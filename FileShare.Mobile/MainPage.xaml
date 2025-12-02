@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="FileShare.Mobile.MainPage"
+             x:Name="MainPageView"
+             Title="局域网文件传输">
+
+    <Grid RowDefinitions="Auto,*,*" Padding="10">
+        <!-- 状态栏 -->
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,10">
+            <Label Text="{Binding StatusMessage}" 
+                   FontSize="14" 
+                   TextColor="Blue" />
+            <Button Text="刷新设备" 
+                    Command="{Binding RefreshDevicesCommand}"
+                    IsEnabled="{Binding !IsScanning}"
+                    Margin="10,0,0,0" />
+        </Grid>
+
+        <!-- 设备列表 -->
+        <Grid Grid.Row="1" Margin="0,10,0,10">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <Label Text="可用设备" 
+                   FontSize="16" 
+                   FontAttributes="Bold" 
+                   Margin="0,0,0,5" />
+            
+            <ListView ItemsSource="{Binding Devices}" 
+                      SelectedItem="{Binding SelectedDevice}"
+                      Grid.Row="1" 
+                      HasUnevenRows="True">
+                <ListView.ItemTemplate>
+                    <DataTemplate>
+                        <ViewCell>
+                            <StackLayout Orientation="Horizontal" Margin="5,10">
+                                <Label Text="{Binding DeviceName}" FontAttributes="Bold" />
+                                <Label Text=" ({Binding DeviceType})" Margin="5,0,0,0" />
+                                <Label Text=" - " Margin="5,0,0,0" />
+                                <Label Text="{Binding IpAddress}" Margin="0,0,0,0" />
+                            </StackLayout>
+                        </ViewCell>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+            
+            <Button Text="发送文件" 
+                    Command="{Binding SendFileCommand}"
+                    HorizontalOptions="Fill"
+                    Margin="0,5,0,0"
+                    Grid.Row="2" />
+        </Grid>
+
+        <!-- 传输任务 -->
+        <Grid Grid.Row="2">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <Label Text="传输任务" 
+                   FontSize="16" 
+                   FontAttributes="Bold" 
+                   Margin="0,0,0,5" />
+            
+            <ListView ItemsSource="{Binding TransferTasks}" 
+                      Grid.Row="1" 
+                      HasUnevenRows="True">
+                <ListView.ItemTemplate>
+                    <DataTemplate>
+                        <ViewCell>
+                            <StackLayout Margin="5,10">
+                                <Label Text="{Binding FileName}" FontAttributes="Bold" />
+                                <ProgressBar Progress="{Binding TransferredSize, Converter={StaticResource FileSizeConverter}}" 
+                                              ProgressColor="Blue"
+                                              HeightRequest="10"
+                                              Margin="0,5,0,0" />
+                                <Label Text="{Binding Status}" FontSize="12" />
+                                
+                                <!-- 只在任务状态为Pending时显示按钮 -->
+                                <StackLayout Orientation="Horizontal" IsVisible="{Binding Status, Converter={StaticResource StatusToVisibilityConverter}}" 
+                                             Margin="0,10,0,0" Spacing="10" HorizontalOptions="End">
+                                    <Button Text="接受" 
+                                            Command="{Binding BindingContext.AcceptTransferCommand, Source={x:Reference MainPageView}}"
+                                            CommandParameter="{Binding}" 
+                                            HorizontalOptions="End" />
+                                    <Button Text="拒绝" 
+                                            Command="{Binding BindingContext.RejectTransferCommand, Source={x:Reference MainPageView}}"
+                                            CommandParameter="{Binding}" 
+                                            HorizontalOptions="End" />
+                                </StackLayout>
+                            </StackLayout>
+                        </ViewCell>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+        </Grid>
+    </Grid>
+</ContentPage>
