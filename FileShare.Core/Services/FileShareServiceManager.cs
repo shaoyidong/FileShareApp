@@ -125,14 +125,12 @@ public class FileShareServiceManager : IDisposable
     /// <param name="accept">是否接受</param>
     public void HandleTransferRequest(FileTransferInfo transferInfo, bool accept)
     {
-        // 这里可以实现更多的处理逻辑
-        if (accept)
+        // 将用户的选择传递给文件传输服务
+        _fileTransferService.HandleTransferRequest(transferInfo.TransferId, accept);
+        
+        // 如果拒绝请求，更新状态
+        if (!accept)
         {
-            // 接受请求，文件传输会自动继续
-        }
-        else
-        {
-            // 拒绝请求，可以实现相应的拒绝逻辑
             transferInfo.Status = TransferStatus.Cancelled;
             OnTransferProgressUpdated?.Invoke(transferInfo.TransferId, 0, 0);
         }

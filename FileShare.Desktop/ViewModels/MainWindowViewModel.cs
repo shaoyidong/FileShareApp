@@ -1,6 +1,8 @@
 ﻿using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Markup.Xaml;
 using Avalonia.Platform.Storage;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.Input;
 using FileShare.Core.Models;
 using FileShare.Core.Services;
@@ -9,7 +11,9 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
+using System.Timers;
 using System.Windows.Input;
 
 namespace FileShare.Desktop.ViewModels
@@ -20,7 +24,9 @@ namespace FileShare.Desktop.ViewModels
 
 
         private readonly FileShareServiceManager _serviceManager;
+        private readonly SynchronizationContext _uiContext;
         private readonly IClassicDesktopStyleApplicationLifetime _appLifetime;
+        private readonly System.Timers.Timer _timerCheckDeviceOnline;
 
         private string _statusMessage = "准备就绪";
         private bool _isScanning;
@@ -55,6 +61,7 @@ namespace FileShare.Desktop.ViewModels
 
         public MainWindowViewModel(IClassicDesktopStyleApplicationLifetime appLifetime)
         {
+            _uiContext = SynchronizationContext.Current ?? new SynchronizationContext();
             _appLifetime = appLifetime;
             Devices = new ObservableCollection<DeviceInfo>();
             TransferTasks = new ObservableCollection<FileTransferInfo>();
@@ -76,8 +83,27 @@ namespace FileShare.Desktop.ViewModels
             AcceptTransferCommand = new RelayCommand<FileTransferInfo>(AcceptTransfer);
             RejectTransferCommand = new RelayCommand<FileTransferInfo>(RejectTransfer);
 
+            _timerCheckDeviceOnline = new System.Timers.Timer(5000);
+            _timerCheckDeviceOnline.Elapsed += Timer_Elapsed;
             // 启动服务
             _ = InitializeAsync();
+        }
+
+        private void Timer_Elapsed(object? sender, ElapsedEventArgs e)
+        {
+            List<DeviceInfo> removeDevices = new List<DeviceInfo>();
+            for (int i = 0; i < Devices.Count; i++)
+            {
+                if ((DateTime.Now - Devices[i].LastSeen) > TimeSpan.FromSeconds(10))
+                {
+                    removeDevices.Add(Devices[i]);
+                }
+            }
+            foreach (var item in removeDevices)
+            {
+                Devices.Remove(item);
+            }
+            removeDevices.Clear();
         }
 
         private async Task InitializeAsync()
@@ -85,6 +111,7 @@ namespace FileShare.Desktop.ViewModels
             try
             {
                 await _serviceManager.StartServicesAsync();
+                _timerCheckDeviceOnline.Start();
                 StatusMessage = "服务已启动";
             }
             catch (Exception ex)
@@ -173,11 +200,14 @@ namespace FileShare.Desktop.ViewModels
             var localDevice = _serviceManager.GetLocalDeviceInfo();
             var remoteDevices = devices.Where(d => d.DeviceId != localDevice.DeviceId).ToList();
 
-            Devices.Clear();
-            foreach (var device in remoteDevices)
+            _uiContext.Send(_=>
             {
-                Devices.Add(device);
-            }
+                Devices.Clear();
+                foreach (var device in remoteDevices)
+                {
+                    Devices.Add(device);
+                }
+            }, null);           
 
             StatusMessage = $"发现 {remoteDevices.Count} 台设备";
         }
@@ -216,6 +246,8 @@ namespace FileShare.Desktop.ViewModels
         public void Dispose()
         {
             _serviceManager.Dispose();
+            _timerCheckDeviceOnline?.Stop();
+            _timerCheckDeviceOnline?.Dispose();
         }
 
     }

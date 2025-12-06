@@ -3,8 +3,11 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Data.Core;
 using Avalonia.Data.Core.Plugins;
 using Avalonia.Markup.Xaml;
+using Avalonia.Threading;
 using FileShare.Desktop.ViewModels;
 using FileShare.Desktop.Views;
+using System;
+using System.Diagnostics;
 using System.Linq;
 
 namespace FileShare.Desktop
@@ -14,6 +17,19 @@ namespace FileShare.Desktop
         public override void Initialize()
         {
             AvaloniaXamlLoader.Load(this);
+
+            AppDomain.CurrentDomain.UnhandledException += (s, e) =>
+            {                
+                // 记录异常
+                Debug.WriteLine(e.ExceptionObject.ToString());
+            };
+
+            Dispatcher.UIThread.UnhandledException += (s, e) =>
+            {
+                // 处理UI线程异常
+                e.Handled = true;
+                Debug.WriteLine(e.Exception.ToString());
+            };
         }
 
         public override void OnFrameworkInitializationCompleted()

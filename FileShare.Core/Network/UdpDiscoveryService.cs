@@ -188,15 +188,19 @@ public class UdpDiscoveryService : IDisposable
                                 lock (_lock)
                                 {
                                     var existingDevice = _discoveredDevices.FirstOrDefault(d => d.DeviceId == deviceInfo.DeviceId);
-                                    if (existingDevice != null)
+                                    if (existingDevice == null)
                                     {
-                                        _discoveredDevices.Remove(existingDevice);
+                                        _discoveredDevices.Add(deviceInfo);
+                                        // 触发设备发现事件
+                                        OnDeviceDiscovered?.Invoke(deviceInfo);
                                     }
-                                    _discoveredDevices.Add(deviceInfo);
+                                    else
+                                    {
+                                        existingDevice.LastSeen = DateTime.Now;
+                                        existingDevice.IpAddress = deviceInfo.IpAddress;
+                                    }
+                                   
                                 }
-                                
-                                // 触发设备发现事件
-                                OnDeviceDiscovered?.Invoke(deviceInfo);
                                 
                                 // 发送回应消息
                                 if (!cancellationToken.IsCancellationRequested && !_isDisposed && _udpClient != null)
