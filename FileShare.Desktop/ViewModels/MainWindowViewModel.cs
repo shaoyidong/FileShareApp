@@ -73,7 +73,7 @@ namespace FileShare.Desktop.ViewModels
 
             // 注册事件处理
             _serviceManager.OnDevicesUpdated += OnDevicesUpdated;
-            _serviceManager.OnTransferRequestReceived += OnTransferRequestReceived;
+            _serviceManager.OnTransferRequestSendAndReceive += OnTransferRequestSendAndReceive;
             _serviceManager.OnTransferProgressUpdated += OnTransferProgressUpdated;
             _serviceManager.OnTransferCompleted += OnTransferCompleted;
 
@@ -128,6 +128,7 @@ namespace FileShare.Desktop.ViewModels
                 StatusMessage = "正在扫描设备...";
                 _serviceManager.RefreshDevices();
                 await Task.Delay(2000); // 等待设备响应
+                StatusMessage = "扫描完成";
             }
             catch (Exception ex)
             {
@@ -135,8 +136,7 @@ namespace FileShare.Desktop.ViewModels
             }
             finally
             {
-                IsScanning = false;
-                StatusMessage = "扫描完成";
+                IsScanning = false;               
             }
         }
 
@@ -182,15 +182,30 @@ namespace FileShare.Desktop.ViewModels
             }
         }
 
-        private void AcceptTransfer(FileTransferInfo info)
+        private async void AcceptTransfer(FileTransferInfo info)
         {
-            _serviceManager.HandleTransferRequest(info, true);
-            StatusMessage = $"开始接收文件: {info.FileName}";
+            var topLevel = TopLevel.GetTopLevel(_appLifetime.MainWindow);
+            var folder = await topLevel.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+            {
+                Title = "选择文件保存位置",
+                AllowMultiple = false
+            });
+
+            string? savePath = null;
+            if (folder.Count > 0)
+            {
+                savePath = folder[0].Path.LocalPath;
+            }
+
+            _serviceManager.HandleTransferRequest(info.TransferId, true, savePath);
+            StatusMessage = savePath != null 
+                ? $"开始接收文件: {info.FileName} (保存到: {savePath})" 
+                : $"开始接收文件: {info.FileName}";
         }
 
         private void RejectTransfer(FileTransferInfo info)
         {
-            _serviceManager.HandleTransferRequest(info, false);
+            _serviceManager.HandleTransferRequest(info.TransferId, false);
             StatusMessage = $"已拒绝文件: {info.FileName}";
         }
 
@@ -212,34 +227,54 @@ namespace FileShare.Desktop.ViewModels
             StatusMessage = $"发现 {remoteDevices.Count} 台设备";
         }
 
-        private void OnTransferRequestReceived(FileTransferInfo info)
+        private void OnTransferRequestSendAndReceive(FileTransferInfo info)
         {
             TransferTasks.Add(info);
             StatusMessage = $"收到文件传输请求: {info.FileName}";
         }
 
-        private void OnTransferProgressUpdated(string transferId, long transferredSize, long totalSize)
+        private void OnTransferProgressUpdated(FileTransferInfo updatedInfo)
         {
-            // 查找并更新传输任务
-            var existingTask = TransferTasks.FirstOrDefault(t => t.TransferId == transferId);
-            if (existingTask != null)
+            // 查找并替换传输任务，实现GUI刷新
+            var index = TransferTasks.IndexOf(TransferTasks.FirstOrDefault(t => t.TransferId == updatedInfo.TransferId));
+            if (index >= 0)
             {
-                existingTask.Status = TransferStatus.Transferring;
-                existingTask.TransferredSize = transferredSize;
+                _uiContext.Send(_ =>
+                {
+                    TransferTasks[index] = updatedInfo;
+                }, null);
 
-                var progress = (double)transferredSize / totalSize * 100;
-                StatusMessage = $"正在传输: {existingTask.FileName} ({progress:F1}%)";
+                var progress = (double)updatedInfo.TransferredSize / updatedInfo.FileSize * 100;
+                StatusMessage = $"正在传输: {updatedInfo.FileName} ({progress:F1}%)";
             }
         }
 
-        private void OnTransferCompleted(string transferId, bool success, string? errorMessage)
+        private void OnTransferCompleted(FileTransferInfo updatedInfo, string? errorMessage)
         {
-            // 查找并更新传输任务
-            var existingTask = TransferTasks.FirstOrDefault(t => t.TransferId == transferId);
-            if (existingTask != null)
+            // 查找并替换传输任务，实现GUI刷新
+            var index = TransferTasks.IndexOf(TransferTasks.FirstOrDefault(t => t.TransferId == updatedInfo.TransferId));
+            if (index >= 0)
             {
-                existingTask.Status = success ? TransferStatus.Completed : TransferStatus.Failed;
-                StatusMessage = success ? $"文件传输完成: {existingTask.FileName}" : $"传输失败: {errorMessage}";
+                _uiContext.Send(_ =>
+                {
+                    TransferTasks[index] = updatedInfo;
+                }, null);
+
+                switch (updatedInfo.Status)
+                {
+                    case TransferStatus.Completed:
+                        StatusMessage = $"文件传输完成: {updatedInfo.FileName}";
+                        break;
+                    case TransferStatus.Failed:
+                        StatusMessage = $"文件传输失败: {errorMessage??string.Empty}";
+                        break;
+                    case TransferStatus.Cancelled:
+                        StatusMessage = $"文件传输取消: {errorMessage ?? string.Empty}";
+                        break;
+                    default:
+                        StatusMessage = errorMessage ?? string.Empty;
+                        break;
+                }
             }
         }
 

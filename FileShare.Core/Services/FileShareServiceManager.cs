@@ -18,19 +18,19 @@ public class FileShareServiceManager : IDisposable
     public event Action<List<DeviceInfo>>? OnDevicesUpdated;
     
     /// <summary>
-    /// 接收到文件传输请求事件
+    /// 文件传输请求事件
     /// </summary>
-    public event Action<FileTransferInfo>? OnTransferRequestReceived;
+    public event Action<FileTransferInfo>? OnTransferRequestSendAndReceive;
     
     /// <summary>
     /// 传输进度更新事件
     /// </summary>
-    public event Action<string, long, long>? OnTransferProgressUpdated;
+    public event Action<FileTransferInfo>? OnTransferProgressUpdated;
     
     /// <summary>
     /// 传输完成事件
     /// </summary>
-    public event Action<string, bool, string?>? OnTransferCompleted;
+    public event Action<FileTransferInfo, string?>? OnTransferCompleted;
     
     /// <summary>
     /// 构造函数
@@ -59,9 +59,9 @@ public class FileShareServiceManager : IDisposable
         
         // 注册事件处理
         _discoveryService.OnDeviceDiscovered += device => OnDevicesUpdated?.Invoke(new List<DeviceInfo> { device });
-        _fileTransferService.OnTransferRequestReceived += info => OnTransferRequestReceived?.Invoke(info);
-        _fileTransferService.OnTransferProgressUpdated += (transferId, transferredSize, totalSize) => OnTransferProgressUpdated?.Invoke(transferId, transferredSize, totalSize);
-        _fileTransferService.OnTransferCompleted += (transferId, success, message) => OnTransferCompleted?.Invoke(transferId, success, message);
+        _fileTransferService.OnTransferRequestSendAndReceive += info => OnTransferRequestSendAndReceive?.Invoke(info);
+        _fileTransferService.OnTransferProgressUpdated += info => OnTransferProgressUpdated?.Invoke(info);
+        _fileTransferService.OnTransferCompleted += (info, message) => OnTransferCompleted?.Invoke(info, message);
     }
     
     /// <summary>
@@ -121,19 +121,13 @@ public class FileShareServiceManager : IDisposable
     /// <summary>
     /// 处理文件传输请求
     /// </summary>
-    /// <param name="transferInfo">传输信息</param>
+    /// <param name="transferId">传输ID</param>
     /// <param name="accept">是否接受</param>
-    public void HandleTransferRequest(FileTransferInfo transferInfo, bool accept)
+    /// <param name="savePath">文件保存路径</param>
+    public void HandleTransferRequest(string transferId, bool accept, string? savePath = null)
     {
         // 将用户的选择传递给文件传输服务
-        _fileTransferService.HandleTransferRequest(transferInfo.TransferId, accept);
-        
-        // 如果拒绝请求，更新状态
-        if (!accept)
-        {
-            transferInfo.Status = TransferStatus.Cancelled;
-            OnTransferProgressUpdated?.Invoke(transferInfo.TransferId, 0, 0);
-        }
+        _fileTransferService.HandleTransferRequest(transferId, accept, savePath);
     }
     
     public void Dispose()

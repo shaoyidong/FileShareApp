@@ -56,7 +56,7 @@ public class MainPageViewModel : INotifyPropertyChanged
         
         // 注册事件处理
         _serviceManager.OnDevicesUpdated += OnDevicesUpdated;
-        _serviceManager.OnTransferRequestReceived += OnTransferRequestReceived;
+        _serviceManager.OnTransferRequestSendAndReceive += OnTransferRequestReceived;
         _serviceManager.OnTransferProgressUpdated += OnTransferProgressUpdated;
         _serviceManager.OnTransferCompleted += OnTransferCompleted;
         
@@ -145,13 +145,13 @@ public class MainPageViewModel : INotifyPropertyChanged
     
     private void AcceptTransfer(FileTransferInfo info)
     {
-        _serviceManager.HandleTransferRequest(info, true);
+        _serviceManager.HandleTransferRequest(info.TransferId, true);
         StatusMessage = $"开始接收文件: {info.FileName}";
     }
     
     private void RejectTransfer(FileTransferInfo info)
     {
-        _serviceManager.HandleTransferRequest(info, false);
+        _serviceManager.HandleTransferRequest(info.TransferId, false);
         StatusMessage = $"已拒绝文件: {info.FileName}";
     }
     
@@ -197,31 +197,32 @@ public class MainPageViewModel : INotifyPropertyChanged
         });
     }
     
-    private void OnTransferProgressUpdated(string transferId, long transferredSize, long totalSize)
+    private void OnTransferProgressUpdated(FileTransferInfo updatedInfo)
     {
         MainThread.BeginInvokeOnMainThread(() =>
         {
-            var existingTask = TransferTasks.FirstOrDefault(t => t.TransferId == transferId);
-            if (existingTask != null)
+            // 查找并替换传输任务，实现GUI刷新
+            var index = TransferTasks.IndexOf(TransferTasks.FirstOrDefault(t => t.TransferId == updatedInfo.TransferId));
+            if (index >= 0)
             {
-                existingTask.TransferredSize = transferredSize;
-                existingTask.Status = TransferStatus.Transferring;
+                TransferTasks[index] = updatedInfo;
                 
-                var progress = (double)transferredSize / totalSize * 100;
-                StatusMessage = $"正在传输: {existingTask.FileName} ({progress:F1}%)";
+                var progress = (double)updatedInfo.TransferredSize / updatedInfo.FileSize * 100;
+                StatusMessage = $"正在传输: {updatedInfo.FileName} ({progress:F1}%)";
             }
         });
     }
     
-    private void OnTransferCompleted(string transferId, bool success, string? errorMessage)
+    private void OnTransferCompleted(FileTransferInfo updatedInfo, bool success, string? errorMessage)
     {
         MainThread.BeginInvokeOnMainThread(() =>
         {
-            var existingTask = TransferTasks.FirstOrDefault(t => t.TransferId == transferId);
-            if (existingTask != null)
+            // 查找并替换传输任务，实现GUI刷新
+            var index = TransferTasks.IndexOf(TransferTasks.FirstOrDefault(t => t.TransferId == updatedInfo.TransferId));
+            if (index >= 0)
             {
-                existingTask.Status = success ? TransferStatus.Completed : TransferStatus.Failed;
-                StatusMessage = success ? $"文件传输完成: {existingTask.FileName}" : $"传输失败: {errorMessage ?? "未知错误"}";
+                TransferTasks[index] = updatedInfo;
+                StatusMessage = success ? $"文件传输完成: {updatedInfo.FileName}" : $"传输失败: {errorMessage ?? "未知错误"}";
             }
         });
     }

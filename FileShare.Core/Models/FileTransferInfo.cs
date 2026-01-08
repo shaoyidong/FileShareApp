@@ -44,6 +44,11 @@ public class FileTransferInfo
     /// 传输进度百分比
     /// </summary>
     public double ProgressPercentage => FileSize > 0 ? (double)TransferredSize / FileSize * 100 : 0;
+    
+    /// <summary>
+    /// 文件保存路径
+    /// </summary>
+    public string? SavePath { get; set; }
 }
 
 /// <summary>
