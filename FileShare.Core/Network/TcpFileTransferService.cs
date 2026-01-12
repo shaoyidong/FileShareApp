@@ -510,7 +510,7 @@ public class TcpFileTransferService : IDisposable
                 }
             }
 
-            transferInfo.Status = TransferStatus.Failed;            
+            transferInfo.Status = TransferStatus.Cancelled;            
             OnTransferCompleted?.Invoke(transferInfo, "传输被接收方拒绝");
             return false;
         }

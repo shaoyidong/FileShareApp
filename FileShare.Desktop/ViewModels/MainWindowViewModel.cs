@@ -31,6 +31,7 @@ namespace FileShare.Desktop.ViewModels
         private string _statusMessage = "准备就绪";
         private bool _isScanning;
         private DeviceInfo _selectedDevice;
+        private string _localDeviceId;
 
         public string StatusMessage
         {
@@ -52,7 +53,9 @@ namespace FileShare.Desktop.ViewModels
         }
 
         public ObservableCollection<DeviceInfo> Devices { get; }
-        public ObservableCollection<FileTransferInfo> TransferTasks { get; }
+        public ObservableCollection<FileTransferViewModel> TransferTasks { get; }
+        public ObservableCollection<FileTransferViewModel> SentTransferTasks { get; }
+        public ObservableCollection<FileTransferViewModel> ReceivedTransferTasks { get; }
 
         public ICommand RefreshDevicesCommand { get; }
         public ICommand SendFileCommand { get; }
@@ -64,12 +67,17 @@ namespace FileShare.Desktop.ViewModels
             _uiContext = SynchronizationContext.Current ?? new SynchronizationContext();
             _appLifetime = appLifetime;
             Devices = new ObservableCollection<DeviceInfo>();
-            TransferTasks = new ObservableCollection<FileTransferInfo>();
+            TransferTasks = new ObservableCollection<FileTransferViewModel>();
+            SentTransferTasks = new ObservableCollection<FileTransferViewModel>();
+            ReceivedTransferTasks = new ObservableCollection<FileTransferViewModel>();
 
             // 初始化服务管理器
             _serviceManager = new FileShareServiceManager(
                 Environment.MachineName,
                 DeviceType.Desktop);
+                
+            // 保存本地设备ID
+            _localDeviceId = _serviceManager.GetLocalDeviceInfo().DeviceId;
 
             // 注册事件处理
             _serviceManager.OnDevicesUpdated += OnDevicesUpdated;
@@ -80,8 +88,8 @@ namespace FileShare.Desktop.ViewModels
             // 初始化命令
             RefreshDevicesCommand = new RelayCommand(async () => await RefreshDevicesAsync());
             SendFileCommand = new RelayCommand(async () => await SendFileAsync());
-            AcceptTransferCommand = new RelayCommand<FileTransferInfo>(AcceptTransfer);
-            RejectTransferCommand = new RelayCommand<FileTransferInfo>(RejectTransfer);
+            AcceptTransferCommand = new RelayCommand<FileTransferViewModel>(AcceptTransfer);
+            RejectTransferCommand = new RelayCommand<FileTransferViewModel>(RejectTransfer);
 
             _timerCheckDeviceOnline = new System.Timers.Timer(5000);
             _timerCheckDeviceOnline.Elapsed += Timer_Elapsed;
@@ -182,7 +190,7 @@ namespace FileShare.Desktop.ViewModels
             }
         }
 
-        private async void AcceptTransfer(FileTransferInfo info)
+        private async void AcceptTransfer(FileTransferViewModel viewModel)
         {
             var topLevel = TopLevel.GetTopLevel(_appLifetime.MainWindow);
             var folder = await topLevel.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
@@ -197,16 +205,16 @@ namespace FileShare.Desktop.ViewModels
                 savePath = folder[0].Path.LocalPath;
             }
 
-            _serviceManager.HandleTransferRequest(info.TransferId, true, savePath);
+            _serviceManager.HandleTransferRequest(viewModel.TransferId, true, savePath);
             StatusMessage = savePath != null 
-                ? $"开始接收文件: {info.FileName} (保存到: {savePath})" 
-                : $"开始接收文件: {info.FileName}";
+                ? $"开始接收文件: {viewModel.FileName} (保存到: {savePath})" 
+                : $"开始接收文件: {viewModel.FileName}";
         }
 
-        private void RejectTransfer(FileTransferInfo info)
+        private void RejectTransfer(FileTransferViewModel viewModel)
         {
-            _serviceManager.HandleTransferRequest(info.TransferId, false);
-            StatusMessage = $"已拒绝文件: {info.FileName}";
+            _serviceManager.HandleTransferRequest(viewModel.TransferId, false);
+            StatusMessage = $"已拒绝文件: {viewModel.FileName}";
         }
 
         private void OnDevicesUpdated(List<DeviceInfo> devices)
@@ -229,38 +237,71 @@ namespace FileShare.Desktop.ViewModels
 
         private void OnTransferRequestSendAndReceive(FileTransferInfo info)
         {
-            TransferTasks.Add(info);
-            StatusMessage = $"收到文件传输请求: {info.FileName}";
+            // 创建FileTransferViewModel实例
+            var transferViewModel = FileTransferViewModel.FromModel(info);
+            
+            // 添加到总任务列表
+            TransferTasks.Add(transferViewModel);
+            
+            // 根据发送者ID判断是发送任务还是接收任务
+            if (info.SenderId == _localDeviceId)
+            {
+                // 发送任务
+                SentTransferTasks.Add(transferViewModel);
+                StatusMessage = $"正在发送文件: {info.FileName}";
+            }
+            else
+            {
+                // 接收任务
+                ReceivedTransferTasks.Add(transferViewModel);
+                StatusMessage = $"收到文件传输请求: {info.FileName}";
+            }
         }
+
+        
 
         private void OnTransferProgressUpdated(FileTransferInfo updatedInfo)
         {
-            // 查找并替换传输任务，实现GUI刷新
-            var index = TransferTasks.IndexOf(TransferTasks.FirstOrDefault(t => t.TransferId == updatedInfo.TransferId));
-            if (index >= 0)
+            // 查找对应的FileTransferViewModel并更新
+            // 由于所有任务列表中的任务都是同一个对象引用
+            // 所以只需要更新TransferTasks列表中的任务即可，其他列表中的任务会自动更新
+            var viewModel = TransferTasks.FirstOrDefault(t => t.TransferId == updatedInfo.TransferId);
+            if (viewModel != null)
             {
-                _uiContext.Send(_ =>
-                {
-                    TransferTasks[index] = updatedInfo;
-                }, null);
-
-                var progress = (double)updatedInfo.TransferredSize / updatedInfo.FileSize * 100;
-                StatusMessage = $"正在传输: {updatedInfo.FileName} ({progress:F1}%)";
+                //_uiContext.Send(_ =>
+                //{
+                //    // 使用UpdateFrom方法更新属性，触发通知
+                    
+                //}, null);
+                viewModel.Status = updatedInfo.Status;
+                viewModel.FileSize = updatedInfo.FileSize;
+                viewModel.TransferredSize = updatedInfo.TransferredSize;
+                viewModel.ProgressPercentage= updatedInfo.ProgressPercentage;
+               
+                StatusMessage = $"正在传输: {updatedInfo.FileName} ({updatedInfo.ProgressPercentage:F1}%)";
             }
         }
 
         private void OnTransferCompleted(FileTransferInfo updatedInfo, string? errorMessage)
         {
-            // 查找并替换传输任务，实现GUI刷新
-            var index = TransferTasks.IndexOf(TransferTasks.FirstOrDefault(t => t.TransferId == updatedInfo.TransferId));
-            if (index >= 0)
+            // 查找对应的FileTransferViewModel并更新
+            // 由于所有任务列表中的任务都是同一个对象引用
+            // 所以只需要更新TransferTasks列表中的任务即可，其他列表中的任务会自动更新
+            var viewModel = TransferTasks.FirstOrDefault(t => t.TransferId == updatedInfo.TransferId);
+            if (viewModel != null)
             {
-                _uiContext.Send(_ =>
-                {
-                    TransferTasks[index] = updatedInfo;
-                }, null);
+                //_uiContext.Send(_ =>
+                //{
+                //    // 使用UpdateFrom方法更新属性，触发通知
+                //    viewModel.UpdateFrom(updatedInfo);
+                //}, null);
 
-                switch (updatedInfo.Status)
+                viewModel.Status = updatedInfo.Status;
+                viewModel.FileSize = updatedInfo.FileSize;
+                viewModel.TransferredSize = updatedInfo.TransferredSize;
+                viewModel.ProgressPercentage = updatedInfo.ProgressPercentage;
+
+                switch (viewModel.Status)
                 {
                     case TransferStatus.Completed:
                         StatusMessage = $"文件传输完成: {updatedInfo.FileName}";
