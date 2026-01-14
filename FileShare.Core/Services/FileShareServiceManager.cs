@@ -130,6 +130,16 @@ public class FileShareServiceManager : IDisposable
         _fileTransferService.HandleTransferRequest(transferId, accept, savePath);
     }
     
+    /// <summary>
+    /// 取消传输
+    /// </summary>
+    /// <param name="transferId">传输ID</param>
+    public void CancelTransfer(string transferId)
+    {
+        // 将取消请求传递给文件传输服务
+        _fileTransferService.CancelTransfer(transferId);
+    }
+    
     public void Dispose()
     {
         // 在线程池中执行异步操作，避免死锁

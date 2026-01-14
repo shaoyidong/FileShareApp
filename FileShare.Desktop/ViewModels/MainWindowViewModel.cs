@@ -4,8 +4,10 @@ using Avalonia.Markup.Xaml;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
 using FileShare.Core.Models;
 using FileShare.Core.Services;
+using FileShare.Desktop.ViewModels.Messages;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -61,6 +63,7 @@ namespace FileShare.Desktop.ViewModels
         public ICommand SendFileCommand { get; }
         public ICommand AcceptTransferCommand { get; }
         public ICommand RejectTransferCommand { get; }
+        public ICommand RemoveTransferCommand { get; }
 
         public MainWindowViewModel(IClassicDesktopStyleApplicationLifetime appLifetime)
         {
@@ -90,12 +93,13 @@ namespace FileShare.Desktop.ViewModels
             SendFileCommand = new RelayCommand(async () => await SendFileAsync());
             AcceptTransferCommand = new RelayCommand<FileTransferViewModel>(AcceptTransfer);
             RejectTransferCommand = new RelayCommand<FileTransferViewModel>(RejectTransfer);
+            RemoveTransferCommand = new RelayCommand<FileTransferViewModel>(RemoveTransfer);
 
             _timerCheckDeviceOnline = new System.Timers.Timer(5000);
             _timerCheckDeviceOnline.Elapsed += Timer_Elapsed;
             // 启动服务
             _ = InitializeAsync();
-        }
+        }        
 
         private void Timer_Elapsed(object? sender, ElapsedEventArgs e)
         {
@@ -215,7 +219,7 @@ namespace FileShare.Desktop.ViewModels
         {
             _serviceManager.HandleTransferRequest(viewModel.TransferId, false);
             StatusMessage = $"已拒绝文件: {viewModel.FileName}";
-        }
+        }   
 
         private void OnDevicesUpdated(List<DeviceInfo> devices)
         {
@@ -233,6 +237,55 @@ namespace FileShare.Desktop.ViewModels
             }, null);           
 
             StatusMessage = $"发现 {remoteDevices.Count} 台设备";
+        }
+
+        private async void RemoveTransfer(FileTransferViewModel? model)
+        {
+            if (model == null)
+                return;
+            switch (model.Status)
+            {
+                case TransferStatus.Pending:
+                    var message = new ConfirmationMessage("正在传输中，确定要移除吗？", "确认移除", false);
+                    WeakReferenceMessenger.Default.Send(message);
+                    // 等待对话框结果
+                    var result = await message.CompletionSource.Task;
+                    if (!result)
+                    {
+                        return;
+                    }
+                    _serviceManager.CancelTransfer(model.TransferId);
+                    break;
+                case TransferStatus.Transferring:
+
+                    //// 发送消息请求显示确认对话框
+                    //var message = new ConfirmationMessage("正在传输中，确定要移除吗？", "确认移除", false);
+                    //WeakReferenceMessenger.Default.Send(message);
+                    //// 等待对话框结果
+                    //var result = await message.CompletionSource.Task;
+                    //if (!result)
+                    //{
+                    //    return;
+                    //}
+                    _serviceManager.CancelTransfer(model.TransferId);
+                    break;
+                case TransferStatus.Completed:
+                case TransferStatus.Failed:
+                case TransferStatus.Cancelled:
+                    break;
+                default:
+                    break;
+            }
+
+            TransferTasks.Remove(model);
+            if (model.SenderId == _localDeviceId)
+            {
+                SentTransferTasks.Remove(model);
+            }
+            else
+            {
+                ReceivedTransferTasks.Remove(model);
+            }
         }
 
         private void OnTransferRequestSendAndReceive(FileTransferInfo info)
