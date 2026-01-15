@@ -4,7 +4,9 @@ using System.Collections.Concurrent;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
+using System.Reflection;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace FileShare.Core.Network;
@@ -20,11 +22,8 @@ public class TcpFileTransferService : IDisposable
     private readonly TcpListener _listener;
     private readonly CancellationTokenSource _cts;
     private readonly ConcurrentDictionary<string, FileTransferInfo> _incomingTransfers; // 接收的文件传输
-    private readonly ConcurrentDictionary<string, FileTransferInfo> _outgoingTransfers; // 发送的文件传输
     private readonly ConcurrentDictionary<string, TaskCompletionSource<bool>> _pendingTransferRequests; // 等待用户确认的传输请求
     private readonly ConcurrentDictionary<string, CancellationTokenSource> _transferCancellationTokens; // 传输取消令牌
-    private readonly ConcurrentDictionary<string, NetworkStream> _transferStreams; // 传输连接信息    
-    private readonly ConcurrentDictionary<string, SemaphoreSlim> _streamLocks;
     private bool _disposedValue;
 
     /// <summary>
@@ -48,11 +47,8 @@ public class TcpFileTransferService : IDisposable
         _listener = new TcpListener(IPAddress.Any, port);
         _cts = new CancellationTokenSource();
         _incomingTransfers = new ConcurrentDictionary<string, FileTransferInfo>();
-        _outgoingTransfers = new ConcurrentDictionary<string, FileTransferInfo>();
         _pendingTransferRequests = new ConcurrentDictionary<string, TaskCompletionSource<bool>>();
         _transferCancellationTokens = new ConcurrentDictionary<string, CancellationTokenSource>();
-        _transferStreams = new ConcurrentDictionary<string, NetworkStream>();
-        _streamLocks = new ConcurrentDictionary<string, SemaphoreSlim>();
     }
 
     /// <summary>
@@ -79,52 +75,12 @@ public class TcpFileTransferService : IDisposable
     /// 取消传输
     /// </summary>
     /// <param name="transferId">传输ID</param>
-    public async Task CancelTransfer(string transferId)
+    public void CancelTransfer(string transferId)
     {
         // 处理待处理的传输请求
         if (_pendingTransferRequests.TryRemove(transferId, out var tcs))
         {
             tcs?.TrySetResult(false);
-        }
-
-        //先发取消命令，再取消令牌，因为取消令牌后TcpCliet就被释放了，没法发了
-
-        // 发送方取消通知接收方
-        if (_outgoingTransfers.TryGetValue(transferId, out var outgoingTransfer))
-        {
-            // 向接收方发送取消请求
-            if (_transferStreams.TryGetValue(transferId, out var stream))
-            {
-                try
-                {
-                    var request = new TransferRequest
-                    {
-                        Type = TransferRequestType.CancelTransfer,
-                        TransferId = transferId,
-                        SenderId = outgoingTransfer.SenderId,
-                        ReceiverId = outgoingTransfer.ReceiverId
-                    };
-
-                    // 使用SendRequestAsync方法发送取消请求，该方法内部已实现线程安全
-                    await SendRequestAsync(stream, request);
-                }
-                catch (Exception)
-                {
-                    // 忽略发送取消请求时的异常
-                }
-            }
-            // 从streamLocks中移除并释放SemaphoreSlim
-            if (_streamLocks.TryRemove(transferId, out var semaphore))
-            {
-                try
-                {
-                    semaphore.Dispose();
-                }
-                catch (Exception)
-                {
-                    //忽略释放异常
-                }
-            }
         }
 
         // 获取并取消传输的取消令牌
@@ -139,7 +95,6 @@ public class TcpFileTransferService : IDisposable
                 // 忽略取消时的异常
             }
         }
-
     }
 
     /// <summary>
@@ -181,33 +136,6 @@ public class TcpFileTransferService : IDisposable
         _transferCancellationTokens.Clear();
 
         _incomingTransfers.Clear();
-        _outgoingTransfers.Clear();
-
-        foreach (var semaphore in _streamLocks.Values)
-        {
-            try
-            {
-                semaphore?.Dispose();
-            }
-            catch (Exception)
-            {
-                // 已释放，忽略
-            }
-        }
-        _streamLocks.Clear();
-
-        foreach (var stream in _transferStreams.Values)
-        {
-            try
-            {
-                stream?.Dispose();
-            }
-            catch (Exception)
-            {
-                // 已释放，忽略
-            }
-        }
-        _transferStreams.Clear();
     }
 
     /// <summary>
@@ -567,17 +495,17 @@ public class TcpFileTransferService : IDisposable
         try
         {
             var cancelResponse = new TransferResponse
-            {               
+            {
                 TransferId = transferInfo.TransferId,
                 Accepted = false,
                 Message = "传输被接收方取消",
             };
-            await SendResponseAsync(stream, cancelResponse,_cts.Token);
+            await SendResponseAsync(stream, cancelResponse, _cts.Token);
         }
         catch (Exception)
         {
             // 忽略发送取消响应的异常
-        }        
+        }
     }
 
     /// <summary>
@@ -601,8 +529,10 @@ public class TcpFileTransferService : IDisposable
     public async Task<bool> SendFileAsync(string filePath, DeviceInfo targetDevice, string senderId)
     {
         string transferId = null;
-        CancellationTokenSource cts = null;
+        CancellationTokenSource userCts = null;
+        CancellationTokenSource timeoutCts = null;
         FileTransferInfo transferInfo = null;
+        NetworkStream stream = null;
         try
         {
             if (!File.Exists(filePath))
@@ -627,21 +557,18 @@ public class TcpFileTransferService : IDisposable
 
             OnTransferRequestSendAndReceive?.Invoke(transferInfo);
 
-            _outgoingTransfers[transferId] = transferInfo;
-
+            userCts = new CancellationTokenSource();
+            _transferCancellationTokens[transferId] = userCts;
+            timeoutCts = new CancellationTokenSource(TimeSpan.FromMilliseconds(REQUEST_TIMEOUT_MS));
             // 创建取消令牌源并保存到字典中
-            using (cts = new CancellationTokenSource(TimeSpan.FromSeconds(REQUEST_TIMEOUT_MS)))
+            using (var cts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token, userCts.Token, timeoutCts.Token))
             {
-                _transferCancellationTokens[transferId] = cts;
                 using (var client = new TcpClient())
                 {
                     // 连接到目标设备，添加超时
                     await client.ConnectAsync(targetDevice.IpAddress, targetDevice.Port, cts.Token);
-                    using (var stream = client.GetStream())
+                    using (stream = client.GetStream())
                     {
-                        // 保存传输连接信息
-                        _transferStreams[transferId] = stream;
-
                         // 发送文件请求
                         var request = new TransferRequest
                         {
@@ -661,26 +588,43 @@ public class TcpFileTransferService : IDisposable
                         if (response.Accepted)
                         {
                             // 发送文件数据，增加文件传输的超时时间
-                            cts.CancelAfter(TimeSpan.FromMinutes(5)); // 大文件传输超时设置为5分钟
+                            timeoutCts.CancelAfter(TimeSpan.FromMinutes(5)); // 大文件传输超时设置为5分钟
 
                             var result = await SendFileDataAsync(stream, filePath, transferInfo, cts.Token);
-
-                            if (result && !cts.IsCancellationRequested)
+                            //发送流程未被接收方取消
+                            if (result)
                             {
-                                // 接收完成响应
-                                response = await ReceiveResponseAsync(stream, cts.Token);
-
-                                if (response.Accepted)
+                                if (cts.IsCancellationRequested)
                                 {
-                                    transferInfo.Status = TransferStatus.Completed;
-                                    OnTransferCompleted?.Invoke(transferInfo, null);
-                                    return true;
+                                    //发送方自行取消
+                                    if (userCts.IsCancellationRequested)
+                                    {
+                                        await OnSenderCancelled(stream, transferInfo, false);
+                                    }
+                                    //发送方超时自行取消
+                                    if (timeoutCts.IsCancellationRequested)
+                                    {
+                                        await OnSenderCancelled(stream, transferInfo, true);
+                                    }
+                                    return false;
                                 }
                                 else
                                 {
-                                    Console.WriteLine("文件传输被接收方拒绝: {0}", response.Message);
+                                    // 接收完成响应
+                                    response = await ReceiveResponseAsync(stream, cts.Token);
+
+                                    if (response.Accepted)
+                                    {
+                                        transferInfo.Status = TransferStatus.Completed;
+                                        OnTransferCompleted?.Invoke(transferInfo, null);
+                                        return true;
+                                    }
+                                    else
+                                    {
+                                        Console.WriteLine("文件传输被接收方拒绝: {0}", response.Message);
+                                    }
                                 }
-                            }                            
+                            }
                         }
                         else
                         {
@@ -697,24 +641,20 @@ public class TcpFileTransferService : IDisposable
         }
         catch (OperationCanceledException)
         {
-            if (cts?.IsCancellationRequested == true)
+            //发送方自行取消
+            if (userCts?.IsCancellationRequested ?? false)
             {
-                // 传输被主动取消
-                Console.WriteLine("传输被发送方取消");
-                if (transferInfo != null)
+                if (transferInfo != null && stream != null)
                 {
-                    transferInfo.Status = TransferStatus.Cancelled;
-                    OnTransferCompleted?.Invoke(transferInfo, "传输被发送方取消");
+                    await OnSenderCancelled(stream, transferInfo, false);
                 }
             }
-            else
+            //发送方超时自行取消
+            if (timeoutCts?.IsCancellationRequested ?? false)
             {
-                // 传输超时
-                Console.WriteLine("文件传输超时");
-                if (transferInfo != null)
+                if (transferInfo != null && stream != null)
                 {
-                    transferInfo.Status = TransferStatus.Failed;
-                    OnTransferCompleted?.Invoke(transferInfo, "传输超时");
+                    await OnSenderCancelled(stream, transferInfo, true);
                 }
             }
             return false;
@@ -746,27 +686,46 @@ public class TcpFileTransferService : IDisposable
             // 清理资源
             if (transferId != null)
             {
-                _outgoingTransfers.TryRemove(transferId, out _);
                 _transferCancellationTokens.TryRemove(transferId, out _);
-                cts?.Dispose();
-
+                userCts?.Dispose();
+                timeoutCts?.Dispose();
                 // 清理传输连接信息和对应的锁
-                if (_transferStreams.TryRemove(transferId, out var stream))
-                {
-                    stream.Dispose();
-                }
-                // 从streamLocks中移除并释放SemaphoreSlim
-                if (_streamLocks.TryRemove(transferId, out var semaphore))
-                {
-                    semaphore.Dispose();
-                }
+                stream?.Dispose();
             }
+        }
+    }
+
+    private async Task OnSenderCancelled(NetworkStream stream, FileTransferInfo transferInfo, bool isTimeout = false)
+    {
+        transferInfo.Status = TransferStatus.Cancelled;
+        OnTransferCompleted?.Invoke(transferInfo, isTimeout ? "传输超时" : "传输被发送方取消");
+        try
+        {
+            var cancelRequest = new TransferRequest
+            {
+                Type = TransferRequestType.CancelTransfer,
+                TransferId = transferInfo.TransferId,
+                FileName = transferInfo.FileName,
+                FileSize = transferInfo.FileSize,
+                SenderId = transferInfo.SenderId,
+                ReceiverId = transferInfo.ReceiverId
+            };
+            await SendRequestAsync(stream, cancelRequest, _cts.Token);
+        }
+        catch (Exception)
+        {
+            // 忽略发送取消请求时的异常
         }
     }
 
     /// <summary>
     /// 发送文件数据
-    /// <summary>
+    /// </summary>
+    /// <param name="stream"></param>
+    /// <param name="filePath"></param>
+    /// <param name="transferInfo"></param>
+    /// <param name="cancellationToken"></param>
+    /// <returns>true：完成或自行取消，false：接到接收方取消响应 </returns>
     private async Task<bool> SendFileDataAsync(NetworkStream stream, string filePath, FileTransferInfo transferInfo, CancellationToken cancellationToken = default)
     {
         transferInfo.Status = TransferStatus.Transferring;
@@ -816,7 +775,7 @@ public class TcpFileTransferService : IDisposable
                     catch (Exception)
                     {
                         // 忽略读取请求的异常，继续发送数据
-                    }                    
+                    }
                 }
 
                 var bytesRead = await fileStream.ReadAsync(buffer, 0, buffer.Length, cancellationToken);
@@ -842,23 +801,9 @@ public class TcpFileTransferService : IDisposable
         var requestBytes = System.Text.Encoding.UTF8.GetBytes(requestJson);
         var headerBytes = BitConverter.GetBytes(requestBytes.Length);
 
-        // 获取或创建该stream对应的SemaphoreSlim
-        var semaphore = _streamLocks.GetOrAdd(request.TransferId, _ => new SemaphoreSlim(1, 1));
-        try
-        {
-            // 等待获取锁
-            await semaphore.WaitAsync(cancellationToken);
-
-            // 执行写入操作
-            await stream.WriteAsync(headerBytes, cancellationToken);
-            await stream.WriteAsync(requestBytes, cancellationToken);
-        }
-        finally
-        {
-            // 释放锁
-            semaphore.Release();
-        }
-    }   
+        await stream.WriteAsync(headerBytes, cancellationToken);
+        await stream.WriteAsync(requestBytes, cancellationToken);
+    }
 
     /// <summary>
     /// 接收响应
