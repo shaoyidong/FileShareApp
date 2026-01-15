@@ -255,6 +255,7 @@ namespace FileShare.Desktop.ViewModels
                         return;
                     }
                     _serviceManager.CancelTransfer(model.TransferId);
+                    StatusMessage = $"已拒绝文件: {model.FileName}";
                     break;
                 case TransferStatus.Transferring:
 
