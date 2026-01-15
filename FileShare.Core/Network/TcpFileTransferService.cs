@@ -689,7 +689,7 @@ public class TcpFileTransferService : IDisposable
                 _transferCancellationTokens.TryRemove(transferId, out _);
                 userCts?.Dispose();
                 timeoutCts?.Dispose();
-                // 清理传输连接信息和对应的锁
+                // 清理传输连接信息
                 stream?.Dispose();
             }
         }
