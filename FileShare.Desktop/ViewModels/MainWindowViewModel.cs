@@ -8,6 +8,7 @@ using CommunityToolkit.Mvvm.Messaging;
 using FileShare.Core.Models;
 using FileShare.Core.Services;
 using FileShare.Desktop.ViewModels.Messages;
+using MsBox.Avalonia;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -246,20 +247,6 @@ namespace FileShare.Desktop.ViewModels
             switch (model.Status)
             {
                 case TransferStatus.Pending:
-                    var message = new ConfirmationMessage("正在传输中，确定要移除吗？", "确认移除", false);
-                    WeakReferenceMessenger.Default.Send(message);
-                    // 等待对话框结果
-                    var result = await message.CompletionSource.Task;
-                    if (!result)
-                    {
-                        return;
-                    }
-                    _serviceManager.CancelTransfer(model.TransferId);
-                    StatusMessage = $"已拒绝文件: {model.FileName}";
-                    break;
-                case TransferStatus.Transferring:
-
-                    //// 发送消息请求显示确认对话框
                     //var message = new ConfirmationMessage("正在传输中，确定要移除吗？", "确认移除", false);
                     //WeakReferenceMessenger.Default.Send(message);
                     //// 等待对话框结果
@@ -267,7 +254,19 @@ namespace FileShare.Desktop.ViewModels
                     //if (!result)
                     //{
                     //    return;
-                    //}
+                    //}                    
+                    _serviceManager.CancelTransfer(model.TransferId);
+                    StatusMessage = $"已拒绝文件: {model.FileName}";
+                    break;
+                case TransferStatus.Transferring:
+                    // 发送消息请求显示确认对话框
+                    var box = MessageBoxManager.GetMessageBoxStandard("移除确认", "正在传输中，确定要移除吗？", MsBox.Avalonia.Enums.ButtonEnum.YesNo);
+                    // 等待对话框结果
+                    var result = await box.ShowWindowDialogAsync(_appLifetime.MainWindow);
+                    if (result != MsBox.Avalonia.Enums.ButtonResult.Yes)
+                    {
+                        return;
+                    }
                     _serviceManager.CancelTransfer(model.TransferId);
                     break;
                 case TransferStatus.Completed:
