@@ -58,7 +58,7 @@ public class MainPageViewModel : INotifyPropertyChanged
         _serviceManager.OnDevicesUpdated += OnDevicesUpdated;
         _serviceManager.OnTransferRequestSendAndReceive += OnTransferRequestReceived;
         _serviceManager.OnTransferProgressUpdated += OnTransferProgressUpdated;
-        _serviceManager.OnTransferCompleted += OnTransferCompleted;
+        //_serviceManager.OnTransferCompleted += OnTransferCompleted;
         
         // 初始化命令
         RefreshDevicesCommand = new Command(async () => await RefreshDevicesAsync());
