@@ -39,7 +39,9 @@ public class FileShareServiceManager : IFileShareServiceManager
     /// <param name="deviceType">设备类型</param>
     /// <param name="discoveryPort">设备发现端口</param>
     /// <param name="transferPort">文件传输端口</param>
-    public FileShareServiceManager(string deviceName, DeviceType deviceType, int discoveryPort = 5236, int transferPort = 5237)
+    public FileShareServiceManager(
+        IPlatformDirectoryService directoryService,
+        string deviceName, DeviceType deviceType, int discoveryPort = 5236, int transferPort = 5237)
     {
         // 生成设备ID
         var deviceId = GetOrCreateDeviceId();
@@ -55,7 +57,7 @@ public class FileShareServiceManager : IFileShareServiceManager
         
         // 初始化服务
         _discoveryService = new UdpDiscoveryService(_localDevice.DeviceId, _localDevice.DeviceName, _localDevice.DeviceType);
-        _fileTransferService = new TcpFileTransferService(transferPort);
+        _fileTransferService = new TcpFileTransferService(directoryService,transferPort);
         
         // 注册事件处理
         _discoveryService.OnDeviceDiscovered += device => OnDeviceDiscovered?.Invoke(device);

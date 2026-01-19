@@ -11,6 +11,11 @@ namespace FileShare.Core.Tests.Services;
 /// </summary>
 public class FileShareServiceManagerTests
 {
+    private readonly Mock<IPlatformDirectoryService> _mockDirectoryService;
+    public FileShareServiceManagerTests()
+    {
+        _mockDirectoryService = new Mock<IPlatformDirectoryService>();
+    }
     /// <summary>
     /// 测试构造函数是否正确初始化所有依赖项
     /// </summary>
@@ -22,7 +27,7 @@ public class FileShareServiceManagerTests
         var deviceType = DeviceType.Desktop;
         
         // Act: 创建 FileShareServiceManager 实例
-        var manager = new FileShareServiceManager(deviceName, deviceType);
+        var manager = new FileShareServiceManager(_mockDirectoryService.Object,deviceName, deviceType);
         
         // Assert: 验证实例是否创建成功
         Assert.NotNull(manager);
@@ -39,7 +44,7 @@ public class FileShareServiceManagerTests
         var deviceType = DeviceType.Desktop;
         
         // Act: 创建实例并获取本地设备信息
-        var manager = new FileShareServiceManager(deviceName, deviceType);
+        var manager = new FileShareServiceManager(_mockDirectoryService.Object, deviceName, deviceType);
         var localDevice = manager.GetLocalDeviceInfo();
         
         // Assert: 验证本地设备信息
@@ -59,7 +64,7 @@ public class FileShareServiceManagerTests
         // Arrange: 准备测试数据
         var deviceName = "Test Device";
         var deviceType = DeviceType.Desktop;
-        var manager = new FileShareServiceManager(deviceName, deviceType);
+        var manager = new FileShareServiceManager(_mockDirectoryService.Object, deviceName, deviceType);
         
         bool devicesUpdatedCalled = false;
         bool transferRequestCalled = false;
@@ -92,7 +97,7 @@ public class FileShareServiceManagerTests
         var deviceType = DeviceType.Desktop;
         
         // Act: 创建实例并调用 RefreshDevices
-        var manager = new FileShareServiceManager(deviceName, deviceType);
+        var manager = new FileShareServiceManager(_mockDirectoryService.Object, deviceName, deviceType);
         manager.RefreshDevices();
         
         // Assert: 验证方法执行成功
@@ -111,7 +116,7 @@ public class FileShareServiceManagerTests
         var deviceType = DeviceType.Desktop;
         
         // Act: 创建实例并释放资源
-        var manager = new FileShareServiceManager(deviceName, deviceType);
+        var manager = new FileShareServiceManager(_mockDirectoryService.Object, deviceName, deviceType);
         manager.Dispose();
         
         // Assert: 验证实例已被释放
@@ -132,7 +137,7 @@ public class FileShareServiceManagerTests
         var deviceName = "Test Device";
         
         // Act: 创建实例
-        var manager = new FileShareServiceManager(deviceName, deviceType);
+        var manager = new FileShareServiceManager(_mockDirectoryService.Object, deviceName, deviceType);
         var localDevice = manager.GetLocalDeviceInfo();
         
         // Assert: 验证设备类型
@@ -152,7 +157,7 @@ public class FileShareServiceManagerTests
         var customTransferPort = 5678;
         
         // Act: 使用自定义端口创建实例
-        var manager = new FileShareServiceManager(deviceName, deviceType, customDiscoveryPort, customTransferPort);
+        var manager = new FileShareServiceManager(_mockDirectoryService.Object, deviceName, deviceType, customDiscoveryPort, customTransferPort);
         var localDevice = manager.GetLocalDeviceInfo();
         
         // Assert: 验证自定义端口是否被正确使用

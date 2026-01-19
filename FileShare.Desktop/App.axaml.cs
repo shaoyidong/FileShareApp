@@ -43,6 +43,7 @@ namespace FileShare.Desktop
                 
                 // 创建服务管理器实例
                 var serviceManager = new FileShare.Core.Services.FileShareServiceManager(
+                    new FileShare.Core.Services.DesktopDirectoryService(),
                     Environment.MachineName,
                     FileShare.Core.Models.DeviceType.Desktop);
                 

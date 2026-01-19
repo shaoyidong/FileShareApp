@@ -1,5 +1,6 @@
 using FileShare.Core.Common;
 using FileShare.Core.Models;
+using FileShare.Core.Services;
 using System;
 using System.Collections.Concurrent;
 using System.IO;
@@ -25,6 +26,7 @@ public class TcpFileTransferService : IDisposable
     private readonly ConcurrentDictionary<string, FileTransferInfo> _incomingTransfers; // 接收的文件传输
     private readonly ConcurrentDictionary<string, TaskCompletionSource<bool>> _pendingTransferRequests; // 等待用户确认的传输请求
     private readonly ConcurrentDictionary<string, CancellationTokenSource> _transferCancellationTokens; // 传输取消令牌
+    private readonly IPlatformDirectoryService _directoryService;
     private bool _disposedValue;
 
     /// <summary>
@@ -42,7 +44,7 @@ public class TcpFileTransferService : IDisposable
     /// </summary>
     public event Action<FileTransferInfo, string?>? OnTransferCompleted;
 
-    public TcpFileTransferService(int port = 5237)
+    public TcpFileTransferService(IPlatformDirectoryService directoryService,int port = 5237)
     {
         _port = port;
         _listener = new TcpListener(IPAddress.Any, port);
@@ -50,6 +52,7 @@ public class TcpFileTransferService : IDisposable
         _incomingTransfers = new ConcurrentDictionary<string, FileTransferInfo>();
         _pendingTransferRequests = new ConcurrentDictionary<string, TaskCompletionSource<bool>>();
         _transferCancellationTokens = new ConcurrentDictionary<string, CancellationTokenSource>();
+        _directoryService = directoryService;
     }
 
     /// <summary>
@@ -373,7 +376,7 @@ public class TcpFileTransferService : IDisposable
             var savePath = transferInfo.SavePath;
             if (string.IsNullOrEmpty(savePath))
             {
-                savePath = FileTypeHelper.GetDirectoryByFileType(request.FileName);
+                savePath = FileTypeHelper.GetDirectoryByFileType(request.FileName, _directoryService);
             }
             var tempFilePath = Path.Combine(savePath, request.FileName);
 

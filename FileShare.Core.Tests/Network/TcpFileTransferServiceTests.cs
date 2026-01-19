@@ -1,5 +1,6 @@
 using FileShare.Core.Models;
 using FileShare.Core.Network;
+using FileShare.Core.Services;
 using Moq;
 using System.Net.Sockets;
 
@@ -11,6 +12,11 @@ namespace FileShare.Core.Tests.Network;
 /// </summary>
 public class TcpFileTransferServiceTests
 {
+    private readonly Mock<IPlatformDirectoryService> _mockDirectoryService;
+    public TcpFileTransferServiceTests()
+    {
+        _mockDirectoryService = new Mock<IPlatformDirectoryService>();
+    }
     /// <summary>
     /// 测试构造函数是否正确初始化
     /// </summary>
@@ -18,7 +24,7 @@ public class TcpFileTransferServiceTests
     public void Constructor_InitializesCorrectly()
     {
         // Arrange & Act: 创建 TcpFileTransferService 实例
-        using var service = new TcpFileTransferService();
+        using var service = new TcpFileTransferService(_mockDirectoryService.Object);
         
         // Assert: 验证实例是否创建成功
         Assert.NotNull(service);
@@ -34,7 +40,7 @@ public class TcpFileTransferServiceTests
         var customPort = 12345;
         
         // Act: 使用自定义端口创建实例
-        using var service = new TcpFileTransferService(customPort);
+        using var service = new TcpFileTransferService(_mockDirectoryService.Object, customPort);
         
         // Assert: 验证实例是否创建成功
         Assert.NotNull(service);
@@ -47,7 +53,7 @@ public class TcpFileTransferServiceTests
     public void Events_CanBeRegistered()
     {
         // Arrange: 准备测试数据
-        using var service = new TcpFileTransferService();
+        using var service = new TcpFileTransferService(_mockDirectoryService.Object);
         
         bool transferRequestCalled = false;
         bool progressUpdatedCalled = false;
@@ -70,7 +76,7 @@ public class TcpFileTransferServiceTests
     public void HandleTransferRequest_ExecutesWithoutException()
     {
         // Arrange: 准备测试数据
-        using var service = new TcpFileTransferService();
+        using var service = new TcpFileTransferService(_mockDirectoryService.Object);
         var transferId = "test-transfer-id";
         var accept = true;
         var savePath = "C:\\Downloads";
@@ -87,7 +93,7 @@ public class TcpFileTransferServiceTests
     public void CancelTransfer_ExecutesWithoutException()
     {
         // Arrange: 准备测试数据
-        using var service = new TcpFileTransferService();
+        using var service = new TcpFileTransferService(_mockDirectoryService.Object);
         var transferId = "test-transfer-id";
         
         // Act & Assert: 验证方法执行过程中没有抛出异常
@@ -102,7 +108,7 @@ public class TcpFileTransferServiceTests
     public async Task StartAsync_And_StopAsync_ExecuteWithoutException()
     {
         // Arrange: 准备测试数据
-        using var service = new TcpFileTransferService(0); // 使用0表示自动选择可用端口
+        using var service = new TcpFileTransferService(_mockDirectoryService.Object); 
         
         // Act & Assert: 验证 StartAsync 和 StopAsync 方法执行过程中没有抛出异常
         await service.StartAsync();
@@ -121,7 +127,7 @@ public class TcpFileTransferServiceTests
     public void Dispose_ReleasesResources()
     {
         // Arrange: 准备测试数据
-        var service = new TcpFileTransferService();
+        var service = new TcpFileTransferService(_mockDirectoryService.Object);
         
         // Act: 调用 Dispose 方法
         service.Dispose();
@@ -137,7 +143,7 @@ public class TcpFileTransferServiceTests
     public void Dispose_CanBeCalledMultipleTimes()
     {
         // Arrange: 准备测试数据
-        var service = new TcpFileTransferService();
+        var service = new TcpFileTransferService(_mockDirectoryService.Object);
         
         // Act & Assert: 多次调用 Dispose 方法
         service.Dispose();
