@@ -54,7 +54,7 @@ public static class FileTypeHelper
        out string ppszPath
     );
 
-    public static string GetDownloadsPath()
+    public static string GetDownloadsPathWindows()
     {
         string path;
         SHGetKnownFolderPath(FolderDownloads, 0, IntPtr.Zero, out path);
@@ -69,13 +69,13 @@ public static class FileTypeHelper
         {
             try
             {
-                return GetDownloadsPath();
+                return GetDownloadsPathWindows();
             }
             catch
             {
                 // API调用失败，回退到备用方案
             }
-        }
+        } 
 
         // 备用方案：基于用户主目录拼接
         string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
