@@ -44,18 +44,19 @@ public class MainPageViewModel : INotifyPropertyChanged
     public ICommand AcceptTransferCommand { get; }
     public ICommand RejectTransferCommand { get; }
     
-    public MainPageViewModel()
+    public MainPageViewModel(IPlatformDirectoryService directoryService)
     {
         Devices = new ObservableCollection<FileShare.Core.Models.DeviceInfo>();
         TransferTasks = new ObservableCollection<FileTransferInfo>();
         
         // 初始化服务管理器
         _serviceManager = new FileShareServiceManager(
+            directoryService,
             Microsoft.Maui.Devices.DeviceInfo.Name,
             FileShare.Core.Models.DeviceType.Mobile);
         
         // 注册事件处理
-        _serviceManager.OnDeviceDiscovered += OnDevicesUpdated;
+        _serviceManager.OnDeviceDiscovered += OnDeviceDiscovered;
         _serviceManager.OnTransferRequestSendAndReceive += OnTransferRequestReceived;
         _serviceManager.OnTransferProgressUpdated += OnTransferProgressUpdated;
         //_serviceManager.OnTransferCompleted += OnTransferCompleted;
@@ -155,21 +156,24 @@ public class MainPageViewModel : INotifyPropertyChanged
         StatusMessage = $"已拒绝文件: {info.FileName}";
     }
     
-    private void OnDevicesUpdated(List<FileShare.Core.Models.DeviceInfo> devices)
+    private void OnDeviceDiscovered(FileShare.Core.Models.DeviceInfo device)
     {
         // 更新设备列表
         var localDevice = _serviceManager.GetLocalDeviceInfo();
-        var remoteDevices = devices.Where(d => d.DeviceId != localDevice.DeviceId).ToList();
-        
+        if(device.DeviceId == localDevice.DeviceId)
+        {
+            return;
+        }
+
         MainThread.BeginInvokeOnMainThread(() =>
         {
-            Devices.Clear();
-            foreach (var device in remoteDevices)
+            // 检查设备是否已存在
+            var existingDevice = Devices.FirstOrDefault(d => d.DeviceId == device.DeviceId);
+            if (existingDevice == null)
             {
                 Devices.Add(device);
+                StatusMessage = $"发现设备: {device.DeviceName}";
             }
-            
-            StatusMessage = $"发现 {remoteDevices.Count} 台设备";
         });
     }
     

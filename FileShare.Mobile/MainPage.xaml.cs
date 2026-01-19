@@ -8,8 +8,19 @@ public partial class MainPage : ContentPage
     {
         InitializeComponent();
         
-        // 设置DataContext
-        BindingContext = new MainPageViewModel();
+        // 使用依赖注入获取MainPageViewModel实例
+        BindingContext = Handler?.MauiContext?.Services.GetRequiredService<MainPageViewModel>();
+    }
+    
+    protected override void OnHandlerChanged()
+    {
+        base.OnHandlerChanged();
+        
+        // 确保Handler已创建后再设置BindingContext
+        if (Handler != null && BindingContext == null)
+        {
+            BindingContext = Handler?.MauiContext?.Services.GetRequiredService<MainPageViewModel>();
+        }
     }
     
     protected override void OnDisappearing()

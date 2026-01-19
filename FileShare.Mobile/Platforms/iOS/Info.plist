@@ -28,5 +28,9 @@
 	</array>
 	<key>XSAppIconAssets</key>
 	<string>Assets.xcassets/appicon.appiconset</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>需要访问相册来保存和选择图片</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>需要保存图片到相册</string>
 </dict>
 </plist>

@@ -239,7 +239,7 @@ namespace FileShare.Desktop.ViewModels
                 Devices.Add(device);
             }, null);
 
-            StatusMessage = $"发现设备";
+            StatusMessage = $"发现设备: {device.DeviceName}";
         }
 
         private async void RemoveTransfer(FileTransferViewModel? model)
