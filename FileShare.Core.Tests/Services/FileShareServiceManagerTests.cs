@@ -67,7 +67,7 @@ public class FileShareServiceManagerTests
         bool transferCompletedCalled = false;
         
         // 注册事件处理程序
-        manager.OnDevicesUpdated += _ => devicesUpdatedCalled = true;
+        manager.OnDeviceDiscovered += _ => devicesUpdatedCalled = true;
         manager.OnTransferRequestSendAndReceive += _ => transferRequestCalled = true;
         manager.OnTransferProgressUpdated += _ => progressUpdatedCalled = true;
         manager.OnTransferCompleted += (_, __) => transferCompletedCalled = true;

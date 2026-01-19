@@ -1,5 +1,6 @@
 using FileShare.Core.Common;
 using FileShare.Core.Models;
+using System;
 using System.Collections.Concurrent;
 using System.IO;
 using System.Net;
@@ -372,7 +373,7 @@ public class TcpFileTransferService : IDisposable
             var savePath = transferInfo.SavePath;
             if (string.IsNullOrEmpty(savePath))
             {
-                savePath = Path.GetTempPath();
+                savePath = FileTypeHelper.GetDirectoryByFileType(request.FileName);
             }
             var tempFilePath = Path.Combine(savePath, request.FileName);
 

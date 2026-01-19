@@ -4,6 +4,7 @@ using Avalonia.Data.Core;
 using Avalonia.Data.Core.Plugins;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
+using FileShare.Desktop.Services;
 using FileShare.Desktop.ViewModels;
 using FileShare.Desktop.Views;
 using System;
@@ -20,13 +21,13 @@ namespace FileShare.Desktop
 
             AppDomain.CurrentDomain.UnhandledException += (s, e) =>
             {                
-                // ��¼�쳣
+                // 记录异常
                 Debug.WriteLine(e.ExceptionObject.ToString());
             };
 
             Dispatcher.UIThread.UnhandledException += (s, e) =>
             {
-                // ����UI�߳��쳣
+                // 处理UI线程异常
                 e.Handled = true;
                 Debug.WriteLine(e.Exception.ToString());
             };
@@ -39,9 +40,18 @@ namespace FileShare.Desktop
                 // Avoid duplicate validations from both Avalonia and the CommunityToolkit. 
                 // More info: https://docs.avaloniaui.net/docs/guides/development-guides/data-validation#manage-validationplugins
                 DisableAvaloniaDataAnnotationValidation();
+                
+                // 创建服务管理器实例
+                var serviceManager = new FileShare.Core.Services.FileShareServiceManager(
+                    Environment.MachineName,
+                    FileShare.Core.Models.DeviceType.Desktop);
+                
+                // 创建对话框服务实例
+                var dialogService = new DialogService(desktop);
+                
                 desktop.MainWindow = new MainWindow
                 {
-                    DataContext = new MainWindowViewModel(desktop),
+                    DataContext = new MainWindowViewModel(serviceManager, dialogService, desktop),
                 };
             }
 

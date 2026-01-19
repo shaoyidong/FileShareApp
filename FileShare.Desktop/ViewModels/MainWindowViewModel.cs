@@ -1,14 +1,10 @@
-﻿using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
-using Avalonia.Markup.Xaml;
-using Avalonia.Platform.Storage;
-using Avalonia.Threading;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using FileShare.Core.Models;
 using FileShare.Core.Services;
+using FileShare.Desktop.Services;
 using FileShare.Desktop.ViewModels.Messages;
-using MsBox.Avalonia;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -26,9 +22,9 @@ namespace FileShare.Desktop.ViewModels
         public string Greeting { get; } = "Welcome to Avalonia!";
 
 
-        private readonly FileShareServiceManager _serviceManager;
+        private readonly IFileShareServiceManager _serviceManager;
         private readonly SynchronizationContext _uiContext;
-        private readonly IClassicDesktopStyleApplicationLifetime _appLifetime;
+        private readonly IClassicDesktopStyleApplicationLifetime? _appLifetime;
         private readonly System.Timers.Timer _timerCheckDeviceOnline;
 
         private string _statusMessage = "准备就绪";
@@ -66,25 +62,33 @@ namespace FileShare.Desktop.ViewModels
         public ICommand RejectTransferCommand { get; }
         public ICommand RemoveTransferCommand { get; }
 
-        public MainWindowViewModel(IClassicDesktopStyleApplicationLifetime appLifetime)
+        private readonly IDialogService _dialogService;
+        /// <summary>
+        /// 构造函数，用于依赖注入
+        /// </summary>
+        /// <param name="serviceManager">文件共享服务管理器</param>
+        /// <param name="dialogService">对话框服务</param>
+        /// <param name="appLifetime">应用程序生命周期</param>
+        /// <param name="uiContext">UI上下文</param>
+        public MainWindowViewModel(IFileShareServiceManager serviceManager, 
+                                  IDialogService dialogService,
+                                  IClassicDesktopStyleApplicationLifetime? appLifetime = null,
+                                  SynchronizationContext? uiContext = null)
         {
-            _uiContext = SynchronizationContext.Current ?? new SynchronizationContext();
+            _serviceManager = serviceManager;
+            _dialogService = dialogService;
+            _uiContext = uiContext ?? SynchronizationContext.Current ?? new SynchronizationContext();
             _appLifetime = appLifetime;
             Devices = new ObservableCollection<DeviceInfo>();
             TransferTasks = new ObservableCollection<FileTransferViewModel>();
             SentTransferTasks = new ObservableCollection<FileTransferViewModel>();
             ReceivedTransferTasks = new ObservableCollection<FileTransferViewModel>();
 
-            // 初始化服务管理器
-            _serviceManager = new FileShareServiceManager(
-                Environment.MachineName,
-                DeviceType.Desktop);
-                
             // 保存本地设备ID
             _localDeviceId = _serviceManager.GetLocalDeviceInfo().DeviceId;
 
             // 注册事件处理
-            _serviceManager.OnDevicesUpdated += OnDevicesUpdated;
+            _serviceManager.OnDeviceDiscovered += OnDeviceDiscovered;
             _serviceManager.OnTransferRequestSendAndReceive += OnTransferRequestSendAndReceive;
             _serviceManager.OnTransferProgressUpdated += OnTransferProgressUpdated;
             _serviceManager.OnTransferCompleted += OnTransferCompleted;
@@ -125,7 +129,7 @@ namespace FileShare.Desktop.ViewModels
             {
                 await _serviceManager.StartServicesAsync();
                 _timerCheckDeviceOnline.Start();
-                StatusMessage = "服务已启动";
+                StatusMessage = "准备就绪";
             }
             catch (Exception ex)
             {
@@ -162,8 +166,7 @@ namespace FileShare.Desktop.ViewModels
             }
 
             // 打开文件选择对话框
-            var topLevel = TopLevel.GetTopLevel(_appLifetime.MainWindow);
-            var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+            var files = await _dialogService.OpenFilePickerAsync(new Avalonia.Platform.Storage.FilePickerOpenOptions
             {
                 Title = "选择要发送的文件",
                 AllowMultiple = false
@@ -197,8 +200,7 @@ namespace FileShare.Desktop.ViewModels
 
         private async void AcceptTransfer(FileTransferViewModel viewModel)
         {
-            var topLevel = TopLevel.GetTopLevel(_appLifetime.MainWindow);
-            var folder = await topLevel.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+            var folder = await _dialogService.OpenFolderPickerAsync(new Avalonia.Platform.Storage.FolderPickerOpenOptions
             {
                 Title = "选择文件保存位置",
                 AllowMultiple = false
@@ -222,22 +224,22 @@ namespace FileShare.Desktop.ViewModels
             StatusMessage = $"已拒绝文件: {viewModel.FileName}";
         }   
 
-        private void OnDevicesUpdated(List<DeviceInfo> devices)
+        private void OnDeviceDiscovered(DeviceInfo device)
         {
             // 更新设备列表，过滤掉本地设备
             var localDevice = _serviceManager.GetLocalDeviceInfo();
-            var remoteDevices = devices.Where(d => d.DeviceId != localDevice.DeviceId).ToList();
 
-            _uiContext.Send(_=>
+            if (device.DeviceId == localDevice.DeviceId)
             {
-                Devices.Clear();
-                foreach (var device in remoteDevices)
-                {
-                    Devices.Add(device);
-                }
-            }, null);           
+                return;
+            }
 
-            StatusMessage = $"发现 {remoteDevices.Count} 台设备";
+            _uiContext.Send(_ =>
+            {
+                Devices.Add(device);
+            }, null);
+
+            StatusMessage = $"发现设备";
         }
 
         private async void RemoveTransfer(FileTransferViewModel? model)
@@ -254,16 +256,14 @@ namespace FileShare.Desktop.ViewModels
                     //if (!result)
                     //{
                     //    return;
-                    //}                    
+                    //}                     
                     _serviceManager.CancelTransfer(model.TransferId);
                     StatusMessage = $"已拒绝文件: {model.FileName}";
                     break;
                 case TransferStatus.Transferring:
-                    // 发送消息请求显示确认对话框
-                    var box = MessageBoxManager.GetMessageBoxStandard("移除确认", "正在传输中，确定要移除吗？", MsBox.Avalonia.Enums.ButtonEnum.YesNo);
-                    // 等待对话框结果
-                    var result = await box.ShowWindowDialogAsync(_appLifetime.MainWindow);
-                    if (result != MsBox.Avalonia.Enums.ButtonResult.Yes)
+                    // 使用对话框服务显示确认对话框
+                    var result = await _dialogService.ShowConfirmationDialogAsync("移除确认", "正在传输中，确定要移除吗？");
+                    if (!result)
                     {
                         return;
                     }

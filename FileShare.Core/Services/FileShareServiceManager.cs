@@ -6,7 +6,7 @@ namespace FileShare.Core.Services;
 /// <summary>
 /// 文件共享服务管理器，整合设备发现和文件传输功能
 /// </summary>
-public class FileShareServiceManager : IDisposable
+public class FileShareServiceManager : IFileShareServiceManager
 {
     private readonly UdpDiscoveryService _discoveryService;
     private readonly TcpFileTransferService _fileTransferService;
@@ -15,7 +15,7 @@ public class FileShareServiceManager : IDisposable
     /// <summary>
     /// 设备列表更新事件
     /// </summary>
-    public event Action<List<DeviceInfo>>? OnDevicesUpdated;
+    public event Action<DeviceInfo>? OnDeviceDiscovered;
     
     /// <summary>
     /// 文件传输请求事件
@@ -58,7 +58,7 @@ public class FileShareServiceManager : IDisposable
         _fileTransferService = new TcpFileTransferService(transferPort);
         
         // 注册事件处理
-        _discoveryService.OnDeviceDiscovered += device => OnDevicesUpdated?.Invoke(new List<DeviceInfo> { device });
+        _discoveryService.OnDeviceDiscovered += device => OnDeviceDiscovered?.Invoke(device);
         _fileTransferService.OnTransferRequestSendAndReceive += info => OnTransferRequestSendAndReceive?.Invoke(info);
         _fileTransferService.OnTransferProgressUpdated += info => OnTransferProgressUpdated?.Invoke(info);
         _fileTransferService.OnTransferCompleted += (info, message) => OnTransferCompleted?.Invoke(info, message);

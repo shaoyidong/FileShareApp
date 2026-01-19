@@ -11,6 +11,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FileShare.Desktop", "FileSh
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FileShare.Core.Tests", "FileShare.Core.Tests\FileShare.Core.Tests.csproj", "{D8048909-19FE-4FE2-9F37-236BFFC62324}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FileShare.Desktop.Tests", "FileShare.Desktop.Tests\FileShare.Desktop.Tests.csproj", "{5A955ACB-42A8-4E02-91AA-24911CBCFD01}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -70,6 +72,18 @@ Global
 		{D8048909-19FE-4FE2-9F37-236BFFC62324}.Release|x64.Build.0 = Release|Any CPU
 		{D8048909-19FE-4FE2-9F37-236BFFC62324}.Release|x86.ActiveCfg = Release|Any CPU
 		{D8048909-19FE-4FE2-9F37-236BFFC62324}.Release|x86.Build.0 = Release|Any CPU
+		{5A955ACB-42A8-4E02-91AA-24911CBCFD01}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5A955ACB-42A8-4E02-91AA-24911CBCFD01}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5A955ACB-42A8-4E02-91AA-24911CBCFD01}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{5A955ACB-42A8-4E02-91AA-24911CBCFD01}.Debug|x64.Build.0 = Debug|Any CPU
+		{5A955ACB-42A8-4E02-91AA-24911CBCFD01}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{5A955ACB-42A8-4E02-91AA-24911CBCFD01}.Debug|x86.Build.0 = Debug|Any CPU
+		{5A955ACB-42A8-4E02-91AA-24911CBCFD01}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5A955ACB-42A8-4E02-91AA-24911CBCFD01}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5A955ACB-42A8-4E02-91AA-24911CBCFD01}.Release|x64.ActiveCfg = Release|Any CPU
+		{5A955ACB-42A8-4E02-91AA-24911CBCFD01}.Release|x64.Build.0 = Release|Any CPU
+		{5A955ACB-42A8-4E02-91AA-24911CBCFD01}.Release|x86.ActiveCfg = Release|Any CPU
+		{5A955ACB-42A8-4E02-91AA-24911CBCFD01}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

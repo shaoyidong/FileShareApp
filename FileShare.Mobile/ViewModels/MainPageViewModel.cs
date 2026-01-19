@@ -55,7 +55,7 @@ public class MainPageViewModel : INotifyPropertyChanged
             FileShare.Core.Models.DeviceType.Mobile);
         
         // 注册事件处理
-        _serviceManager.OnDevicesUpdated += OnDevicesUpdated;
+        _serviceManager.OnDeviceDiscovered += OnDevicesUpdated;
         _serviceManager.OnTransferRequestSendAndReceive += OnTransferRequestReceived;
         _serviceManager.OnTransferProgressUpdated += OnTransferProgressUpdated;
         //_serviceManager.OnTransferCompleted += OnTransferCompleted;
