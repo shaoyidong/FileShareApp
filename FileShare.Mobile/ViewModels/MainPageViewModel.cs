@@ -1,74 +1,108 @@
-using System.Collections.ObjectModel;
-using System.ComponentModel;
-using System.IO;
-using System.Runtime.CompilerServices;
-using System.Windows.Input;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using FileShare.Core.Models;
 using FileShare.Core.Services;
+using FileShare.Mobile.Services;
 using Microsoft.Maui.Storage;
+using System.Collections.ObjectModel;
+using System.IO;
+using System.Timers;
+using System.Windows.Input;
 
 namespace FileShare.Mobile.ViewModels;
 
-public class MainPageViewModel : INotifyPropertyChanged
+public partial class MainPageViewModel : ViewModelBase
 {
     private readonly FileShareServiceManager _serviceManager;
+    private readonly System.Timers.Timer _timerCheckDeviceOnline;
+    private readonly SynchronizationContext _uiContext;
+    private readonly IAlertService _alertService;
+    private string _localDeviceId;   
+
     private string _statusMessage = "准备就绪";
-    private bool _isScanning;
-    private FileShare.Core.Models.DeviceInfo _selectedDevice;
-    
-    public event PropertyChangedEventHandler? PropertyChanged;
-    
     public string StatusMessage
     {
         get => _statusMessage;
-        set { _statusMessage = value; OnPropertyChanged(); }
+        set => SetProperty(ref _statusMessage, value);
     }
-    
+   
+
+    private bool _isScanning;
     public bool IsScanning
     {
         get => _isScanning;
-        set { _isScanning = value; OnPropertyChanged(); }
+        set => SetProperty(ref _isScanning, value);
     }
-    
-    public FileShare.Core.Models.DeviceInfo SelectedDevice
+
+    private Core.Models.DeviceInfo? _selectedDevice;
+    public Core.Models.DeviceInfo? SelectedDevice
     {
         get => _selectedDevice;
-        set { _selectedDevice = value; OnPropertyChanged(); }
-    }
-    
-    public ObservableCollection<FileShare.Core.Models.DeviceInfo> Devices { get; }
-    public ObservableCollection<FileTransferInfo> TransferTasks { get; }
-    
+        set => SetProperty(ref _selectedDevice, value);
+    }   
+
     public ICommand RefreshDevicesCommand { get; }
     public ICommand SendFileCommand { get; }
-    public ICommand AcceptTransferCommand { get; }
-    public ICommand RejectTransferCommand { get; }
+
+    public ObservableCollection<FileShare.Core.Models.DeviceInfo> Devices { get; }
+    public ObservableCollection<FileTransferViewModel> TransferTasks { get; }
+    public ObservableCollection<FileTransferViewModel> SentTransferTasks { get; }
+    public ObservableCollection<FileTransferViewModel> ReceivedTransferTasks { get; }
     
-    public MainPageViewModel(IPlatformDirectoryService directoryService)
+    public MainPageViewModel(IPlatformDirectoryService directoryService, IAlertService alertService)
     {
+        _uiContext = SynchronizationContext.Current?? new SynchronizationContext();
+        _alertService = alertService;
         Devices = new ObservableCollection<FileShare.Core.Models.DeviceInfo>();
-        TransferTasks = new ObservableCollection<FileTransferInfo>();
-        
+        TransferTasks = new ObservableCollection<FileTransferViewModel>();
+        SentTransferTasks = new ObservableCollection<FileTransferViewModel>();
+        ReceivedTransferTasks = new ObservableCollection<FileTransferViewModel>();
+
         // 初始化服务管理器
         _serviceManager = new FileShareServiceManager(
             directoryService,
             Microsoft.Maui.Devices.DeviceInfo.Name,
             FileShare.Core.Models.DeviceType.Mobile);
         
+        // 保存本地设备ID
+        _localDeviceId = _serviceManager.GetLocalDeviceInfo().DeviceId;
+        
         // 注册事件处理
         _serviceManager.OnDeviceDiscovered += OnDeviceDiscovered;
-        _serviceManager.OnTransferRequestSendAndReceive += OnTransferRequestReceived;
+        _serviceManager.OnTransferRequestSendAndReceive += OnTransferRequestSendAndReceive;
         _serviceManager.OnTransferProgressUpdated += OnTransferProgressUpdated;
-        //_serviceManager.OnTransferCompleted += OnTransferCompleted;
-        
+        _serviceManager.OnTransferCompleted += OnTransferCompleted;
+
         // 初始化命令
-        RefreshDevicesCommand = new Command(async () => await RefreshDevicesAsync());
-        SendFileCommand = new Command(async () => await SendFileAsync());
-        AcceptTransferCommand = new Command<FileTransferInfo>(AcceptTransfer);
-        RejectTransferCommand = new Command<FileTransferInfo>(RejectTransfer);
+        RefreshDevicesCommand = new RelayCommand(async () => RefreshDevicesAsync());
+        SendFileCommand = new RelayCommand(async () => SendFileAsync());
+
+        // 初始化设备在线检测定时器
+        _timerCheckDeviceOnline = new System.Timers.Timer(5000);
+        _timerCheckDeviceOnline.Elapsed += Timer_Elapsed;
         
         // 启动服务
-        _ = InitializeAsync();
+        _ = InitializeAsync();       
+    }
+    
+    private void Timer_Elapsed(object? sender, ElapsedEventArgs e)
+    {
+        _uiContext.Post((o) =>
+        {
+            List<Core.Models.DeviceInfo> removeDevices = new List<Core.Models.DeviceInfo>();
+            for (int i = 0; i < Devices.Count; i++)
+            {
+                if ((DateTime.Now - Devices[i].LastSeen) > TimeSpan.FromSeconds(10))
+                {
+                    removeDevices.Add(Devices[i]);
+                }
+            }
+            foreach (var item in removeDevices)
+            {
+                Devices.Remove(item);
+            }
+            removeDevices.Clear();
+        },null);
     }
     
     private async Task InitializeAsync()
@@ -76,14 +110,15 @@ public class MainPageViewModel : INotifyPropertyChanged
         try
         {
             await _serviceManager.StartServicesAsync();
+            _timerCheckDeviceOnline.Start();
             StatusMessage = "服务已启动";
         }
         catch (Exception ex)
         {
             StatusMessage = $"启动服务失败: {ex.Message}";
         }
-    }
-    
+    }    
+   
     private async Task RefreshDevicesAsync()
     {
         try
@@ -92,6 +127,7 @@ public class MainPageViewModel : INotifyPropertyChanged
             StatusMessage = "正在扫描设备...";
             _serviceManager.RefreshDevices();
             await Task.Delay(2000);
+            StatusMessage = "扫描完成";
         }
         catch (Exception ex)
         {
@@ -100,15 +136,14 @@ public class MainPageViewModel : INotifyPropertyChanged
         finally
         {
             IsScanning = false;
-            StatusMessage = "扫描完成";
         }
-    }
+    }    
     
     private async Task SendFileAsync()
     {
         if (SelectedDevice == null)
         {
-            await Application.Current.MainPage.DisplayAlert("提示", "请先选择目标设备", "确定");
+            await _alertService.DisplayAlertAsync("提示", "请先选择目标设备", "确定");
             return;
         }
         
@@ -128,44 +163,113 @@ public class MainPageViewModel : INotifyPropertyChanged
                 if (success)
                 {
                     StatusMessage = "文件发送成功";
-                    await Application.Current.MainPage.DisplayAlert("成功", "文件发送成功", "确定");
+                    await _alertService.DisplayAlertAsync("成功", "文件发送成功", "确定");
                 }
                 else
                 {
                     StatusMessage = "文件发送失败";
-                    await Application.Current.MainPage.DisplayAlert("失败", "文件发送失败", "确定");
+                    await _alertService.DisplayAlertAsync("失败", "文件发送失败", "确定");
                 }
             }
         }
         catch (Exception ex)
         {
             StatusMessage = $"发送文件失败: {ex.Message}";
-            await Application.Current.MainPage.DisplayAlert("错误", ex.Message, "确定");
+            await _alertService.DisplayAlertAsync("错误", ex.Message, "确定");
         }
     }
     
-    private void AcceptTransfer(FileTransferInfo info)
+    [RelayCommand]
+    private async Task AcceptTransfer(FileTransferViewModel viewModel)
     {
-        _serviceManager.HandleTransferRequest(info.TransferId, true);
-        StatusMessage = $"开始接收文件: {info.FileName}";
+        try
+        {
+            if (viewModel?.TransferId == null)
+            {
+                return;
+            }           
+            
+            _serviceManager.HandleTransferRequest(viewModel.TransferId, true);
+            StatusMessage = $"开始接收文件: {viewModel.FileName}";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"接受传输失败: {ex.Message}";
+            await _alertService.DisplayAlertAsync("错误", ex.Message, "确定");
+        }
     }
     
-    private void RejectTransfer(FileTransferInfo info)
+    [RelayCommand]
+    private void RejectTransfer(FileTransferViewModel viewModel)
     {
-        _serviceManager.HandleTransferRequest(info.TransferId, false);
-        StatusMessage = $"已拒绝文件: {info.FileName}";
-    }
-    
-    private void OnDeviceDiscovered(FileShare.Core.Models.DeviceInfo device)
-    {
-        // 更新设备列表
-        var localDevice = _serviceManager.GetLocalDeviceInfo();
-        if(device.DeviceId == localDevice.DeviceId)
+        if (viewModel?.TransferId == null)
         {
             return;
         }
 
-        MainThread.BeginInvokeOnMainThread(() =>
+        _serviceManager.HandleTransferRequest(viewModel.TransferId, false);
+        StatusMessage = $"已拒绝文件: {viewModel.FileName}";
+    }
+    
+    [RelayCommand]
+    private async Task RemoveTransfer(FileTransferViewModel viewModel)
+    {
+        if (viewModel?.TransferId == null)
+        {
+            return;
+        }
+
+        switch (viewModel.Status)
+        {
+            case TransferStatus.Pending:
+                _serviceManager.CancelTransfer(viewModel.TransferId);
+                StatusMessage = $"已拒绝文件: {viewModel.FileName}";
+                break;
+            case TransferStatus.Transferring:
+                // 显示确认对话框
+                var result = await _alertService.DisplayAlertAsync(
+                    "确认移除", 
+                    "正在传输中，确定要移除吗？", 
+                    "确定", "取消");
+                
+                if (!result)
+                {
+                    return;
+                }
+                
+                _serviceManager.CancelTransfer(viewModel.TransferId);
+                StatusMessage = $"已取消传输: {viewModel.FileName}";
+                break;
+            case TransferStatus.Completed:
+            case TransferStatus.Failed:
+            case TransferStatus.Cancelled:
+                break;
+            default:
+                break;
+        }
+        
+        // 从列表中移除
+        TransferTasks.Remove(viewModel);
+        if (viewModel.SenderId == _localDeviceId)
+        {
+            SentTransferTasks.Remove(viewModel);
+        }
+        else
+        {
+            ReceivedTransferTasks.Remove(viewModel);
+        }
+    }
+    
+    private void OnDeviceDiscovered(FileShare.Core.Models.DeviceInfo device)
+    {
+        // 更新设备列表，过滤掉本地设备
+        var localDevice = _serviceManager.GetLocalDeviceInfo();
+        if (device.DeviceId == localDevice.DeviceId)
+        {
+            return;
+        }
+        
+        _uiContext.Post((o) =>
         {
             // 检查设备是否已存在
             var existingDevice = Devices.FirstOrDefault(d => d.DeviceId == device.DeviceId);
@@ -174,82 +278,109 @@ public class MainPageViewModel : INotifyPropertyChanged
                 Devices.Add(device);
                 StatusMessage = $"发现设备: {device.DeviceName}";
             }
-        });
+        },null);
     }
     
-    private void OnTransferRequestReceived(FileTransferInfo info)
+    private void OnTransferRequestSendAndReceive(FileTransferInfo info)
     {
-        MainThread.BeginInvokeOnMainThread(async () =>
+        _uiContext.Post(async (o) =>
         {
-            TransferTasks.Add(info);
-            StatusMessage = $"收到文件传输请求: {info.FileName}";
+            // 创建FileTransferViewModel实例
+            var transferViewModel = FileTransferViewModel.FromModel(info);
             
-            // 显示确认对话框
-            var result = await Application.Current.MainPage.DisplayAlert(
-                "文件传输请求",
-                $"来自 {info.SenderId} 的文件: {info.FileName} ({FormatFileSize(info.FileSize)})",
-                "接受", "拒绝");
+            // 添加到总任务列表
+            TransferTasks.Add(transferViewModel);
             
-            if (result)
+            // 根据发送者ID判断是发送任务还是接收任务
+            if (info.SenderId == _localDeviceId)
             {
-                AcceptTransfer(info);
+                // 发送任务
+                SentTransferTasks.Add(transferViewModel);
+                StatusMessage = $"正在发送文件: {info.FileName}";
             }
             else
             {
-                RejectTransfer(info);
+                // 接收任务
+                ReceivedTransferTasks.Add(transferViewModel);
+                StatusMessage = $"收到文件传输请求: {info.FileName}";
+                
+                var senderDevice = Devices.FirstOrDefault(d => d.DeviceId == info.SenderId);
+                if (senderDevice == null) 
+                {
+                    return;
+                }
+                // 显示确认对话框
+                var result = await _alertService.DisplayAlertAsync(
+                    "文件传输请求",
+                    $"来自 {senderDevice.DeviceName ?? "未知设备"} 的文件: {info.FileName} ({transferViewModel.FormattedFileSize})",
+                    "接受", "拒绝");
+                
+                if (result)
+                {
+                    await AcceptTransfer(transferViewModel);
+                }
+                else
+                {
+                    RejectTransferCommand.Execute(transferViewModel);
+                }
             }
-        });
+        },null);
     }
     
     private void OnTransferProgressUpdated(FileTransferInfo updatedInfo)
     {
-        MainThread.BeginInvokeOnMainThread(() =>
+        _uiContext.Post((o) =>
         {
-            // 查找并替换传输任务，实现GUI刷新
-            var index = TransferTasks.IndexOf(TransferTasks.FirstOrDefault(t => t.TransferId == updatedInfo.TransferId));
-            if (index >= 0)
+            // 查找对应的FileTransferViewModel并更新
+            var viewModel = TransferTasks.FirstOrDefault(t => t.TransferId == updatedInfo.TransferId);
+            if (viewModel != null)
             {
-                TransferTasks[index] = updatedInfo;
-                
-                var progress = (double)updatedInfo.TransferredSize / updatedInfo.FileSize * 100;
-                StatusMessage = $"正在传输: {updatedInfo.FileName} ({progress:F1}%)";
+                viewModel.Status = updatedInfo.Status;
+                viewModel.FileSize = updatedInfo.FileSize;
+                viewModel.TransferredSize = updatedInfo.TransferredSize;
+                viewModel.ProgressPercentage = updatedInfo.ProgressPercentage;
+
+                StatusMessage = $"正在传输: {updatedInfo.FileName} ({updatedInfo.ProgressPercentage:F1}%)";
             }
-        });
+        },null);
     }
     
-    private void OnTransferCompleted(FileTransferInfo updatedInfo, bool success, string? errorMessage)
+    private void OnTransferCompleted(FileTransferInfo updatedInfo, string? errorMessage)
     {
-        MainThread.BeginInvokeOnMainThread(() =>
+        _uiContext.Post((o) =>
         {
-            // 查找并替换传输任务，实现GUI刷新
-            var index = TransferTasks.IndexOf(TransferTasks.FirstOrDefault(t => t.TransferId == updatedInfo.TransferId));
-            if (index >= 0)
+            // 查找对应的FileTransferViewModel并更新
+            var viewModel = TransferTasks.FirstOrDefault(t => t.TransferId == updatedInfo.TransferId);
+            if (viewModel != null)
             {
-                TransferTasks[index] = updatedInfo;
-                StatusMessage = success ? $"文件传输完成: {updatedInfo.FileName}" : $"传输失败: {errorMessage ?? "未知错误"}";
+                viewModel.Status = updatedInfo.Status;
+                viewModel.FileSize = updatedInfo.FileSize;
+                viewModel.TransferredSize = updatedInfo.TransferredSize;
+                viewModel.ProgressPercentage = updatedInfo.ProgressPercentage;
+
+                switch (viewModel.Status)
+                {
+                    case TransferStatus.Completed:
+                        StatusMessage = $"文件传输完成: {updatedInfo.FileName}";
+                        break;
+                    case TransferStatus.Failed:
+                        StatusMessage = $"文件传输失败: {errorMessage??string.Empty}";
+                        break;
+                    case TransferStatus.Cancelled:
+                        StatusMessage = $"文件传输取消: {errorMessage ?? string.Empty}";
+                        break;
+                    default:
+                        StatusMessage = errorMessage ?? string.Empty;
+                        break;
+                }
             }
-        });
-    }
-    
-    private string FormatFileSize(long bytes)
-    {
-        if (bytes < 1024)
-            return $"{bytes} B";
-        else if (bytes < 1024 * 1024)
-            return $"{(bytes / 1024.0):F2} KB";
-        else if (bytes < 1024 * 1024 * 1024)
-            return $"{(bytes / (1024.0 * 1024)):F2} MB";
-        else
-            return $"{(bytes / (1024.0 * 1024 * 1024)):F2} GB";
-    }
-    
-    protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
-    {
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-    }
+        },null);
+    } 
     
     public void Dispose()
     {
         _serviceManager.Dispose();
+        _timerCheckDeviceOnline?.Stop();
+        _timerCheckDeviceOnline?.Dispose();
     }
 }

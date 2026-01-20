@@ -22,8 +22,9 @@ namespace FileShare.Desktop.Tests.ViewModels
         public MainWindowViewModelTests()
         {
             // 设置测试同步上下文
-            _testSynchronizationContext = new SynchronizationContext();
-            SynchronizationContext.SetSynchronizationContext(_testSynchronizationContext);
+            //_testSynchronizationContext = new SynchronizationContext();
+            //SynchronizationContext.SetSynchronizationContext(_testSynchronizationContext);
+            _testSynchronizationContext = SynchronizationContext.Current?? new SynchronizationContext();
 
             // 创建模拟对象
             _mockServiceManager = new Mock<IFileShareServiceManager>();
@@ -37,7 +38,8 @@ namespace FileShare.Desktop.Tests.ViewModels
                     DeviceId = "test-device-id",
                     DeviceName = "Test Device",
                     DeviceType = DeviceType.Desktop,
-                    Port = 5237
+                    Port = 5237,
+                    IpAddress = "127.0.0.1"
                 });
 
             // 创建ViewModel实例
@@ -92,7 +94,8 @@ namespace FileShare.Desktop.Tests.ViewModels
                     DeviceId = "remote-device-1",
                     DeviceName = "Remote Device 1",
                     DeviceType = DeviceType.Desktop,
-                    Port = 5237
+                    Port = 5237,
+                    IpAddress = "127.0.0.1"
                 };
 
             // Act
@@ -397,7 +400,8 @@ namespace FileShare.Desktop.Tests.ViewModels
                 DeviceId = "remote-device-1",
                 DeviceName = "Remote Device",
                 DeviceType = DeviceType.Desktop,
-                Port = 5237
+                Port = 5237,
+                IpAddress = "127.0.0.1"
             };
             _viewModel.SelectedDevice = selectedDevice;
 

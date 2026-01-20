@@ -50,17 +50,10 @@ public class UdpDiscoveryService : IDisposable
             Console.WriteLine($"发送发现数据包失败: {ex.Message}");
         }
     }
-    
-    public UdpDiscoveryService(string deviceId, string deviceName, DeviceType deviceType)
+
+    public UdpDiscoveryService(DeviceInfo localDevice)
     {
-        _localDevice = new DeviceInfo
-        {
-            DeviceId = deviceId,
-            DeviceName = deviceName,
-            DeviceType = deviceType,
-            Port = 5237, // 文件传输服务端口
-            IpAddress = GetLocalIpAddress()
-        };
+        _localDevice = localDevice;
         
         // 初始化UdpClient，但不绑定端口
         _udpClient = new UdpClient();
@@ -320,30 +313,7 @@ public class UdpDiscoveryService : IDisposable
     {
         var cutoffTime = DateTime.Now.AddSeconds(-10);
         _discoveredDevices.RemoveAll(d => d.LastSeen < cutoffTime);
-    }
-    
-    /// <summary>
-    /// 获取本地IP地址
-    /// </summary>
-    private string GetLocalIpAddress()
-    {
-        try
-        {
-            var host = Dns.GetHostEntry(Dns.GetHostName());
-            foreach (var ip in host.AddressList)
-            {
-                if (ip.AddressFamily == AddressFamily.InterNetwork)
-                {
-                    return ip.ToString();
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"获取本地IP地址失败: {ex.Message}");
-        }
-        return "127.0.0.1";
-    }
+    } 
     
     /// <summary>
     /// 获取当前发现的设备列表

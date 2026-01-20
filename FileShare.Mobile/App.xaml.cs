@@ -7,28 +7,21 @@ public partial class App : Microsoft.Maui.Controls.Application
 {
 	public App()
 	{
-		InitializeComponent();
-		// 使用AppShell作为主页面，而不是在CreateWindow中直接设置
-		MainPage = new AppShell();
-	}
+		InitializeComponent();       
+    }
 
 	protected override Window CreateWindow(IActivationState? activationState)
 	{
-		var window = base.CreateWindow(activationState);
-		
-		// 配置窗口大小和行为
-		if (window != null)
-		{
-			window.MinimumHeight = 600;
-			window.MinimumWidth = 800;
-			
-			// 配置iOS平台特定设置（在AppShell中设置）
-			if (window.Page != null)
-			{
-				window.Page.On<iOS>().SetUseSafeArea(true);
-			}
-		}
-		
-		return window;
-	}
+        // 显式创建根 Window，根 Page 使用 AppShell（Shell 内已包含 MainPage）
+        var window = new Window(new AppShell());
+
+        // 仅在桌面平台设置最小尺寸
+        if (OperatingSystem.IsWindows() || OperatingSystem.IsMacOS())
+        {
+            window.MinimumHeight = 600;
+            window.MinimumWidth = 800;
+        }
+
+        return window;
+    }
 }

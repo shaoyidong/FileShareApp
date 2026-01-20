@@ -10,6 +10,7 @@ using FileShare.Desktop.Views;
 using System;
 using System.Diagnostics;
 using System.Linq;
+using System.Threading;
 
 namespace FileShare.Desktop
 {
@@ -52,7 +53,7 @@ namespace FileShare.Desktop
                 
                 desktop.MainWindow = new MainWindow
                 {
-                    DataContext = new MainWindowViewModel(serviceManager, dialogService, desktop),
+                    DataContext = new MainWindowViewModel(serviceManager, dialogService, desktop, SynchronizationContext.Current??new SynchronizationContext()),
                 };
             }
 

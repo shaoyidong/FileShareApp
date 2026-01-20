@@ -1,4 +1,5 @@
 using Avalonia.Controls.ApplicationLifetimes;
+using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using FileShare.Core.Models;
@@ -29,7 +30,8 @@ namespace FileShare.Desktop.ViewModels
 
         private string _statusMessage = "准备就绪";
         private bool _isScanning;
-        private DeviceInfo _selectedDevice;
+        [ObservableProperty]
+        private DeviceInfo? _selectedDevice;
         private string _localDeviceId;
 
         public string StatusMessage
@@ -43,13 +45,7 @@ namespace FileShare.Desktop.ViewModels
         {
             get => _isScanning;
             set => this.SetProperty(ref _isScanning, value);
-        }
-
-        public DeviceInfo SelectedDevice
-        {
-            get => _selectedDevice;
-            set => this.SetProperty(ref _selectedDevice, value);
-        }
+        }        
 
         public ObservableCollection<DeviceInfo> Devices { get; }
         public ObservableCollection<FileTransferViewModel> TransferTasks { get; }
@@ -72,8 +68,8 @@ namespace FileShare.Desktop.ViewModels
         /// <param name="uiContext">UI上下文</param>
         public MainWindowViewModel(IFileShareServiceManager serviceManager, 
                                   IDialogService dialogService,
-                                  IClassicDesktopStyleApplicationLifetime? appLifetime = null,
-                                  SynchronizationContext? uiContext = null)
+                                  IClassicDesktopStyleApplicationLifetime appLifetime,
+                                  SynchronizationContext uiContext)
         {
             _serviceManager = serviceManager;
             _dialogService = dialogService;
@@ -94,8 +90,8 @@ namespace FileShare.Desktop.ViewModels
             _serviceManager.OnTransferCompleted += OnTransferCompleted;
 
             // 初始化命令
-            RefreshDevicesCommand = new RelayCommand(async () => await RefreshDevicesAsync());
-            SendFileCommand = new RelayCommand(async () => await SendFileAsync());
+            RefreshDevicesCommand = new RelayCommand(async () => RefreshDevicesAsync());
+            SendFileCommand = new RelayCommand(async () => SendFileAsync());
             AcceptTransferCommand = new RelayCommand<FileTransferViewModel>(AcceptTransfer);
             RejectTransferCommand = new RelayCommand<FileTransferViewModel>(RejectTransfer);
             RemoveTransferCommand = new RelayCommand<FileTransferViewModel>(RemoveTransfer);
@@ -198,8 +194,12 @@ namespace FileShare.Desktop.ViewModels
             }
         }
 
-        private async void AcceptTransfer(FileTransferViewModel viewModel)
+        private async void AcceptTransfer(FileTransferViewModel? viewModel)
         {
+            if (viewModel?.TransferId == null)
+            {
+                return;
+            }
             var folder = await _dialogService.OpenFolderPickerAsync(new Avalonia.Platform.Storage.FolderPickerOpenOptions
             {
                 Title = "选择文件保存位置",
@@ -218,8 +218,12 @@ namespace FileShare.Desktop.ViewModels
                 : $"开始接收文件: {viewModel.FileName}";
         }
 
-        private void RejectTransfer(FileTransferViewModel viewModel)
+        private void RejectTransfer(FileTransferViewModel? viewModel)
         {
+            if (viewModel?.TransferId == null)
+            {
+                return;
+            }
             _serviceManager.HandleTransferRequest(viewModel.TransferId, false);
             StatusMessage = $"已拒绝文件: {viewModel.FileName}";
         }   
@@ -244,7 +248,7 @@ namespace FileShare.Desktop.ViewModels
 
         private async void RemoveTransfer(FileTransferViewModel? model)
         {
-            if (model == null)
+            if (model?.TransferId == null)
                 return;
             switch (model.Status)
             {

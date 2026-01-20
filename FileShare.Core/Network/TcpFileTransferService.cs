@@ -180,7 +180,7 @@ public class TcpFileTransferService : IDisposable
     /// </summary>
     private async Task HandleClientAsync(TcpClient client, CancellationToken cancellationToken)
     {
-        string senderId = null;
+        string? senderId = null;
         try
         {
             using (client)
@@ -532,11 +532,11 @@ public class TcpFileTransferService : IDisposable
     /// <summary>
     public async Task<bool> SendFileAsync(string filePath, DeviceInfo targetDevice, string senderId)
     {
-        string transferId = null;
-        CancellationTokenSource userCts = null;
-        CancellationTokenSource timeoutCts = null;
-        FileTransferInfo transferInfo = null;
-        NetworkStream stream = null;
+        string? transferId = null;
+        CancellationTokenSource? userCts = null;
+        CancellationTokenSource? timeoutCts = null;
+        FileTransferInfo? transferInfo = null;
+        NetworkStream? stream = null;
         try
         {
             if (!File.Exists(filePath))
@@ -589,7 +589,7 @@ public class TcpFileTransferService : IDisposable
                         // 接收响应
                         var response = await ReceiveResponseAsync(stream, cts.Token);
 
-                        if (response.Accepted)
+                        if (response?.Accepted??false)
                         {
                             // 发送文件数据，增加文件传输的超时时间
                             timeoutCts.CancelAfter(TimeSpan.FromMinutes(5)); // 大文件传输超时设置为5分钟
@@ -617,7 +617,7 @@ public class TcpFileTransferService : IDisposable
                                     // 接收完成响应
                                     response = await ReceiveResponseAsync(stream, cts.Token);
 
-                                    if (response.Accepted)
+                                    if (response?.Accepted??false)
                                     {
                                         transferInfo.Status = TransferStatus.Completed;
                                         OnTransferCompleted?.Invoke(transferInfo, null);
@@ -625,14 +625,14 @@ public class TcpFileTransferService : IDisposable
                                     }
                                     else
                                     {
-                                        Console.WriteLine("文件传输被接收方拒绝: {0}", response.Message);
+                                        Console.WriteLine("文件传输被接收方拒绝: {0}", response?.Message);
                                     }
                                 }
                             }
                         }
                         else
                         {
-                            Console.WriteLine("文件请求被接收方拒绝: {0}", response.Message);
+                            Console.WriteLine("文件请求被接收方拒绝: {0}", response?.Message);
                         }
 
                     }
@@ -812,7 +812,7 @@ public class TcpFileTransferService : IDisposable
     /// <summary>
     /// 接收响应
     /// <summary>
-    private async Task<TransferResponse> ReceiveResponseAsync(NetworkStream stream, CancellationToken cancellationToken = default)
+    private async Task<TransferResponse?> ReceiveResponseAsync(NetworkStream stream, CancellationToken cancellationToken = default)
     {
         var headerBytes = await ReadBytesAsync(stream, 4, cancellationToken);
         var headerLength = BitConverter.ToInt32(headerBytes, 0);
@@ -891,11 +891,11 @@ public enum TransferRequestType
 public class TransferRequest
 {
     public TransferRequestType Type { get; set; }
-    public string TransferId { get; set; }
-    public string FileName { get; set; }
+    public required string TransferId { get; set; }
+    public required string FileName { get; set; }
     public long FileSize { get; set; }
-    public string SenderId { get; set; }
-    public string ReceiverId { get; set; }
+    public required string SenderId { get; set; }
+    public required string ReceiverId { get; set; }
 }
 
 /// <summary>
@@ -903,7 +903,7 @@ public class TransferRequest
 /// <summary>
 public class TransferResponse
 {
-    public string TransferId { get; set; }
+    public required string TransferId { get; set; }
     public bool Accepted { get; set; }
-    public string Message { get; set; }
+    public string? Message { get; set; }
 }

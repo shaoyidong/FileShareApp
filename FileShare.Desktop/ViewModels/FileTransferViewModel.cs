@@ -5,17 +5,17 @@ namespace FileShare.Desktop.ViewModels
 {
     public partial class FileTransferViewModel : ViewModelBase
     {
-        [ObservableProperty]
         /// <summary>
         /// 传输ID
         /// </summary>
-        private string _transferId;
-
         [ObservableProperty]
+        private string? _transferId;
+
         /// <summary>
         /// 文件名
         /// </summary>
-        private string _fileName;
+        [ObservableProperty]
+        private string? _fileName;
 
         private long _fileSize;
 
@@ -24,8 +24,8 @@ namespace FileShare.Desktop.ViewModels
             get { return _fileSize; }
             set
             {
-                if (SetProperty(ref _fileSize,value))
-                {                    
+                if (SetProperty(ref _fileSize, value))
+                {
                     OnPropertyChanged(nameof(FormattedFileSize));
                 }
             }
@@ -42,7 +42,7 @@ namespace FileShare.Desktop.ViewModels
             set
             {
                 if (SetProperty(ref _transferredSize, value))
-                {                   
+                {
                     OnPropertyChanged(nameof(FormattedTransferredSize));
                 }
             }
@@ -74,21 +74,21 @@ namespace FileShare.Desktop.ViewModels
         /// <summary>
         /// 发送方ID
         /// </summary>
-        public string SenderId { get; set; }
+        public string? SenderId { get; set; }
 
         /// <summary>
         /// 接收方ID
         /// </summary>
-        public string ReceiverId { get; set; }
+        public string? ReceiverId { get; set; }
 
         [ObservableProperty]
         // 传输进度百分比
         private double _progressPercentage;
 
-        [ObservableProperty]
         /// <summary>
         /// 文件保存路径
         /// </summary>
+        [ObservableProperty]
         private string? _savePath;
 
         // 状态文本显示

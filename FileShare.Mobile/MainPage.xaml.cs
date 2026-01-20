@@ -7,7 +7,9 @@ public partial class MainPage : ContentPage
     public MainPage()
     {
         InitializeComponent();
-        
+#if IOS
+        this.SafeAreaEdges = SafeAreaEdges.All;
+#endif
         // 使用依赖注入获取MainPageViewModel实例
         BindingContext = Handler?.MauiContext?.Services.GetRequiredService<MainPageViewModel>();
     }

@@ -1,5 +1,7 @@
 using FileShare.Core.Models;
 using FileShare.Core.Network;
+using System.Net;
+using System.Net.Sockets;
 
 namespace FileShare.Core.Services;
 
@@ -52,11 +54,12 @@ public class FileShareServiceManager : IFileShareServiceManager
             DeviceId = deviceId,
             DeviceName = deviceName,
             DeviceType = deviceType,
-            Port = transferPort
+            Port = transferPort,
+            IpAddress = GetLocalIpAddress()
         };
         
         // 初始化服务
-        _discoveryService = new UdpDiscoveryService(_localDevice.DeviceId, _localDevice.DeviceName, _localDevice.DeviceType);
+        _discoveryService = new UdpDiscoveryService(_localDevice);
         _fileTransferService = new TcpFileTransferService(directoryService,transferPort);
         
         // 注册事件处理
@@ -65,7 +68,30 @@ public class FileShareServiceManager : IFileShareServiceManager
         _fileTransferService.OnTransferProgressUpdated += info => OnTransferProgressUpdated?.Invoke(info);
         _fileTransferService.OnTransferCompleted += (info, message) => OnTransferCompleted?.Invoke(info, message);
     }
-    
+
+    /// <summary>
+    /// 获取本地IP地址
+    /// </summary>
+    private string GetLocalIpAddress()
+    {
+        try
+        {
+            var host = Dns.GetHostEntry(Dns.GetHostName());
+            foreach (var ip in host.AddressList)
+            {
+                if (ip.AddressFamily == AddressFamily.InterNetwork)
+                {
+                    return ip.ToString();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"获取本地IP地址失败: {ex.Message}");
+        }
+        return "127.0.0.1";
+    }
+
     /// <summary>
     /// 获取或创建设备ID
     /// </summary>
@@ -150,5 +176,6 @@ public class FileShareServiceManager : IFileShareServiceManager
             .GetResult();
         _discoveryService.Dispose();
         _fileTransferService.Dispose();
+        GC.SuppressFinalize(this);
     }
 }

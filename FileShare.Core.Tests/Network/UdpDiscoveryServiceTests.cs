@@ -19,12 +19,16 @@ public class UdpDiscoveryServiceTests
     public void Constructor_InitializesCorrectly()
     {
         // Arrange: 准备测试数据
-        var deviceId = "test-device-id";
-        var deviceName = "Test Device";
-        var deviceType = DeviceType.Desktop;
+        var deviceInfo = new DeviceInfo()
+        {
+            DeviceId = "test-device-id",
+            DeviceName = "Test Device",
+            DeviceType = DeviceType.Desktop,
+            IpAddress = "127.0.0.1"
+        };    
         
         // Act: 创建 UdpDiscoveryService 实例
-        using var service = new UdpDiscoveryService(deviceId, deviceName, deviceType);
+        using var service = new UdpDiscoveryService(deviceInfo);
         
         // Assert: 验证实例是否创建成功
         Assert.NotNull(service);
@@ -37,12 +41,16 @@ public class UdpDiscoveryServiceTests
     public void GetDiscoveredDevices_ReturnsEmptyListInitially()
     {
         // Arrange: 准备测试数据
-        var deviceId = "test-device-id";
-        var deviceName = "Test Device";
-        var deviceType = DeviceType.Desktop;
-        
+        var deviceInfo = new DeviceInfo()
+        {
+            DeviceId = "test-device-id",
+            DeviceName = "Test Device",
+            DeviceType = DeviceType.Desktop,
+            IpAddress = "127.0.0.1"
+        };
+
         // Act: 创建实例并获取发现的设备列表
-        using var service = new UdpDiscoveryService(deviceId, deviceName, deviceType);
+        using var service = new UdpDiscoveryService(deviceInfo);
         var discoveredDevices = service.GetDiscoveredDevices();
         
         // Assert: 验证初始状态下设备列表为空
@@ -57,12 +65,16 @@ public class UdpDiscoveryServiceTests
     public void SendDiscoveryPacket_ExecutesWithoutException()
     {
         // Arrange: 准备测试数据
-        var deviceId = "test-device-id";
-        var deviceName = "Test Device";
-        var deviceType = DeviceType.Desktop;
-        
+        var deviceInfo = new DeviceInfo()
+        {
+            DeviceId = "test-device-id",
+            DeviceName = "Test Device",
+            DeviceType = DeviceType.Desktop,
+            IpAddress = "127.0.0.1"
+        };
+
         // Act & Assert: 验证方法执行过程中没有抛出异常
-        using var service = new UdpDiscoveryService(deviceId, deviceName, deviceType);
+        using var service = new UdpDiscoveryService(deviceInfo);
         Assert.NotNull(service);
         
         // 这个方法应该能正常执行，不会抛出异常
@@ -76,12 +88,16 @@ public class UdpDiscoveryServiceTests
     public void Event_OnDeviceDiscovered_CanBeRegistered()
     {
         // Arrange: 准备测试数据
-        var deviceId = "test-device-id";
-        var deviceName = "Test Device";
-        var deviceType = DeviceType.Desktop;
-        
+        var deviceInfo = new DeviceInfo()
+        {
+            DeviceId = "test-device-id",
+            DeviceName = "Test Device",
+            DeviceType = DeviceType.Desktop,
+            IpAddress = "127.0.0.1"
+        };
+
         // Act: 创建实例并注册事件
-        using var service = new UdpDiscoveryService(deviceId, deviceName, deviceType);
+        using var service = new UdpDiscoveryService(deviceInfo);
         bool eventCalled = false;
         
         service.OnDeviceDiscovered += device =>
@@ -102,12 +118,16 @@ public class UdpDiscoveryServiceTests
     public async Task StartAsync_And_StopAsync_ExecuteWithoutException()
     {
         // Arrange: 准备测试数据
-        var deviceId = "test-device-id";
-        var deviceName = "Test Device";
-        var deviceType = DeviceType.Desktop;
-        
+        var deviceInfo = new DeviceInfo()
+        {
+            DeviceId = "test-device-id",
+            DeviceName = "Test Device",
+            DeviceType = DeviceType.Desktop,
+            IpAddress = "127.0.0.1"
+        };
+
         // Act & Assert: 验证 StartAsync 和 StopAsync 方法执行过程中没有抛出异常
-        using var service = new UdpDiscoveryService(deviceId, deviceName, deviceType);
+        using var service = new UdpDiscoveryService(deviceInfo);
         
         // 启动服务
         await service.StartAsync();
@@ -129,12 +149,16 @@ public class UdpDiscoveryServiceTests
     public void Dispose_ReleasesResources()
     {
         // Arrange: 准备测试数据
-        var deviceId = "test-device-id";
-        var deviceName = "Test Device";
-        var deviceType = DeviceType.Desktop;
-        
+        var deviceInfo = new DeviceInfo()
+        {
+            DeviceId = "test-device-id",
+            DeviceName = "Test Device",
+            DeviceType = DeviceType.Desktop,
+            IpAddress = "127.0.0.1"
+        };
+
         // Act: 创建实例并释放资源
-        var service = new UdpDiscoveryService(deviceId, deviceName, deviceType);
+        var service = new UdpDiscoveryService(deviceInfo);
         service.Dispose();
         
         // Assert: 验证服务已释放资源
