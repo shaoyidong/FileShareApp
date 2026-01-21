@@ -22,36 +22,3 @@ public class StatusToVisibilityConverter : IValueConverter
         throw new NotImplementedException();
     }
 }
-
-/// <summary>
-/// 文件大小转换器（用于进度条）
-/// </summary>
-public class FileSizeConverter : IValueConverter
-{
-    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
-    {
-        if (value is long transferredSize && parameter is object item)
-        {
-            // 通过反射获取FileSize属性
-            var fileSizeProperty = item.GetType().GetProperty("FileSize");
-            if (fileSizeProperty != null)
-            {
-                var filesizeObject = fileSizeProperty.GetValue(item);
-                if (filesizeObject!=null)
-                {
-                    var fileSize = (long)filesizeObject;
-                    if (fileSize > 0)
-                    {
-                        return (double)transferredSize / fileSize;
-                    }
-                }
-            }
-        }
-        return 0;
-    }
-
-    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
-    {
-        throw new NotImplementedException();
-    }
-}

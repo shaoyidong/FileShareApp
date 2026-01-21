@@ -25,6 +25,13 @@ public partial class FileTransferViewModel : ViewModelBase
         set { SetProperty(ref _fileName, value); }
     }
 
+    private string? _deviceName;
+    public string? DeviceName
+    {
+        get { return _deviceName; }
+        set { SetProperty(ref _deviceName, value); }
+    }
+
     private long _fileSize;
 
     public long FileSize
@@ -94,8 +101,13 @@ public partial class FileTransferViewModel : ViewModelBase
     public double ProgressPercentage
     {
         get { return _progressPercentage; }
-        set { SetProperty(ref _progressPercentage, value); }
+        set { if(SetProperty(ref _progressPercentage, value))              
+            {
+                OnPropertyChanged(nameof(ProgressFraction));
+            }; }
     }
+
+    public double ProgressFraction => _progressPercentage / 100.0;
 
     /// <summary>
     /// 文件保存路径

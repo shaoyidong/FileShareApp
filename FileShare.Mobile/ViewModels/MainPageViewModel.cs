@@ -31,8 +31,16 @@ public partial class MainPageViewModel : ViewModelBase
     public bool IsScanning
     {
         get => _isScanning;
-        set => SetProperty(ref _isScanning, value);
+        set
+            {
+            if (SetProperty(ref _isScanning, value))
+            {
+                OnPropertyChanged(nameof(IsNotScanning));
+            }
+        }           
     }
+
+    public bool IsNotScanning => !IsScanning;
 
     private Core.Models.DeviceInfo? _selectedDevice;
     public Core.Models.DeviceInfo? SelectedDevice
@@ -309,6 +317,7 @@ public partial class MainPageViewModel : ViewModelBase
                 {
                     return;
                 }
+                transferViewModel.DeviceName = senderDevice.DeviceName;
                 // 显示确认对话框
                 var result = await _alertService.DisplayAlertAsync(
                     "文件传输请求",

@@ -12,7 +12,6 @@
             </ResourceDictionary.MergedDictionaries>
             <!-- 转换器资源 -->
             <helpers:StatusToVisibilityConverter x:Key="StatusToVisibilityConverter" />
-            <helpers:FileSizeConverter x:Key="FileSizeConverter" />
             <helpers:StatusToColorConverter x:Key="StatusToColorConverter" />
         </ResourceDictionary>
     </Application.Resources>
