@@ -151,7 +151,7 @@ public partial class MainPageViewModel : ViewModelBase
     {
         if (SelectedDevice == null)
         {
-            await _alertService.DisplayAlertAsync("提示", "请先选择目标设备", "确定");
+            await _alertService.DisplayToastAsync("请先选择目标设备");
             return;
         }
         
@@ -171,19 +171,19 @@ public partial class MainPageViewModel : ViewModelBase
                 if (success)
                 {
                     StatusMessage = "文件发送成功";
-                    await _alertService.DisplayAlertAsync("成功", "文件发送成功", "确定");
+                    await _alertService.DisplayToastAsync("文件发送成功");
                 }
                 else
                 {
                     StatusMessage = "文件发送失败";
-                    await _alertService.DisplayAlertAsync("失败", "文件发送失败", "确定");
+                    await _alertService.DisplayToastAsync("文件发送失败");
                 }
             }
         }
         catch (Exception ex)
         {
             StatusMessage = $"发送文件失败: {ex.Message}";
-            await _alertService.DisplayAlertAsync("错误", ex.Message, "确定");
+            await _alertService.DisplayToastAsync(ex.Message);
         }
     }
     
@@ -203,7 +203,7 @@ public partial class MainPageViewModel : ViewModelBase
         catch (Exception ex)
         {
             StatusMessage = $"接受传输失败: {ex.Message}";
-            await _alertService.DisplayAlertAsync("错误", ex.Message, "确定");
+            await _alertService.DisplayToastAsync(ex.Message);
         }
     }
     

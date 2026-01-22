@@ -14,7 +14,14 @@ public static class MauiProgram
         var builder = MauiApp.CreateBuilder();
         builder
             .UseMauiApp<App>()
-            .UseMauiCommunityToolkit()
+            .UseMauiCommunityToolkit(
+#if WINDOWS
+options =>
+  {
+    options.SetShouldEnableSnackbarOnWindows(true);
+  }
+#endif
+            )
             .ConfigureSyncfusionToolkit()
             .ConfigureMauiHandlers(handlers =>
             {

@@ -8,7 +8,7 @@
              x:Name="MainPageView"
              Title="局域网文件传输"
              Padding="0" x:DataType="vm:MainPageViewModel"
-             BackgroundColor="#f5f5f5">
+             >
 
 	<ContentPage.Resources>
 		<helpers:StatusToPendingVisibilityConverter x:Key="StatusToPendingVisibilityConverter" />
@@ -72,8 +72,7 @@
 		<StackLayout Padding="0" Spacing="10">
 			<!-- 状态栏 -->
 			<Border Margin="16,16,16,8"
-        Padding="12"
-        BackgroundColor="White"
+        Padding="12"        
         Stroke="Transparent" 
                 StrokeThickness="0"
         StrokeShape="RoundRectangle 12">
@@ -90,14 +89,14 @@
            VerticalOptions="Center" 
            HorizontalOptions="Start" 
            LineBreakMode="TailTruncation" />
-					<Button Text="刷新设备" 
+					<!--<Button Text="刷新设备" Grid.Column="1"
             Command="{Binding RefreshDevicesCommand}"
             IsEnabled="{Binding IsNotScanning}"
             Margin="10,0,0,0" 
             VerticalOptions="Center" 
             HorizontalOptions="End" 
             Style="{StaticResource SecondaryButton}" 
-            WidthRequest="120" />
+            WidthRequest="120" />-->
 				</Grid>
 			</Border>
 
@@ -132,14 +131,13 @@
                                                FontSize="16" 
                                                FontAttributes="Bold" 
                                                TextColor="#2c3e50" />
-											<Border StrokeShape="RoundRectangle 8" BackgroundColor="#3498db" Padding="6,2"    >
+											<Border Grid.Column="1" StrokeShape="RoundRectangle 8" BackgroundColor="#3498db" Padding="6,2"    >
 												<Label Text="{Binding DeviceType}" 
-                                                       FontSize="12" 
-         TextColor="#7f8c8d" 
-         HorizontalOptions="End" 
-         VerticalOptions="Center" />
+													   FontSize="12" 
+													   TextColor="#7f8c8d" 
+													   HorizontalOptions="End" 
+													   VerticalOptions="Center" />
 											</Border>
-
 										</Grid>
 										<Label Text="{Binding IpAddress}" 
                                            FontSize="14" 
@@ -249,7 +247,7 @@
                                                 Style="{StaticResource RejectButton}" 
                                                 WidthRequest="80" />
 											<Button Text="×" 
-                                                Command="{Binding Path=RemoveTransferCommand, Source={RelativeSource AncestorType={x:Type ContentPage}}, x:DataType='vm:MainPageViewModel'}"
+                                                Command="{Binding Path=RemoveTransferCommand, Source={RelativeSource AncestorType={x:Type vm:MainPageViewModel}}, x:DataType='vm:MainPageViewModel'}"
                                                 CommandParameter="{Binding}"                                                 
                                                 Style="{StaticResource RemoveButton}" 
                                                 WidthRequest="80" />

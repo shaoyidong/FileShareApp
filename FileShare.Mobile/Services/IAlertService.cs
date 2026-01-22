@@ -11,5 +11,11 @@ namespace FileShare.Mobile.Services
 
         // For confirmation alerts (with "Accept" and "Cancel" buttons)
         Task<bool> DisplayAlertAsync(string title, string message, string accept, string cancel);
+
+        Task DisplayToastAsync(string message, double textSize = 14);        
+
+        Task DisplaySnackbarAsync(string message, Action? action = null,
+        string actionButtonText = "OK",
+        TimeSpan? duration = null);
     }
 }

@@ -49,7 +49,7 @@
 	  <AndroidEnableMultiDex>False</AndroidEnableMultiDex>
 	  <AndroidLinkTool>r8</AndroidLinkTool>
 	  <PublishTrimmed>True</PublishTrimmed>
-	  <RunAOTCompilation>True</RunAOTCompilation>
+	  <RunAOTCompilation>False</RunAOTCompilation>
 	  <EnableLLVM>True</EnableLLVM>
 	  <RuntimeIdentifiers>android-arm64;android-arm</RuntimeIdentifiers>
 	</PropertyGroup>
