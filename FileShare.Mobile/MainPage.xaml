@@ -237,7 +237,7 @@
 										<StackLayout Orientation="Horizontal" Spacing="10" HorizontalOptions="End" Margin="0,8,0,0">
 											<!-- 接收任务的按钮 -->
 											<Button Text="接受" 
-                                                Command="{Binding Source={Reference MainPageView}, Path=BindingContext.AcceptTransferCommand, x:DataType='vm:MainPageViewModel'}"
+                                                Command="{Binding Source={Reference MainPageView}, Path=AcceptTransferCommand, x:DataType='vm:MainPageViewModel'}"
                                                 CommandParameter="{Binding}" 
                                                 IsVisible="{Binding Status, Converter={StaticResource StatusToPendingVisibilityConverter}}" 
                                                 Style="{StaticResource AcceptButton}" 
