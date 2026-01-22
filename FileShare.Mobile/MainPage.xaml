@@ -9,91 +9,88 @@
              Title="局域网文件传输"
              Padding="0" x:DataType="vm:MainPageViewModel"
              BackgroundColor="#f5f5f5">
-    
-    <ContentPage.Resources>
-        <helpers:StatusToAcceptVisibilityConverter x:Key="StatusToAcceptVisibilityConverter" />
-        <helpers:StatusToPendingVisibilityConverter x:Key="StatusToPendingVisibilityConverter" />
-        <helpers:StatusToCancelVisibilityConverter x:Key="StatusToCancelVisibilityConverter" />
-        <helpers:StatusToRemoveVisibilityConverter x:Key="StatusToRemoveVisibilityConverter" />
-        <helpers:StatusToColorConverter x:Key="StatusToColorConverter" />
-        
-        <!-- 样式定义 -->
-        <Style TargetType="Label" x:Key="TitleLabel">
-            <Setter Property="FontSize" Value="18" />
-            <Setter Property="FontAttributes" Value="Bold" />
-            <Setter Property="TextColor" Value="#2c3e50" />
-        </Style>
-        
-        <Style TargetType="Label" x:Key="StatusLabel">
-            <Setter Property="FontSize" Value="14" />
-            <Setter Property="TextColor" Value="#3498db" />
-        </Style>
-        
-        <Style TargetType="Button" x:Key="PrimaryButton">
-            <Setter Property="BackgroundColor" Value="#3498db" />
-            <Setter Property="TextColor" Value="White" />
-            <Setter Property="CornerRadius" Value="12" />
-            <Setter Property="Padding" Value="15,10" />
-            <Setter Property="FontSize" Value="16" />
-            <Setter Property="FontAttributes" Value="None" />
-        </Style>
-        
-        <Style TargetType="Button" x:Key="SecondaryButton">
-            <Setter Property="BackgroundColor" Value="#95a5a6" />
-            <Setter Property="TextColor" Value="White" />
-            <Setter Property="CornerRadius" Value="8" />
-            <Setter Property="Padding" Value="10,6" />
-            <Setter Property="FontSize" Value="14" />
-        </Style>
-        
-        <Style TargetType="Button" x:Key="AcceptButton">
-            <Setter Property="BackgroundColor" Value="#2ecc71" />
-            <Setter Property="TextColor" Value="White" />
-            <Setter Property="CornerRadius" Value="8" />
-            <Setter Property="Padding" Value="12,8" />
-            <Setter Property="FontSize" Value="14" />
-        </Style>
-        
-        <Style TargetType="Button" x:Key="RejectButton">
-            <Setter Property="BackgroundColor" Value="#e74c3c" />
-            <Setter Property="TextColor" Value="White" />
-            <Setter Property="CornerRadius" Value="8" />
-            <Setter Property="Padding" Value="12,8" />
-            <Setter Property="FontSize" Value="14" />
-        </Style>
-        
-        <Style TargetType="Button" x:Key="CancelButton">
-            <Setter Property="BackgroundColor" Value="#f39c12" />
-            <Setter Property="TextColor" Value="White" />
-            <Setter Property="CornerRadius" Value="8" />
-            <Setter Property="Padding" Value="12,8" />
-            <Setter Property="FontSize" Value="14" />
-        </Style>
-    </ContentPage.Resources>
 
-    <ScrollView>
-        <StackLayout Padding="0" Spacing="10">
-            <!-- 状态栏 -->
-            <Border Margin="16,16,16,8"
+	<ContentPage.Resources>
+		<helpers:StatusToPendingVisibilityConverter x:Key="StatusToPendingVisibilityConverter" />
+		<helpers:StatusToColorConverter x:Key="StatusToColorConverter" />
+
+		<!-- 样式定义 -->
+		<Style TargetType="Label" x:Key="TitleLabel">
+			<Setter Property="FontSize" Value="18" />
+			<Setter Property="FontAttributes" Value="Bold" />
+			<Setter Property="TextColor" Value="#2c3e50" />
+		</Style>
+
+		<Style TargetType="Label" x:Key="StatusLabel">
+			<Setter Property="FontSize" Value="14" />
+			<Setter Property="TextColor" Value="#3498db" />
+		</Style>
+
+		<Style TargetType="Button" x:Key="PrimaryButton">
+			<Setter Property="BackgroundColor" Value="#3498db" />
+			<Setter Property="TextColor" Value="White" />
+			<Setter Property="CornerRadius" Value="12" />
+			<Setter Property="Padding" Value="15,10" />
+			<Setter Property="FontSize" Value="16" />
+			<Setter Property="FontAttributes" Value="None" />
+		</Style>
+
+		<Style TargetType="Button" x:Key="SecondaryButton">
+			<Setter Property="BackgroundColor" Value="#95a5a6" />
+			<Setter Property="TextColor" Value="White" />
+			<Setter Property="CornerRadius" Value="8" />
+			<Setter Property="Padding" Value="10,6" />
+			<Setter Property="FontSize" Value="14" />
+		</Style>
+
+		<Style TargetType="Button" x:Key="AcceptButton">
+			<Setter Property="BackgroundColor" Value="#2ecc71" />
+			<Setter Property="TextColor" Value="White" />
+			<Setter Property="CornerRadius" Value="8" />
+			<Setter Property="Padding" Value="12,8" />
+			<Setter Property="FontSize" Value="14" />
+		</Style>
+
+		<Style TargetType="Button" x:Key="RejectButton">
+			<Setter Property="BackgroundColor" Value="#e74c3c" />
+			<Setter Property="TextColor" Value="White" />
+			<Setter Property="CornerRadius" Value="8" />
+			<Setter Property="Padding" Value="12,8" />
+			<Setter Property="FontSize" Value="14" />
+		</Style>
+
+		<Style TargetType="Button" x:Key="RemoveButton">
+			<Setter Property="BackgroundColor" Value="#e74c3c" />
+			<Setter Property="TextColor" Value="White" />
+			<Setter Property="CornerRadius" Value="8" />
+			<Setter Property="Padding" Value="12,8" />
+			<Setter Property="FontSize" Value="14" />
+		</Style>
+	</ContentPage.Resources>
+
+	<ScrollView>
+		<StackLayout Padding="0" Spacing="10">
+			<!-- 状态栏 -->
+			<Border Margin="16,16,16,8"
         Padding="12"
         BackgroundColor="White"
         Stroke="Transparent" 
                 StrokeThickness="0"
         StrokeShape="RoundRectangle 12">
-                <Border.Shadow >
-                    <Shadow Brush="#000000" Opacity="0.1" Radius="4" Offset="0,2" />
-                </Border.Shadow>
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <Label Text="{Binding StatusMessage}" 
+				<Border.Shadow >
+					<Shadow Brush="#000000" Opacity="0.1" Radius="4" Offset="0,2" />
+				</Border.Shadow>
+				<Grid>
+					<Grid.ColumnDefinitions>
+						<ColumnDefinition Width="*" />
+						<ColumnDefinition Width="Auto" />
+					</Grid.ColumnDefinitions>
+					<Label Text="{Binding StatusMessage}" 
            Style="{StaticResource StatusLabel}" 
            VerticalOptions="Center" 
            HorizontalOptions="Start" 
            LineBreakMode="TailTruncation" />
-                    <Button Text="刷新设备" 
+					<Button Text="刷新设备" 
             Command="{Binding RefreshDevicesCommand}"
             IsEnabled="{Binding IsNotScanning}"
             Margin="10,0,0,0" 
@@ -101,184 +98,177 @@
             HorizontalOptions="End" 
             Style="{StaticResource SecondaryButton}" 
             WidthRequest="120" />
-                </Grid>
-            </Border>
+				</Grid>
+			</Border>
 
-            <!-- 设备列表 -->
-            <Border Margin="16,0,16,0" Padding="16" BackgroundColor="White" StrokeThickness="0" StrokeShape="RoundRectangle 12">
-                <Border.Shadow >
-                    <Shadow Brush="#000000" Opacity="0.1" Radius="4" Offset="0,2" />
-                </Border.Shadow>
-                <StackLayout >
-                <Label Text="可用设备" 
+			<!-- 设备列表 -->
+			<Border Margin="16,0,16,0" Padding="16" BackgroundColor="White" StrokeThickness="0" StrokeShape="RoundRectangle 12">
+				<Border.Shadow >
+					<Shadow Brush="#000000" Opacity="0.1" Radius="4" Offset="0,2" />
+				</Border.Shadow>
+				<StackLayout >
+					<Label Text="可用设备" 
                        Style="{StaticResource TitleLabel}" 
                        Margin="0,0,0,12" />
 
-                <CollectionView ItemsSource="{Binding Devices}" 
+					<CollectionView ItemsSource="{Binding Devices}" 
                               SelectedItem="{Binding SelectedDevice}"
                               SelectionMode="Single" 
                               BackgroundColor="Transparent" 
                               HeightRequest="200">
-                    <CollectionView.ItemsLayout>
-                        <LinearItemsLayout Orientation="Vertical" ItemSpacing="12" />
-                    </CollectionView.ItemsLayout>
-                    <CollectionView.ItemTemplate>
-                            <DataTemplate x:DataType="coreModel:DeviceInfo">
-                            <Border BackgroundColor="#ecf0f1" 
+						<CollectionView.ItemsLayout>
+							<LinearItemsLayout Orientation="Vertical" ItemSpacing="12" />
+						</CollectionView.ItemsLayout>
+						<CollectionView.ItemTemplate>
+							<DataTemplate x:DataType="coreModel:DeviceInfo">
+								<Border BackgroundColor="#ecf0f1" 
                                    StrokeShape="RoundRectangle 12" 
                                    Padding="16"                                   
                                    Stroke="#bdc3c7" 
                                    StrokeThickness="1">
-                                <StackLayout Orientation="Vertical" Spacing="6">
-                                    <Grid ColumnDefinitions="*,Auto">
-                                        <Label Text="{Binding DeviceName}" 
+									<StackLayout Orientation="Vertical" Spacing="6">
+										<Grid ColumnDefinitions="*,Auto">
+											<Label Text="{Binding DeviceName}" 
                                                FontSize="16" 
                                                FontAttributes="Bold" 
                                                TextColor="#2c3e50" />
-                                            <Border StrokeShape="RoundRectangle 8" BackgroundColor="#3498db" Padding="6,2"    >
-                                                <Label Text="{Binding DeviceType}" 
+											<Border StrokeShape="RoundRectangle 8" BackgroundColor="#3498db" Padding="6,2"    >
+												<Label Text="{Binding DeviceType}" 
                                                        FontSize="12" 
          TextColor="#7f8c8d" 
          HorizontalOptions="End" 
          VerticalOptions="Center" />
-                                            </Border>
-                                      
-                                    </Grid>
-                                    <Label Text="{Binding IpAddress}" 
+											</Border>
+
+										</Grid>
+										<Label Text="{Binding IpAddress}" 
                                            FontSize="14" 
                                            TextColor="#7f8c8d" />
-                                </StackLayout>
-                            </Border>
-                        </DataTemplate>
-                    </CollectionView.ItemTemplate>
-                    <CollectionView.EmptyView>
-                        <Label Text="暂无可用设备，请点击刷新按钮" 
+									</StackLayout>
+								</Border>
+							</DataTemplate>
+						</CollectionView.ItemTemplate>
+						<CollectionView.EmptyView>
+							<Label Text="暂无可用设备，请点击刷新按钮" 
                                FontSize="14" 
                                TextColor="#95a5a6" 
                                HorizontalOptions="Center" 
                                VerticalOptions="Center" 
                                Margin="0,40,0,0" />
-                    </CollectionView.EmptyView>
-                </CollectionView>
+						</CollectionView.EmptyView>
+					</CollectionView>
 
-                <Button Text="发送文件" 
+					<Button Text="发送文件" 
                         Command="{Binding SendFileCommand}"
                         HorizontalOptions="Fill"
                         Margin="0,16,0,0"
                         Style="{StaticResource PrimaryButton}" 
                         IsEnabled="{Binding SelectedDevice}" />
-        </StackLayout>
-        </Border>
-        <!-- 传输任务 -->
-            <Border Margin="16,0,16,32" Padding="16" BackgroundColor="White">
-                <Border.Shadow >
-                    <Shadow Brush="#000000" Opacity="0.1" Radius="4" Offset="0,2" />
-                </Border.Shadow>
-                <Border.StrokeShape>
-                    <RoundRectangle CornerRadius="12" />
-                </Border.StrokeShape>
-                <StackLayout >
-                <Label Text="传输任务" 
+				</StackLayout>
+			</Border>
+			<!-- 传输任务 -->
+			<Border Margin="16,0,16,32" Padding="16" BackgroundColor="White">
+				<Border.Shadow >
+					<Shadow Brush="#000000" Opacity="0.1" Radius="4" Offset="0,2" />
+				</Border.Shadow>
+				<Border.StrokeShape>
+					<RoundRectangle CornerRadius="12" />
+				</Border.StrokeShape>
+				<StackLayout >
+					<Label Text="传输任务" 
                        Style="{StaticResource TitleLabel}" 
                        Margin="0,0,0,12" />
 
-                <!-- 传输任务列表 -->
-                <CollectionView ItemsSource="{Binding TransferTasks}"                               
+					<!-- 传输任务列表 -->
+					<CollectionView ItemsSource="{Binding ReceivedTransferTasks}"                               
                               BackgroundColor="Transparent">
-                    <CollectionView.ItemsLayout>
-                        <LinearItemsLayout Orientation="Vertical" ItemSpacing="12" />
-                    </CollectionView.ItemsLayout>
-                    <CollectionView.ItemTemplate>
-                        <DataTemplate x:DataType="vm:FileTransferViewModel">
-                            <Border BackgroundColor="#ecf0f1" 
+						<CollectionView.ItemsLayout>
+							<LinearItemsLayout Orientation="Vertical" ItemSpacing="12" />
+						</CollectionView.ItemsLayout>
+						<CollectionView.ItemTemplate>
+							<DataTemplate x:DataType="vm:FileTransferViewModel">
+								<Border BackgroundColor="#ecf0f1" 
                                    StrokeShape="RoundRectangle 12" 
                                    Padding="16"                                    
                                    Stroke="#bdc3c7" 
                                    StrokeThickness="1">
-                                <StackLayout Spacing="10">
-                                    <Grid ColumnDefinitions="*,Auto">
-                                        <Label Text="{Binding FileName}" 
+									<StackLayout Spacing="10">
+										<Grid ColumnDefinitions="*,Auto">
+											<Label Text="{Binding FileName}" 
                                                FontAttributes="Bold" 
                                                FontSize="16" 
                                                TextColor="#2c3e50" 
                                                LineBreakMode="TailTruncation" />
-                                            <Border StrokeShape="RoundRectangle 6" BackgroundColor="#f1c40f" Padding="4,2">
-                                                <Label Text="{Binding DeviceName}" 
+											<Border StrokeShape="RoundRectangle 6" BackgroundColor="#f1c40f" Padding="4,2">
+												<Label Text="{Binding DeviceName}" 
                                                FontSize="12" 
                                                TextColor="#7f8c8d"                                               
                                                HorizontalOptions="End" 
                                                VerticalOptions="Center" />
-                                            </Border>
-                                        </Grid>
+											</Border>
+										</Grid>
 
-                                    <Grid ColumnDefinitions="*,Auto">
-                                            <Label Text="{Binding FormattedFileSize}" 
+										<Grid ColumnDefinitions="*,Auto">
+											<Label Text="{Binding FormattedFileSize}" 
                                                FontSize="14" 
                                                TextColor="#7f8c8d" />
-                                            <Label Text="{Binding StatusText}" 
+											<Label Text="{Binding StatusText}" 
                                                FontSize="14" 
                                                FontAttributes="None" 
                                                TextColor="{Binding Status, Converter={StaticResource StatusToColorConverter}}" 
                                                HorizontalOptions="End" />
-                                    </Grid>
+										</Grid>
 
-                                        <Border StrokeShape="RoundRectangle 5" >
-                                            <ProgressBar Progress="{Binding ProgressFraction}"                                                  
+										<Border StrokeShape="RoundRectangle 5" >
+											<ProgressBar Progress="{Binding ProgressFraction}"                                                  
                                                   ProgressColor="#3498db"
                                                   HeightRequest="10"
                                                   BackgroundColor="#bdc3c7" 
                                                  />
-                                        </Border>
+										</Border>
 
-                                        <Label Text="{Binding ProgressPercentage, StringFormat='{0:P1}'}" 
+										<Label Text="{Binding ProgressPercentage, StringFormat='{0:P1}'}" 
                                            FontSize="14" 
                                            TextColor="#3498db" 
                                            HorizontalOptions="End" 
                                            Margin="0,4,0,0" />
 
-                                    <!-- 根据状态显示不同按钮 -->
-                                    <StackLayout Orientation="Horizontal" Spacing="10" HorizontalOptions="End" Margin="0,8,0,0">
-                                        <!-- 接收任务的按钮 -->
-                                        <Button Text="接受" 
-                                                Command="{x:Binding Source={x:Reference MainPageView}, Path=BindingContext.AcceptTransferCommand}"
+										<!-- 根据状态显示不同按钮 -->
+										<StackLayout Orientation="Horizontal" Spacing="10" HorizontalOptions="End" Margin="0,8,0,0">
+											<!-- 接收任务的按钮 -->
+											<Button Text="接受" 
+                                                Command="{Binding Source={Reference MainPageView}, Path=BindingContext.AcceptTransferCommand, x:DataType='vm:MainPageViewModel'}"
                                                 CommandParameter="{Binding}" 
-                                                IsVisible="{Binding Status, Converter={StaticResource StatusToAcceptVisibilityConverter}}" 
+                                                IsVisible="{Binding Status, Converter={StaticResource StatusToPendingVisibilityConverter}}" 
                                                 Style="{StaticResource AcceptButton}" 
                                                 WidthRequest="80" />
-                                        <Button Text="拒绝" 
-                                                Command="{Binding Path=BindingContext.RejectTransferCommand, Source={RelativeSource AncestorType={x:Type ContentPage}}}"
+											<Button Text="拒绝" 
+                                                Command="{Binding Path=RejectTransferCommand,  Source={RelativeSource AncestorType={x:Type ContentPage}}, x:DataType='vm:MainPageViewModel'}"
                                                 CommandParameter="{Binding}" 
                                                 IsVisible="{Binding Status, Converter={StaticResource StatusToPendingVisibilityConverter}}" 
                                                 Style="{StaticResource RejectButton}" 
                                                 WidthRequest="80" />
-                                        <Button Text="取消" 
-                                                Command="{Binding Path=BindingContext.RemoveTransferCommand, Source={RelativeSource AncestorType={x:Type ContentPage}}}"
-                                                CommandParameter="{Binding}" 
-                                                IsVisible="{Binding Status, Converter={StaticResource StatusToCancelVisibilityConverter}}" 
-                                                Style="{StaticResource CancelButton}" 
+											<Button Text="×" 
+                                                Command="{Binding Path=RemoveTransferCommand, Source={RelativeSource AncestorType={x:Type ContentPage}}, x:DataType='vm:MainPageViewModel'}"
+                                                CommandParameter="{Binding}"                                                 
+                                                Style="{StaticResource RemoveButton}" 
                                                 WidthRequest="80" />
-                                        <Button Text="删除" 
-                                                Command="{Binding Path=BindingContext.RemoveTransferCommand,Source={RelativeSource AncestorType={x:Type ContentPage}}}"
-                                                CommandParameter="{Binding}" 
-                                                IsVisible="{Binding Status, Converter={StaticResource StatusToRemoveVisibilityConverter}}" 
-                                                Style="{StaticResource SecondaryButton}" 
-                                                WidthRequest="80" />
-                                    </StackLayout>
-                                </StackLayout>
-                            </Border>
-                        </DataTemplate>
-                    </CollectionView.ItemTemplate>
-                    <CollectionView.EmptyView>
-                        <Label Text="暂无传输任务" 
+										</StackLayout>
+									</StackLayout>
+								</Border>
+							</DataTemplate>
+						</CollectionView.ItemTemplate>
+						<CollectionView.EmptyView>
+							<Label Text="暂无传输任务" 
                                FontSize="14" 
                                TextColor="#95a5a6" 
                                HorizontalOptions="Center" 
                                VerticalOptions="Center" 
                                Margin="0,40,0,0" />
-                    </CollectionView.EmptyView>
-                </CollectionView>
-        </StackLayout>
-        </Border>
-        </StackLayout>
-    </ScrollView>
+						</CollectionView.EmptyView>
+					</CollectionView>
+				</StackLayout>
+			</Border>
+		</StackLayout>
+	</ScrollView>
 </ContentPage>

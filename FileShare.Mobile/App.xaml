@@ -6,13 +6,11 @@
              x:Class="FileShare.Mobile.App">
     <Application.Resources>
         <ResourceDictionary>
-            <ResourceDictionary.MergedDictionaries>
-                <ResourceDictionary Source="Resources/Styles/Colors.xaml" />
-                <ResourceDictionary Source="Resources/Styles/Styles.xaml" />
-            </ResourceDictionary.MergedDictionaries>
-            <!-- 转换器资源 -->
-            <helpers:StatusToVisibilityConverter x:Key="StatusToVisibilityConverter" />
-            <helpers:StatusToColorConverter x:Key="StatusToColorConverter" />
-        </ResourceDictionary>
+			<ResourceDictionary.MergedDictionaries>
+				<ResourceDictionary Source="Resources/Styles/Colors.xaml" />
+				<ResourceDictionary Source="Resources/Styles/Styles.xaml" />
+				<ResourceDictionary Source="Resources/Styles/AppStyles.xaml" />
+			</ResourceDictionary.MergedDictionaries>
+		</ResourceDictionary>
     </Application.Resources>
 </Application>
