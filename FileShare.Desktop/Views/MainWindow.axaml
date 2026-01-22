@@ -74,7 +74,7 @@ mc:Ignorable="d">
 					<DataTemplate>
 						<StackPanel Margin="5" Orientation="Horizontal">
 							<TextBlock FontWeight="Bold" Text="{Binding DeviceName}" />
-							<TextBlock Margin="5,0,0,0" Text=" ({Binding DeviceType})" />
+							<TextBlock Margin="5,0,0,0" Text="{Binding DeviceType,StringFormat={}({0})}" />
 							<TextBlock Margin="5,0,0,0" Text=" - " />
 							<TextBlock Margin="0,0,0,0" Text="{Binding IpAddress}" />
 						</StackPanel>
