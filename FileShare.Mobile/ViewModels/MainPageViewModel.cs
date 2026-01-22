@@ -6,6 +6,7 @@ using FileShare.Mobile.Services;
 using Microsoft.Maui.Storage;
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Threading.Tasks;
 using System.Timers;
 using System.Windows.Input;
 
@@ -90,7 +91,89 @@ public partial class MainPageViewModel : ViewModelBase
         _timerCheckDeviceOnline.Elapsed += Timer_Elapsed;
         
         // 启动服务
-        _ = InitializeAsync();       
+        _ = InitializeAsync();
+
+#if DEBUG
+        Devices.Add(new Core.Models.DeviceInfo
+        {
+            DeviceId = "HuaWei Mate 60",
+            DeviceName = "HuaWei Mate 60",
+            DeviceType = Core.Models.DeviceType.Mobile,
+            IpAddress = "ipaddrss",
+            LastSeen = DateTime.Now
+        });
+        Devices.Add(new Core.Models.DeviceInfo
+        {
+            DeviceId = "123",
+            DeviceName = "Mac Pad",
+            DeviceType = Core.Models.DeviceType.Tablet,
+            IpAddress = "127.0.0.1",
+            LastSeen = DateTime.Now
+        });
+        Devices.Add(new Core.Models.DeviceInfo
+        {
+            DeviceId = "1234",
+            DeviceName = "jiaolong 15Pro",
+            DeviceType = Core.Models.DeviceType.Desktop,
+            IpAddress = "127.0.0.3",
+            LastSeen = DateTime.Now
+        });
+
+        FileTransferViewModel fileTransferViewModel = new FileTransferViewModel
+        {
+            TransferId = Guid.NewGuid().ToString(),
+            FileName = "示例文件.txt",
+            FileSize = 1024 * 1024 * 5,
+            TransferredSize = 1024 * 1024 * 2,
+            ProgressPercentage = 40,
+            Status = TransferStatus.Pending,
+            SenderId = "123",
+            ReceiverId = _localDeviceId,            
+        };
+        FileTransferViewModel fileTransferViewModel2 = new FileTransferViewModel
+        {
+            TransferId = Guid.NewGuid().ToString(),
+            FileName = "示例文件2.txt",
+            FileSize = 1024 * 1024 * 5,
+            TransferredSize = 1024 * 1024 * 2,
+            ProgressPercentage = 40,
+            Status = TransferStatus.Transferring,
+            SenderId = "1233",
+            ReceiverId = _localDeviceId,            
+        };
+        TransferTasks.Add(fileTransferViewModel);
+        TransferTasks.Add(fileTransferViewModel2);
+        ReceivedTransferTasks.Add(fileTransferViewModel);
+        ReceivedTransferTasks.Add(fileTransferViewModel2);
+
+        FileTransferViewModel fileTransferViewModel3 = new FileTransferViewModel
+        {
+            TransferId = Guid.NewGuid().ToString(),
+            FileName = "示例文件3.txt",
+            FileSize = 1024 * 1024 * 5,
+            TransferredSize = 1024 * 1024 * 2,
+            ProgressPercentage = 40,
+            Status = TransferStatus.Pending,
+            SenderId = _localDeviceId,
+            ReceiverId = "1234",            
+        };
+        FileTransferViewModel fileTransferViewModel4 = new FileTransferViewModel
+        {
+            TransferId = Guid.NewGuid().ToString(),
+            FileName = "示例文件4.txt",
+            FileSize = 1024 * 1024 * 5,
+            TransferredSize = 1024 * 1024 * 2,
+            ProgressPercentage = 40,
+            Status = TransferStatus.Transferring,
+            SenderId = _localDeviceId,
+            ReceiverId = "1234",           
+        };
+
+        TransferTasks.Add(fileTransferViewModel3);
+        TransferTasks.Add(fileTransferViewModel4);
+        SentTransferTasks.Add(fileTransferViewModel3);
+        SentTransferTasks.Add(fileTransferViewModel4);
+#endif
     }
     
     private void Timer_Elapsed(object? sender, ElapsedEventArgs e)
@@ -208,7 +291,7 @@ public partial class MainPageViewModel : ViewModelBase
     }
     
     [RelayCommand]
-    private void RejectTransfer(FileTransferViewModel viewModel)
+    private async Task RejectTransfer(FileTransferViewModel viewModel)
     {
         if (viewModel?.TransferId == null)
         {
@@ -216,6 +299,7 @@ public partial class MainPageViewModel : ViewModelBase
         }
 
         _serviceManager.HandleTransferRequest(viewModel.TransferId, false);
+        await _alertService.DisplayToastAsync("拒绝");
         StatusMessage = $"已拒绝文件: {viewModel.FileName}";
     }
     
@@ -317,7 +401,7 @@ public partial class MainPageViewModel : ViewModelBase
                 {
                     return;
                 }
-                transferViewModel.DeviceName = senderDevice.DeviceName;
+                //transferViewModel.DeviceName = senderDevice.DeviceName;
                 // 显示确认对话框
                 var result = await _alertService.DisplayAlertAsync(
                     "文件传输请求",

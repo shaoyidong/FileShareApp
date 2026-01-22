@@ -52,7 +52,7 @@
 		</Style>
 
 		<Style TargetType="Button" x:Key="RejectButton">
-			<Setter Property="BackgroundColor" Value="#e74c3c" />
+			<Setter Property="BackgroundColor" Value="#f39c12" />
 			<Setter Property="TextColor" Value="White" />
 			<Setter Property="CornerRadius" Value="8" />
 			<Setter Property="Padding" Value="12,8" />
@@ -196,52 +196,49 @@
                                                FontAttributes="Bold" 
                                                FontSize="16" 
                                                TextColor="#2c3e50" 
-                                               LineBreakMode="TailTruncation" />
-											<Border StrokeShape="RoundRectangle 6" BackgroundColor="#f1c40f" Padding="4,2">
-												<Label Text="{Binding DeviceName}" 
-                                               FontSize="12" 
-                                               TextColor="#7f8c8d"                                               
-                                               HorizontalOptions="End" 
-                                               VerticalOptions="Center" />
-											</Border>
+                                               LineBreakMode="TailTruncation" />											
 										</Grid>
-
 										<Grid ColumnDefinitions="*,Auto">
-											<Label Text="{Binding FormattedFileSize}" 
-                                               FontSize="14" 
-                                               TextColor="#7f8c8d" />
-											<Label Text="{Binding StatusText}" 
+											<StackLayout Grid.Column="1" Orientation="Horizontal">
+												<Label  Text="{Binding FormattedTransferredSize,StringFormat='{0}'}" 
+														FontSize="14" 
+														TextColor="#7f8c8d" />
+												<Label  Text="{Binding FormattedFileSize,StringFormat='/{0}'}" 
+														FontSize="14" 
+														TextColor="#7f8c8d" />												
+											</StackLayout>											
+											<Label Grid.Column="0" Text="{Binding StatusText}" 
                                                FontSize="14" 
                                                FontAttributes="None" 
                                                TextColor="{Binding Status, Converter={StaticResource StatusToColorConverter}}" 
-                                               HorizontalOptions="End" />
+                                               HorizontalOptions="Start" />
 										</Grid>
 
-										<Border StrokeShape="RoundRectangle 5" >
-											<ProgressBar Progress="{Binding ProgressFraction}"                                                  
-                                                  ProgressColor="#3498db"
-                                                  HeightRequest="10"
-                                                  BackgroundColor="#bdc3c7" 
-                                                 />
-										</Border>
+										<Grid ColumnDefinitions="*,Auto">
+											<ProgressBar Progress="{Binding ProgressFraction}" 
+															 ProgressColor="#3498db"
+															 HeightRequest="10"
+															 BackgroundColor="#bdc3c7"/>
+											<Label Grid.Column="1" Text="{Binding ProgressFraction, StringFormat='{0:P1}'}" 
+													   FontSize="14"
+													   TextColor="#3498db" 
+													   HorizontalOptions="End" 
+													   Margin="10,0,0,0" />
+										</Grid>
 
-										<Label Text="{Binding ProgressPercentage, StringFormat='{0:P1}'}" 
-                                           FontSize="14" 
-                                           TextColor="#3498db" 
-                                           HorizontalOptions="End" 
-                                           Margin="0,4,0,0" />
+
 
 										<!-- 根据状态显示不同按钮 -->
 										<StackLayout Orientation="Horizontal" Spacing="10" HorizontalOptions="End" Margin="0,8,0,0">
 											<!-- 接收任务的按钮 -->
 											<Button Text="接受" 
-                                                Command="{Binding Source={Reference MainPageView}, Path=AcceptTransferCommand, x:DataType='vm:MainPageViewModel'}"
+                                                Command="{Binding Source={Reference MainPageView}, Path=BindingContext.AcceptTransferCommand, x:DataType=ContentPage}"
                                                 CommandParameter="{Binding}" 
                                                 IsVisible="{Binding Status, Converter={StaticResource StatusToPendingVisibilityConverter}}" 
                                                 Style="{StaticResource AcceptButton}" 
                                                 WidthRequest="80" />
 											<Button Text="拒绝" 
-                                                Command="{Binding Path=RejectTransferCommand,  Source={RelativeSource AncestorType={x:Type ContentPage}}, x:DataType='vm:MainPageViewModel'}"
+                                                Command="{Binding Path=RejectTransferCommand,  Source={RelativeSource AncestorType={x:Type vm:MainPageViewModel}}, x:DataType='vm:MainPageViewModel'}"
                                                 CommandParameter="{Binding}" 
                                                 IsVisible="{Binding Status, Converter={StaticResource StatusToPendingVisibilityConverter}}" 
                                                 Style="{StaticResource RejectButton}" 

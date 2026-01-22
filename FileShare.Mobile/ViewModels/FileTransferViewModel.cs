@@ -25,12 +25,12 @@ public partial class FileTransferViewModel : ViewModelBase
         set { SetProperty(ref _fileName, value); }
     }
 
-    private string? _deviceName;
-    public string? DeviceName
-    {
-        get { return _deviceName; }
-        set { SetProperty(ref _deviceName, value); }
-    }
+    //private string? _deviceName;
+    //public string? DeviceName
+    //{
+    //    get { return _deviceName; }
+    //    set { SetProperty(ref _deviceName, value); }
+    //}
 
     private long _fileSize;
 
