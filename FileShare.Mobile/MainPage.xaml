@@ -11,9 +11,8 @@
              >
 
 	<ContentPage.Resources>
-		<helpers:StatusToPendingVisibilityConverter x:Key="StatusToPendingVisibilityConverter" />
 		<helpers:StatusToColorConverter x:Key="StatusToColorConverter" />
-
+		<helpers:TransferDirectionToColorConverter x:Key="TransferDirectionToColorConverter"/>
 		<!-- 样式定义 -->
 		<Style TargetType="Label" x:Key="TitleLabel">
 			<Setter Property="FontSize" Value="18" />
@@ -60,18 +59,20 @@
 		</Style>
 
 		<Style TargetType="Button" x:Key="RemoveButton">
-			<Setter Property="BackgroundColor" Value="#e74c3c" />
-			<Setter Property="TextColor" Value="White" />
-			<Setter Property="CornerRadius" Value="8" />
-			<Setter Property="Padding" Value="12,8" />
-			<Setter Property="FontSize" Value="14" />
+			<Setter Property="BackgroundColor" Value="Transparent" />
+			<Setter Property="TextColor" Value="#e74c3c" />
+			<Setter Property="CornerRadius" Value="0" />
+			<Setter Property="Padding" Value="0,0" />
+			<Setter Property="FontSize" Value="15" />					
+			<Setter Property="MinimumHeightRequest" Value="0"/>
+			<Setter Property="MinimumWidthRequest" Value="0"/>
 		</Style>
 	</ContentPage.Resources>
 
 	<ScrollView>
-		<StackLayout Padding="0" Spacing="10">
+		<StackLayout Padding="0" Spacing="13">
 			<!-- 状态栏 -->
-			<Border Margin="16,16,16,8"
+			<Border Margin="16,8,16,0"
         Padding="12"        
         Stroke="Transparent" 
                 StrokeThickness="0"
@@ -178,25 +179,33 @@
                        Margin="0,0,0,12" />
 
 					<!-- 传输任务列表 -->
-					<CollectionView ItemsSource="{Binding ReceivedTransferTasks}"                               
+					<CollectionView ItemsSource="{Binding TransferTasks}"                               
                               BackgroundColor="Transparent">
 						<CollectionView.ItemsLayout>
-							<LinearItemsLayout Orientation="Vertical" ItemSpacing="12" />
+							<LinearItemsLayout Orientation="Vertical" ItemSpacing="5" />
 						</CollectionView.ItemsLayout>
 						<CollectionView.ItemTemplate>
 							<DataTemplate x:DataType="vm:FileTransferViewModel">
 								<Border BackgroundColor="#ecf0f1" 
                                    StrokeShape="RoundRectangle 12" 
-                                   Padding="16"                                    
+                                   Padding="10 12 6 12"                                    
                                    Stroke="#bdc3c7" 
                                    StrokeThickness="1">
 									<StackLayout Spacing="10">
-										<Grid ColumnDefinitions="*,Auto">
-											<Label Text="{Binding FileName}" 
-                                               FontAttributes="Bold" 
+										<Grid ColumnDefinitions="Auto,*,Auto">
+											<Label Text="{Binding DirectionText,StringFormat='({0})'}" 
+												   TextColor="{Binding Direction, Converter={StaticResource TransferDirectionToColorConverter}}"
+												   FontAttributes="None" 
+												   FontSize="16" />
+											<Label Text="{Binding FileName}" Grid.Column="1"
+                                               FontAttributes="Bold" Margin="0 0 0 5"
                                                FontSize="16" 
                                                TextColor="#2c3e50" 
-                                               LineBreakMode="TailTruncation" />											
+                                               LineBreakMode="TailTruncation" />
+											<Button Text="✕"  Grid.Column="2" VerticalOptions="Start"
+													Command="{Binding Path=RemoveTransferCommand, Source={RelativeSource AncestorType={x:Type vm:MainPageViewModel}}, x:DataType='vm:MainPageViewModel'}"
+													CommandParameter="{Binding}" 
+													Style="{StaticResource RemoveButton}"/>
 										</Grid>
 										<Grid ColumnDefinitions="*,Auto">
 											<StackLayout Grid.Column="1" Orientation="Horizontal">
@@ -224,31 +233,7 @@
 													   TextColor="#3498db" 
 													   HorizontalOptions="End" 
 													   Margin="10,0,0,0" />
-										</Grid>
-
-
-
-										<!-- 根据状态显示不同按钮 -->
-										<StackLayout Orientation="Horizontal" Spacing="10" HorizontalOptions="End" Margin="0,8,0,0">
-											<!-- 接收任务的按钮 -->
-											<Button Text="接受" 
-                                                Command="{Binding Source={Reference MainPageView}, Path=BindingContext.AcceptTransferCommand, x:DataType=ContentPage}"
-                                                CommandParameter="{Binding}" 
-                                                IsVisible="{Binding Status, Converter={StaticResource StatusToPendingVisibilityConverter}}" 
-                                                Style="{StaticResource AcceptButton}" 
-                                                WidthRequest="80" />
-											<Button Text="拒绝" 
-                                                Command="{Binding Path=RejectTransferCommand,  Source={RelativeSource AncestorType={x:Type vm:MainPageViewModel}}, x:DataType='vm:MainPageViewModel'}"
-                                                CommandParameter="{Binding}" 
-                                                IsVisible="{Binding Status, Converter={StaticResource StatusToPendingVisibilityConverter}}" 
-                                                Style="{StaticResource RejectButton}" 
-                                                WidthRequest="80" />
-											<Button Text="×" 
-                                                Command="{Binding Path=RemoveTransferCommand, Source={RelativeSource AncestorType={x:Type vm:MainPageViewModel}}, x:DataType='vm:MainPageViewModel'}"
-                                                CommandParameter="{Binding}"                                                 
-                                                Style="{StaticResource RemoveButton}" 
-                                                WidthRequest="80" />
-										</StackLayout>
+										</Grid>										
 									</StackLayout>
 								</Border>
 							</DataTemplate>

@@ -49,6 +49,8 @@ public class FileTransferInfo
     /// 文件保存路径
     /// </summary>
     public string? SavePath { get; set; }
+
+    public TransferDirection Direction { get; set; }
 }
 
 /// <summary>
@@ -61,4 +63,10 @@ public enum TransferStatus
     Completed,  // 完成
     Failed,     // 失败
     Cancelled   // 取消
+}
+
+public enum TransferDirection
+{
+    Send,     // 发送
+    Receive   // 接收
 }

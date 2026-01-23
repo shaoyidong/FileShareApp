@@ -5,14 +5,25 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
     xmlns:local="clr-namespace:FileShare.Mobile"
 	xmlns:sf="clr-namespace:Syncfusion.Maui.Toolkit.SegmentedControl;assembly=Syncfusion.Maui.Toolkit"
-	Shell.FlyoutBehavior="Flyout"
+	Shell.FlyoutBehavior="Disabled" FlyoutWidth="220" 
     Title="FileShare.Mobile"
     >
-
-    <ShellContent
-        Title="Home"
-        ContentTemplate="{DataTemplate local:MainPage}"
-        Route="MainPage" />
+	<Shell.FlyoutHeader>
+		<Grid HeightRequest="100">
+			<Label Text="文件传输" 
+                   VerticalOptions="Center" 
+                   HorizontalOptions="Center"
+                   FontSize="Title"
+                   TextColor="White"/>
+		</Grid>
+	</Shell.FlyoutHeader>	
+	<TabBar>
+		<ShellContent
+            Title="主页"
+            Icon="{StaticResource IconHome}"
+            ContentTemplate="{DataTemplate local:MainPage}"
+            Route="MainPage" />
+	</TabBar>
 	<Shell.FlyoutFooter>
 		<Grid Padding="10">
 			<sf:SfSegmentedControl x:Name="ThemeSegmentedControl" 

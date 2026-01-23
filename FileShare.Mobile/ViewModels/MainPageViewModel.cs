@@ -94,6 +94,7 @@ public partial class MainPageViewModel : ViewModelBase
         _ = InitializeAsync();
 
 #if DEBUG
+        _timerCheckDeviceOnline.Elapsed -= Timer_Elapsed;
         Devices.Add(new Core.Models.DeviceInfo
         {
             DeviceId = "HuaWei Mate 60",
@@ -154,6 +155,7 @@ public partial class MainPageViewModel : ViewModelBase
             TransferredSize = 1024 * 1024 * 2,
             ProgressPercentage = 40,
             Status = TransferStatus.Pending,
+            Direction = TransferDirection.Receive,
             SenderId = _localDeviceId,
             ReceiverId = "1234",            
         };
@@ -165,6 +167,7 @@ public partial class MainPageViewModel : ViewModelBase
             TransferredSize = 1024 * 1024 * 2,
             ProgressPercentage = 40,
             Status = TransferStatus.Transferring,
+            Direction = TransferDirection.Receive,
             SenderId = _localDeviceId,
             ReceiverId = "1234",           
         };

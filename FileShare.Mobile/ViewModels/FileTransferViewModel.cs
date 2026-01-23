@@ -130,6 +130,24 @@ public partial class FileTransferViewModel : ViewModelBase
         _ => "未知状态"
     };
 
+    private TransferDirection _direction;
+    public TransferDirection Direction
+    {
+        get { return _direction; }
+        set { if (SetProperty(ref _direction, value)) 
+            {
+                OnPropertyChanged(nameof(DirectionText));              
+            } }
+    }
+
+    public string DirectionText => Direction switch
+    {
+        TransferDirection.Send => "发送",
+        TransferDirection.Receive => "接收",      
+        _ => "未知状态"
+    };
+  
+
     // 格式化文件大小的辅助方法
     private string FormatFileSize(long size)
     {
@@ -158,7 +176,8 @@ public partial class FileTransferViewModel : ViewModelBase
             SenderId = model.SenderId,
             ReceiverId = model.ReceiverId,
             ProgressPercentage = model.ProgressPercentage,
-            SavePath = model.SavePath
+            SavePath = model.SavePath,
+            Direction = model.Direction,
         };
     }
 }

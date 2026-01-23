@@ -299,7 +299,8 @@ public class TcpFileTransferService : IDisposable
             FileSize = request.FileSize,
             SenderId = request.SenderId,
             ReceiverId = request.ReceiverId,
-            Status = TransferStatus.Pending
+            Status = TransferStatus.Pending,
+            Direction = TransferDirection.Receive,
         };
 
         // 创建TaskCompletionSource来等待用户选择
@@ -556,7 +557,8 @@ public class TcpFileTransferService : IDisposable
                 FileSize = fileInfo.Length,
                 SenderId = senderId,
                 ReceiverId = targetDevice.DeviceId,
-                Status = TransferStatus.Pending
+                Status = TransferStatus.Pending,
+                Direction = TransferDirection.Send,
             };
 
             OnTransferRequestSendAndReceive?.Invoke(transferInfo);
