@@ -223,10 +223,6 @@ public class TcpFileTransferService : IDisposable
                                 case TransferRequestType.SendFileData:
                                     await HandleFileData(stream, request, cancellationToken);
                                     break;
-                                case TransferRequestType.CancelTransfer:
-                                    // 处理取消传输请求
-                                    CancelTransfer(request.TransferId);
-                                    break;
                             }
                         }
                     }
@@ -400,9 +396,9 @@ public class TcpFileTransferService : IDisposable
                     Directory.CreateDirectory(savePath);
                 }
 
+                var totalBytesRead = 0L;
                 using (var fileStream = new FileStream(tempFilePath, FileMode.Create))
                 {
-                    var totalBytesRead = 0L;
                     var buffer = new byte[BUFFER_SIZE];
 
                     while (totalBytesRead < request.FileSize && !cts.Token.IsCancellationRequested)
@@ -425,21 +421,55 @@ public class TcpFileTransferService : IDisposable
                     return;
                 }
 
-                // 传输完成
-                transferInfo.Status = TransferStatus.Completed;
-                OnTransferCompleted?.Invoke(transferInfo, null);
-
-                // 发送完成响应
-                var response = new TransferResponse
+                // 检查传输进度是否达到100%
+                if (totalBytesRead == request.FileSize)
                 {
-                    TransferId = transferInfo.TransferId,
-                    Accepted = true,
-                    Message = "文件接收完成"
-                };
+                    // 传输完成
+                    transferInfo.Status = TransferStatus.Completed;
+                    OnTransferCompleted?.Invoke(transferInfo, null);
 
-                await SendResponseAsync(stream, response, cts.Token);
-                // 确保响应已发送完成
-                await stream.FlushAsync(cts.Token);
+                    // 发送完成响应
+                    var response = new TransferResponse
+                    {
+                        TransferId = transferInfo.TransferId,
+                        Accepted = true,
+                        Message = "文件接收完成"
+                    };
+
+                    await SendResponseAsync(stream, response, cts.Token);
+                    // 确保响应已发送完成
+                    await stream.FlushAsync(cts.Token);
+                }
+                else
+                {
+                    // 传输中断，没到100%
+                    transferInfo.Status = TransferStatus.Failed;
+                    OnTransferCompleted?.Invoke(transferInfo, "传输中断");
+
+                    // 删除临时文件
+                    if (File.Exists(tempFilePath))
+                    {
+                        File.Delete(tempFilePath);
+                    }
+
+                    try
+                    {
+                        // 发送错误响应
+                        var response = new TransferResponse
+                        {
+                            TransferId = transferInfo.TransferId,
+                            Accepted = false,
+                            Message = "文件接收失败: 传输中断"
+                        };
+
+                        await SendResponseAsync(stream, response, cts.Token);
+                        await stream.FlushAsync(cts.Token);
+                    }
+                    catch (Exception)
+                    {
+                        // 忽略发送错误响应时的异常
+                    }
+                }
             }
             catch (OperationCanceledException)
             {
@@ -884,7 +914,6 @@ public enum TransferRequestType
 {
     SendFileRequest,
     SendFileData,
-    CancelTransfer
 }
 
 /// <summary>
