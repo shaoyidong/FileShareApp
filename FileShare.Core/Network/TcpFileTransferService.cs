@@ -735,23 +735,6 @@ public class TcpFileTransferService : IDisposable
     {
         transferInfo.Status = TransferStatus.Cancelled;
         OnTransferCompleted?.Invoke(transferInfo, isTimeout ? "传输超时" : "传输被发送方取消");
-        try
-        {
-            var cancelRequest = new TransferRequest
-            {
-                Type = TransferRequestType.CancelTransfer,
-                TransferId = transferInfo.TransferId,
-                FileName = transferInfo.FileName,
-                FileSize = transferInfo.FileSize,
-                SenderId = transferInfo.SenderId,
-                ReceiverId = transferInfo.ReceiverId
-            };
-            await SendRequestAsync(stream, cancelRequest, _cts.Token);
-        }
-        catch (Exception)
-        {
-            // 忽略发送取消请求时的异常
-        }
     }
 
     /// <summary>
