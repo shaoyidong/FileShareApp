@@ -48,15 +48,35 @@ options =>
         // Continue initializing your .NET MAUI App here
 #if ANDROID
         // 注册服务
-        builder.Services.AddTransient<IPlatformDirectoryService, AndroidDirectoryService>();
+        builder.Services.AddSingleton<IPlatformDirectoryService, AndroidDirectoryService>();
 #elif IOS
         // 注册服务
-        builder.Services.AddTransient<IPlatformDirectoryService, IosDirectoryService>();
+        builder.Services.AddSingleton<IPlatformDirectoryService, IosDirectoryService>();
 #else
-		builder.Services.AddTransient<IPlatformDirectoryService, DesktopDirectoryService>();	
+		builder.Services.AddSingleton<IPlatformDirectoryService, DesktopDirectoryService>();	
 #endif
-		builder.Services.AddTransient<IAlertService,AlertService>();
-        builder.Services.AddTransient<MainPageViewModel>();
+        builder.Services.AddSingleton<IFileShareServiceManager, FileShareServiceManager>((serviceProvider) =>
+        {
+            var platformDirectoryService = serviceProvider.GetRequiredService<IPlatformDirectoryService>();
+            var isMobileOs = System.OperatingSystem.IsAndroid() || System.OperatingSystem.IsIOS();          
+            var isTablet = isMobileOs && FileShare.Mobile.Helpers.DeviceTypeHelper.IsTablet();
+            var deviceType = isTablet ? Core.Models.DeviceType.Tablet :
+                             isMobileOs ? Core.Models.DeviceType.Mobile :
+                             Core.Models.DeviceType.Desktop;
+
+            // 根据需要把 isTablet 用于不同的逻辑：例如传不同 DeviceType 或启用不同 UI/行为
+            return new FileShareServiceManager(
+                platformDirectoryService,
+                Microsoft.Maui.Devices.DeviceInfo.Name,
+                deviceType);
+        });
+#if ANDROID
+        builder.Services.AddSingleton<IFileTransferForegroundService, AndroidFileTransferForegroundService>();
+#else
+        builder.Services.AddSingleton<IFileTransferForegroundService, DefaultFileTransferForegroundService>();
+#endif
+        builder.Services.AddSingleton<IAlertService,AlertService>();
+        builder.Services.AddSingleton<MainPageViewModel>();
 
 		return builder.Build();
 	}

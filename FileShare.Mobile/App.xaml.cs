@@ -24,4 +24,14 @@ public partial class App : Microsoft.Maui.Controls.Application
 
         return window;
     }
+
+    protected override void OnSleep()
+    {
+        base.OnSleep();
+    }
+
+    protected override void OnResume()
+    {
+        base.OnResume();
+    }
 }

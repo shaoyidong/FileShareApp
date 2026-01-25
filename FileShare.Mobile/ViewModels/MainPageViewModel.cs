@@ -14,11 +14,12 @@ namespace FileShare.Mobile.ViewModels;
 
 public partial class MainPageViewModel : ViewModelBase
 {
-    private readonly FileShareServiceManager _serviceManager;
+    private readonly IFileShareServiceManager _serviceManager;
     private readonly System.Timers.Timer _timerCheckDeviceOnline;
     private readonly SynchronizationContext _uiContext;
     private readonly IAlertService _alertService;
-    private string _localDeviceId;   
+    private readonly string _localDeviceId;
+    private readonly IFileTransferForegroundService _fileTransferService;   
 
     private string _statusMessage = "准备就绪";
     public string StatusMessage
@@ -58,9 +59,14 @@ public partial class MainPageViewModel : ViewModelBase
     public ObservableCollection<FileTransferViewModel> SentTransferTasks { get; }
     public ObservableCollection<FileTransferViewModel> ReceivedTransferTasks { get; }
     
-    public MainPageViewModel(IPlatformDirectoryService directoryService, IAlertService alertService)
+    public MainPageViewModel(IPlatformDirectoryService directoryService
+        , IFileShareServiceManager fileShareServiceManager
+        , IFileTransferForegroundService fileTransferService
+        , IAlertService alertService)
     {
         _uiContext = SynchronizationContext.Current?? new SynchronizationContext();
+        _serviceManager = fileShareServiceManager;
+        _fileTransferService = fileTransferService;
         _alertService = alertService;
         Devices = new ObservableCollection<FileShare.Core.Models.DeviceInfo>();
         TransferTasks = new ObservableCollection<FileTransferViewModel>();
@@ -68,10 +74,10 @@ public partial class MainPageViewModel : ViewModelBase
         ReceivedTransferTasks = new ObservableCollection<FileTransferViewModel>();
 
         // 初始化服务管理器
-        _serviceManager = new FileShareServiceManager(
-            directoryService,
-            Microsoft.Maui.Devices.DeviceInfo.Name,
-            FileShare.Core.Models.DeviceType.Mobile);
+        //_serviceManager = new FileShareServiceManager(
+        //    directoryService,
+        //    Microsoft.Maui.Devices.DeviceInfo.Name,
+        //    FileShare.Core.Models.DeviceType.Mobile);
         
         // 保存本地设备ID
         _localDeviceId = _serviceManager.GetLocalDeviceInfo().DeviceId;
@@ -92,7 +98,7 @@ public partial class MainPageViewModel : ViewModelBase
         
         // 启动服务
         _ = InitializeAsync();
-
+        //InitializeFileTransferService();
 //#if DEBUG
 //        _timerCheckDeviceOnline.Elapsed -= Timer_Elapsed;
 //        Devices.Add(new Core.Models.DeviceInfo
@@ -211,7 +217,25 @@ public partial class MainPageViewModel : ViewModelBase
         {
             StatusMessage = $"启动服务失败: {ex.Message}";
         }
-    }    
+    }
+    
+//    private void InitializeFileTransferService()
+//    {
+//        // 如果服务实例不存在，创建一个默认实例
+//        if (_fileTransferService == null)
+//        {
+
+//#if ANDROID
+//            _fileTransferService = new AndroidFileTransferForegroundService();
+//#else
+//            // 其他平台使用默认实现
+//             _fileTransferService = new DefaultFileTransferForegroundService();
+//#endif
+//        }
+
+//        // 初始化服务，传入服务管理器
+//        _fileTransferService.Initialize(_serviceManager);
+//    }    
    
     private async Task RefreshDevicesAsync()
     {
@@ -237,7 +261,7 @@ public partial class MainPageViewModel : ViewModelBase
     {
         if (SelectedDevice == null)
         {
-            await _alertService.DisplayToastAsync("请先选择目标设备");
+            await _alertService.DisplayToastAsync("请先选择目标设备").ConfigureAwait(false);
             return;
         }
         
@@ -246,24 +270,18 @@ public partial class MainPageViewModel : ViewModelBase
             // 打开文件选择器
             var result = await FilePicker.PickAsync(new PickOptions
             {
-                PickerTitle = "选择要发送的文件"
-            });
-            
+                PickerTitle = "选择要发送的文件",
+                
+            }).ConfigureAwait(false);
+         
             if (result != null)
             {
-                StatusMessage = $"正在发送文件: {result.FileName}";
-                var success = await _serviceManager.SendFileAsync(result.FullPath, SelectedDevice);
-                
-                if (success)
+                _uiContext.Post((o) =>
                 {
-                    StatusMessage = "文件发送成功";
-                    await _alertService.DisplayToastAsync("文件发送成功");
-                }
-                else
-                {
-                    StatusMessage = "文件发送失败";
-                    await _alertService.DisplayToastAsync("文件发送失败");
-                }
+                    StatusMessage = $"正在发送文件: {result.FileName}";
+                }, null);
+
+                await _fileTransferService.SendFileAsync(result.FullPath, SelectedDevice).ConfigureAwait(false);
             }
         }
         catch (Exception ex)
@@ -478,5 +496,8 @@ public partial class MainPageViewModel : ViewModelBase
         _serviceManager.Dispose();
         _timerCheckDeviceOnline?.Stop();
         _timerCheckDeviceOnline?.Dispose();
+        
+        // 停止文件传输服务
+        _fileTransferService?.StopService();
     }
 }
