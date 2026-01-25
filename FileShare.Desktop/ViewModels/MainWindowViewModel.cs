@@ -211,8 +211,12 @@ namespace FileShare.Desktop.ViewModels
             {
                 savePath = folder[0].Path.LocalPath;
             }
+            else
+            {
+                return;
+            }
 
-            _serviceManager.HandleTransferRequest(viewModel.TransferId, true, savePath);
+                _serviceManager.HandleTransferRequest(viewModel.TransferId, true, savePath);
             StatusMessage = savePath != null 
                 ? $"开始接收文件: {viewModel.FileName} (保存到: {savePath})" 
                 : $"开始接收文件: {viewModel.FileName}";
