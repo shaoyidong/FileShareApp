@@ -250,7 +250,6 @@ public class TcpFileTransferService : IDisposable
                         try
                         {
                             await SendResponseAsync(stream, response, cancellationToken);
-                            await stream.FlushAsync(cancellationToken);
                         }
                         catch (Exception)
                         {
@@ -348,8 +347,6 @@ public class TcpFileTransferService : IDisposable
             };
 
             await SendResponseAsync(stream, response, cancellationToken);
-            await stream.FlushAsync(cancellationToken);
-
         }
         catch (Exception ex)
         {
@@ -437,8 +434,6 @@ public class TcpFileTransferService : IDisposable
                     };
 
                     await SendResponseAsync(stream, response, cts.Token);
-                    // 确保响应已发送完成
-                    await stream.FlushAsync(cts.Token);
                 }
                 else
                 {
@@ -462,8 +457,7 @@ public class TcpFileTransferService : IDisposable
                             Message = "文件接收失败: 传输中断"
                         };
 
-                        await SendResponseAsync(stream, response, cts.Token);
-                        await stream.FlushAsync(cts.Token);
+                        await SendResponseAsync(stream, response, cts.Token);                       
                     }
                     catch (Exception)
                     {
@@ -497,8 +491,7 @@ public class TcpFileTransferService : IDisposable
                         Message = "文件接收失败: " + ex.Message
                     };
 
-                    await SendResponseAsync(stream, response, cts.Token);
-                    await stream.FlushAsync(cts.Token);
+                    await SendResponseAsync(stream, response, cts.Token);                 
                 }
                 catch (Exception)
                 {
@@ -535,7 +528,7 @@ public class TcpFileTransferService : IDisposable
                 Accepted = false,
                 Message = "传输被接收方取消",
             };
-            await SendResponseAsync(stream, cancelResponse, _cts.Token);
+            await SendResponseAsync(stream, cancelResponse, _cts.Token);            
         }
         catch (Exception)
         {
@@ -554,6 +547,7 @@ public class TcpFileTransferService : IDisposable
 
         await stream.WriteAsync(headerBytes, cancellationToken);
         await stream.WriteAsync(responseBytes, cancellationToken);
+        await stream.FlushAsync(cancellationToken);
     }
     #endregion
 
@@ -822,6 +816,7 @@ public class TcpFileTransferService : IDisposable
 
         await stream.WriteAsync(headerBytes, cancellationToken);
         await stream.WriteAsync(requestBytes, cancellationToken);
+        await stream.FlushAsync(cancellationToken);
     }
 
     /// <summary>
