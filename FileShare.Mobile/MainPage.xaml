@@ -188,7 +188,7 @@
 							<DataTemplate x:DataType="vm:FileTransferViewModel">
 								<Border BackgroundColor="#ecf0f1" 
                                    StrokeShape="RoundRectangle 12" 
-                                   Padding="10 12 6 12"                                    
+                                   Padding="10,12,6,12"                                    
                                    Stroke="#bdc3c7" 
                                    StrokeThickness="1">
 									<StackLayout Spacing="10">
@@ -198,7 +198,7 @@
 												   FontAttributes="None" 
 												   FontSize="16" />
 											<Label Text="{Binding FileName}" Grid.Column="1"
-                                               FontAttributes="Bold" Margin="0 0 0 5"
+                                               FontAttributes="Bold" Margin="0,0,0,5"
                                                FontSize="16" 
                                                TextColor="#2c3e50" 
                                                LineBreakMode="TailTruncation" />
