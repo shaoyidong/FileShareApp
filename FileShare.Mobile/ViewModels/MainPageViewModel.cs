@@ -308,7 +308,7 @@ public partial class MainPageViewModel : ViewModelBase
             {
                 return;
             }           
-            
+         
             _serviceManager.HandleTransferRequest(viewModel.TransferId, true);
             StatusMessage = $"开始接收文件: {viewModel.FileName}";
         }

@@ -72,6 +72,8 @@ options =>
         });
 #if ANDROID
         builder.Services.AddSingleton<IFileTransferForegroundService, AndroidFileTransferForegroundService>();
+#elif IOS
+        builder.Services.AddSingleton<IFileTransferForegroundService, IosFileTransferForegroundService>();
 #else
         builder.Services.AddSingleton<IFileTransferForegroundService, DefaultFileTransferForegroundService>();
 #endif
