@@ -295,7 +295,7 @@ public partial class MainPageViewModel : ViewModelBase
         catch (Exception ex)
         {
             StatusMessage = $"发送文件失败: {ex.Message}";
-            await _alertService.DisplayToastAsync(ex.Message);
+            await _alertService.DisplayToastAsync(ex.Message).ConfigureAwait(false);
         }
     }
     
@@ -315,7 +315,7 @@ public partial class MainPageViewModel : ViewModelBase
         catch (Exception ex)
         {
             StatusMessage = $"接受传输失败: {ex.Message}";
-            await _alertService.DisplayToastAsync(ex.Message);
+            await _alertService.DisplayToastAsync(ex.Message).ConfigureAwait(false);
         }
     }
     
@@ -328,7 +328,7 @@ public partial class MainPageViewModel : ViewModelBase
         }
 
         _serviceManager.HandleTransferRequest(viewModel.TransferId, false);
-        await _alertService.DisplayToastAsync("拒绝");
+        await _alertService.DisplayToastAsync("拒绝").ConfigureAwait(false);
         StatusMessage = $"已拒绝文件: {viewModel.FileName}";
     }
     
@@ -404,7 +404,7 @@ public partial class MainPageViewModel : ViewModelBase
     
     private async void OnTransferRequestSendAndReceive(FileTransferInfo info)
     {
-        await _foregroundService.StartServiceAsync();
+        await _foregroundService.StartServiceAsync().ConfigureAwait(false);
         _uiContext.Post(async (o) =>
         {
             // 创建FileTransferViewModel实例

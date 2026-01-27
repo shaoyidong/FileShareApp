@@ -106,8 +106,8 @@ public class FileShareServiceManager : IFileShareServiceManager
     /// </summary>
     public async Task StartServicesAsync()
     {
-        await _discoveryService.StartAsync();
-        await _fileTransferService.StartAsync();
+        await _discoveryService.StartAsync().ConfigureAwait(false);
+        await _fileTransferService.StartAsync().ConfigureAwait(false);
     }
     
     /// <summary>
@@ -115,8 +115,8 @@ public class FileShareServiceManager : IFileShareServiceManager
     /// </summary>
     public async Task StopServicesAsync()
     {
-        await _discoveryService.StopAsync();
-        await _fileTransferService.StopAsync();
+        await _discoveryService.StopAsync().ConfigureAwait(false);
+        await _fileTransferService.StopAsync().ConfigureAwait(false);
     }
     
     /// <summary>
@@ -135,7 +135,7 @@ public class FileShareServiceManager : IFileShareServiceManager
     /// <returns>是否发送成功</returns>
     public async Task<bool> SendFileAsync(string filePath, DeviceInfo targetDevice)
     {
-        return await _fileTransferService.SendFileAsync(filePath, targetDevice, _localDevice.DeviceId);
+        return await _fileTransferService.SendFileAsync(filePath, targetDevice, _localDevice.DeviceId).ConfigureAwait(false);
     }
     
     /// <summary>

@@ -118,7 +118,7 @@ public class UdpDiscoveryService : IDisposable
         }
         
         // 等待异步操作完成
-        await Task.Delay(100);
+        await Task.Delay(100).ConfigureAwait(false);
         
         // 安全释放资源
         ReleaseResources();
@@ -161,7 +161,7 @@ public class UdpDiscoveryService : IDisposable
             {
                 try
                 {
-                    var result = await _udpClient.ReceiveAsync(cancellationToken);
+                    var result = await _udpClient.ReceiveAsync(cancellationToken).ConfigureAwait(false);
                     var message = System.Text.Encoding.UTF8.GetString(result.Buffer);
                     
                     if (message.StartsWith(DiscoveryMessage))
@@ -198,7 +198,7 @@ public class UdpDiscoveryService : IDisposable
                                 // 发送回应消息
                                 if (!cancellationToken.IsCancellationRequested && !_isDisposed && _udpClient != null)
                                 {
-                                    await SendResponseAsync(result.RemoteEndPoint);
+                                    await SendResponseAsync(result.RemoteEndPoint).ConfigureAwait(false);
                                 }
                             }
                         }
@@ -220,7 +220,7 @@ public class UdpDiscoveryService : IDisposable
                         Console.WriteLine($"接收广播消息失败: {ex.Message}");
                     }
                     // 短暂延迟后继续尝试
-                    await Task.Delay(100, cancellationToken);
+                    await Task.Delay(100, cancellationToken).ConfigureAwait(false);
                 }
             }
         }
@@ -249,7 +249,7 @@ public class UdpDiscoveryService : IDisposable
                     var message = DiscoveryMessage + deviceJson;
                     var data = System.Text.Encoding.UTF8.GetBytes(message);
                     
-                    await _udpClient.SendAsync(data, data.Length, _broadcastEndPoint);
+                    await _udpClient.SendAsync(data, data.Length, _broadcastEndPoint).ConfigureAwait(false);
                     
                     // 清理过期设备（使用锁保护共享资源）
                     lock (_lock)
@@ -257,7 +257,7 @@ public class UdpDiscoveryService : IDisposable
                         CleanupExpiredDevices();
                     }
                     
-                    await Task.Delay(BroadcastIntervalMs, cancellationToken);
+                    await Task.Delay(BroadcastIntervalMs, cancellationToken).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
                 {
@@ -271,7 +271,7 @@ public class UdpDiscoveryService : IDisposable
                         Console.WriteLine($"发送广播消息失败: {ex.Message}");
                     }
                     // 短暂延迟后继续尝试
-                    await Task.Delay(100, cancellationToken);
+                    await Task.Delay(100, cancellationToken).ConfigureAwait(false);
                 }
             }
         }
@@ -298,7 +298,7 @@ public class UdpDiscoveryService : IDisposable
             var message = DiscoveryMessage + deviceJson;
             var data = System.Text.Encoding.UTF8.GetBytes(message);
             
-            await _udpClient.SendAsync(data, data.Length, remoteEndPoint);
+            await _udpClient.SendAsync(data, data.Length, remoteEndPoint).ConfigureAwait(false);
         }
         catch (Exception ex)
         {

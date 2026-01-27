@@ -65,7 +65,7 @@ public class AndroidFileTransferForegroundService : IFileTransferForegroundServi
             if (!IsBound || FileTransferService == null)
             {
                 // 如果服务未绑定，先绑定服务
-                await  BindServiceAsync();
+                await  BindServiceAsync().ConfigureAwait(false);
             }
 
             _isServiceStarted = true;
@@ -95,7 +95,7 @@ public class AndroidFileTransferForegroundService : IFileTransferForegroundServi
         IsBound = context.BindService(intent, _serviceConnection, Bind.AutoCreate);
         
         // 等待服务绑定完成
-        await Task.Delay(100);
+        await Task.Delay(100).ConfigureAwait(false);
     }
 
     private class ServiceConnection : Java.Lang.Object, IServiceConnection
