@@ -509,27 +509,6 @@ public class TcpFileTransferService : IDisposable
         }
     }
 
-    private void UpdateTransferProgress(FileTransferInfo transferInfo, long totalBytesRead)
-    {
-        // 更新进度
-        transferInfo.TransferredSize = totalBytesRead;
-
-        // 计算当前进度百分比
-        double currentProgress = transferInfo.ProgressPercentage;
-
-        // 获取上次进度值，如果不存在则默认为-1
-        double lastProgress = -1;
-        _lastProgressValues.TryGetValue(transferInfo.TransferId, out lastProgress);
-
-        // 只有当进度变化超过0.5%时才触发事件        
-        if (Math.Abs(currentProgress - lastProgress) >= PROGRESS_THRESHOLD || lastProgress < 0)
-        {
-            OnTransferProgressUpdated?.Invoke(transferInfo);
-            // 更新上次进度值
-            _lastProgressValues[transferInfo.TransferId] = currentProgress;
-        }
-    }
-
     private async Task OnReceiverCancelled(NetworkStream stream, FileTransferInfo transferInfo, string tempFilePath)
     {
         // 传输被取消
@@ -641,9 +620,10 @@ public class TcpFileTransferService : IDisposable
                         if (response?.Accepted??false)
                         {
                             // 发送文件数据，增加文件传输的超时时间
-                            timeoutCts.CancelAfter(TimeSpan.FromMinutes(5)); // 大文件传输超时设置为5分钟
+                            // 初始设置超时，后续会根据进度更新重置
+                            timeoutCts.CancelAfter(TimeSpan.FromMicroseconds(REQUEST_TIMEOUT_MS));
 
-                            var result = await SendFileDataAsync(stream, filePath, transferInfo, cts.Token).ConfigureAwait(false);
+                            var result = await SendFileDataAsync(stream, filePath, transferInfo, cts.Token, timeoutCts).ConfigureAwait(false);
                             //发送流程未被接收方取消
                             if (result)
                             {
@@ -762,8 +742,9 @@ public class TcpFileTransferService : IDisposable
     /// <param name="filePath"></param>
     /// <param name="transferInfo"></param>
     /// <param name="cancellationToken"></param>
+    /// <param name="timeoutCts">超时取消令牌源，用于在进度更新时重置</param>
     /// <returns>true：完成或自行取消，false：接到接收方取消响应 </returns>
-    private async Task<bool> SendFileDataAsync(NetworkStream stream, string filePath, FileTransferInfo transferInfo, CancellationToken cancellationToken = default)
+    private async Task<bool> SendFileDataAsync(NetworkStream stream, string filePath, FileTransferInfo transferInfo, CancellationToken cancellationToken = default, CancellationTokenSource? timeoutCts = null)
     {
         transferInfo.Status = TransferStatus.Transferring;
         // 触发传输进度事件，通知UI状态变化
@@ -821,8 +802,8 @@ public class TcpFileTransferService : IDisposable
                 await stream.WriteAsync(buffer, 0, bytesRead, cancellationToken).ConfigureAwait(false);
                 totalBytesRead += bytesRead;
 
-                // 更新进度
-                UpdateTransferProgress(transferInfo, totalBytesRead);
+                // 更新进度，传递timeoutCts以便在进度更新时重置超时
+                UpdateTransferProgress(transferInfo, totalBytesRead, timeoutCts);
             }
             return true;
         }
@@ -874,6 +855,30 @@ public class TcpFileTransferService : IDisposable
         }
 
         return buffer;
+    }
+
+    private void UpdateTransferProgress(FileTransferInfo transferInfo, long totalBytesRead, CancellationTokenSource? timeoutCts = null)
+    {
+        // 更新进度
+        transferInfo.TransferredSize = totalBytesRead;
+
+        // 计算当前进度百分比
+        double currentProgress = transferInfo.ProgressPercentage;
+
+        // 获取上次进度值，如果不存在则默认为-1
+        double lastProgress = -1;
+        _lastProgressValues.TryGetValue(transferInfo.TransferId, out lastProgress);
+
+        // 只有当进度变化超过0.5%时才触发事件        
+        if (Math.Abs(currentProgress - lastProgress) >= PROGRESS_THRESHOLD || lastProgress < 0)
+        {
+            OnTransferProgressUpdated?.Invoke(transferInfo);
+            // 更新上次进度值
+            _lastProgressValues[transferInfo.TransferId] = currentProgress;
+
+            // 重置超时时间，只要有进度更新就不触发超时
+            timeoutCts?.CancelAfter(TimeSpan.FromMicroseconds(REQUEST_TIMEOUT_MS));
+        }
     }
 
     protected virtual void Dispose(bool disposing)
