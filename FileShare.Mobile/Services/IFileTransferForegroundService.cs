@@ -5,7 +5,7 @@ namespace FileShare.Mobile.Services;
 
 public interface IFileTransferForegroundService
 {
-    Task<bool> SendFileAsync(string filePath, Core.Models.DeviceInfo targetDevice);
-    void StartService();
+    //Task<bool> SendFileAsync(string filePath, Core.Models.DeviceInfo targetDevice);
+    Task StartServiceAsync();
     void StopService();
 }

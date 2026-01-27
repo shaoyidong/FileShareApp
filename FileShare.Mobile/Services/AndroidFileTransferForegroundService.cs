@@ -11,7 +11,7 @@ namespace FileShare.Mobile.Services;
 
 public class AndroidFileTransferForegroundService : IFileTransferForegroundService
 {
-    private FileTransferService? FileTransferService { get; set; }
+    private AndroidDataSyncForegroundService? FileTransferService { get; set; }
     //private IFileShareServiceManager ServiceManager { get; set; }
     private bool IsBound { get; set; }
     private bool _isServiceStarted;
@@ -21,34 +21,35 @@ public class AndroidFileTransferForegroundService : IFileTransferForegroundServi
     {
         //ServiceManager = serviceManager;
         _serviceConnection = new ServiceConnection(this);
+        
     }
 
-    public async Task<bool> SendFileAsync(string filePath, Core.Models.DeviceInfo targetDevice)
-    {
-        if (!_isServiceStarted)
-        {
-            StartService();
-        }
-        if (!IsBound || FileTransferService == null)
-        {
-            // 如果服务未绑定，先绑定服务
-            await BindServiceAsync();
-        }
+    //public async Task<bool> SendFileAsync(string filePath, Core.Models.DeviceInfo targetDevice)
+    //{
+    //    if (!_isServiceStarted)
+    //    {
+    //        await StartServiceAsync();
+    //    }
+    //    if (!IsBound || FileTransferService == null)
+    //    {
+    //        // 如果服务未绑定，先绑定服务
+    //        await BindServiceAsync();
+    //    }
 
-        if (FileTransferService != null)
-        {
-            return await FileTransferService.SendFileAsync(filePath, targetDevice);
-        }
+    //    if (FileTransferService != null)
+    //    {
+    //        return await FileTransferService.SendFileAsync(filePath, targetDevice);
+    //    }
 
-        throw new System.InvalidOperationException("文件传输服务未初始化");
-    }
+    //    throw new System.InvalidOperationException("文件传输服务未初始化");
+    //}
 
-    public void StartService()
+    public async Task StartServiceAsync()
     {
         if (!_isServiceStarted)
         {
             var context = Android.App.Application.Context;
-            var intent = new Intent(context, typeof(FileTransferService));
+            var intent = new Intent(context, typeof(AndroidDataSyncForegroundService));
             // 添加API级别判断
             if (Build.VERSION.SdkInt >= BuildVersionCodes.O) // Android 8.0 或更高
             {
@@ -61,6 +62,12 @@ public class AndroidFileTransferForegroundService : IFileTransferForegroundServi
                 // 对于 Android 8.0 以下的系统，使用旧版的 StartService 方法
                 context.StartService(intent);
             }
+            if (!IsBound || FileTransferService == null)
+            {
+                // 如果服务未绑定，先绑定服务
+                await  BindServiceAsync();
+            }
+
             _isServiceStarted = true;
         }
     }
@@ -68,7 +75,7 @@ public class AndroidFileTransferForegroundService : IFileTransferForegroundServi
     public void StopService()
     {
         var context = Android.App.Application.Context;
-        var intent = new Intent(context, typeof(FileTransferService));
+        var intent = new Intent(context, typeof(AndroidDataSyncForegroundService));
         context.StopService(intent);
         _isServiceStarted = false;
         
@@ -76,13 +83,14 @@ public class AndroidFileTransferForegroundService : IFileTransferForegroundServi
         {
             context.UnbindService(_serviceConnection);
             IsBound = false;
+            FileTransferService = null;
         }
     }
 
     private async Task BindServiceAsync()
     {
         var context = Android.App.Application.Context;
-        var intent = new Intent(context, typeof(FileTransferService));       
+        var intent = new Intent(context, typeof(AndroidDataSyncForegroundService));       
        
         IsBound = context.BindService(intent, _serviceConnection, Bind.AutoCreate);
         
@@ -101,7 +109,7 @@ public class AndroidFileTransferForegroundService : IFileTransferForegroundServi
 
         public void OnServiceConnected(ComponentName? name, IBinder? service)
         {
-            var binder = service as FileTransferService.LocalBinder;
+            var binder = service as AndroidDataSyncForegroundService.LocalBinder;
             if (binder != null)
             {
                 _service.FileTransferService = binder.Service;

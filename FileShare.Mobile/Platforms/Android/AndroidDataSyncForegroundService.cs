@@ -18,16 +18,19 @@ using Intent = Android.Content.Intent;
 namespace FileShare.Mobile.Platforms.Android;
 
 [Service(ForegroundServiceType = ForegroundService.TypeDataSync)]
-public class FileTransferService : Service
+public class AndroidDataSyncForegroundService : Service
 {
     private const int NOTIFICATION_ID = 1001;
     private const string CHANNEL_ID = "FileTransferServiceChannel";
+    private const string CHANNEL_NAME = "文件传输服务";
+    private const string CHANNEL_DESCRIPTION = "用于在后台保持文件传输活跃";
     
     private IBinder? _binder;
     private bool _isRunning;
-    private int _transferCount = 0;
+    //private int _transferCount = 0;
     //private List<FileTransferTask> _transferTasks;
-    private IFileShareServiceManager? _serviceManager;
+    //private IFileShareServiceManager? _serviceManager;
+
     //private Handler _handler;
     //private Action<FileTransferInfo>? _transferProgressHandler;
     //private Action<FileTransferInfo, string?>? _transferCompletedHandler;
@@ -45,22 +48,30 @@ public class FileTransferService : Service
     {
         base.OnCreate();
         // 通过服务提供者获取服务实例
-        _serviceManager = IPlatformApplication.Current?.Services?
-    .GetService<IFileShareServiceManager>();
+    //    _serviceManager = IPlatformApplication.Current?.Services?
+    //.GetService<IFileShareServiceManager>();
+        
         _binder = new LocalBinder(this);
-        _transferCount = 0;
+        //_transferCount = 0;
         //_transferTasks = new List<FileTransferTask>();
         //_handler = new Handler(Looper.MainLooper);
 
         //Handler handler = new Handler(Looper.MainLooper!);
         //Initialize(handler);
+        
+        // 注册传输进度事件
+        //if (_serviceManager != null)
+        //{
+        //    _serviceManager.OnTransferProgressUpdated += OnTransferProgressUpdated;
+        //    _serviceManager.OnTransferCompleted += OnTransferCompleted;
+        //}
 
 #if ANDROID26_0_OR_GREATER
 #pragma warning disable CA1416 // 验证平台兼容性
         CreateNotificationChannel();
 #pragma warning restore CA1416 // 验证平台兼容性
 #endif
-    }
+     }
 
     public override IBinder OnBind(Intent? intent)
     {
@@ -81,28 +92,54 @@ public class FileTransferService : Service
     public override void OnDestroy()
     {
         base.OnDestroy();
+        
+        // 注销事件
+        //if (_serviceManager != null)
+        //{
+        //    _serviceManager.OnTransferProgressUpdated -= OnTransferProgressUpdated;
+        //    _serviceManager.OnTransferCompleted -= OnTransferCompleted;           
+        //}
+        
         _isRunning = false;    
-        _transferCount = 0;
-        //_transferTasks.Clear();
-//        // 对于 Android 13 (API 33) 及以上
-//        if (Build.VERSION.SdkInt >= BuildVersionCodes.Tiramisu)
-//        {
-//            // 移除通知
-//            StopForeground(StopForegroundFlags.Remove);
-//            // 或者，如果想让通知暂时保留：StopForeground(StopForegroundFlags.Detach);
-//        }
-//        else
-//        {
-//            // 为了兼容旧版本，保留原来的调用
-//#if ANDROID33_0_OR_GREATER
-//            StopForeground(StopForegroundFlags.Remove);
-//#else
-//            StopForeground(true);
-//#endif
-
-//        }
-        // 使用兼容性 API，一行代码解决问题
-        ServiceCompat.StopForeground(this,1);
+        //_transferCount = 0;
+        
+        // // 正确停止前台服务并移除通知
+        // if (Build.VERSION.SdkInt >= BuildVersionCodes.Tiramisu)
+        // {
+        //     // Android 13 (API 33) 及以上
+        //     StopForeground(StopForegroundFlags.Remove);
+        //     _logger?.LogInformation("Foreground service stopped with Remove flag");
+        // }
+        // else
+        // {
+        //     // 旧版本Android
+        //     StopForeground(true);
+        //     _logger?.LogInformation("Foreground service stopped with true flag");
+        // }
+        //使用兼容api一行解决
+        ServiceCompat.StopForeground(this,1);      
+    }
+    
+    private void OnTransferProgressUpdated(FileTransferInfo info)
+    {
+        try
+        {
+            UpdateNotification(info);
+        }
+        catch (Exception)
+        {
+        }
+    }
+    
+    private void OnTransferCompleted(FileTransferInfo info, string? message)
+    {
+        try
+        {
+            UpdateNotification(info);
+        }
+        catch (Exception)
+        {
+        }
     }
 
     //public void Initialize(/*IFileShareServiceManager serviceManager*/ Handler handler)
@@ -137,57 +174,57 @@ public class FileTransferService : Service
     //    }
     //}
 
-    public async Task<bool> SendFileAsync(string filePath, Core.Models.DeviceInfo targetDevice)
-    {
-        if (_serviceManager == null)
-        {
-            throw new InvalidOperationException("服务管理器未初始化");
-        }
-     
-        //var transferTask = new FileTransferTask
-        //{
-        //    FilePath = filePath,
-        //    TargetDevice = targetDevice,           
-        //};
+    //public async Task<bool> SendFileAsync(string filePath, Core.Models.DeviceInfo targetDevice)
+    //{        
+    //    if (_serviceManager == null)
+    //    {
+    //        throw new InvalidOperationException("服务管理器未初始化");
+    //    }
+      
+    //    //var transferTask = new FileTransferTask
+    //    //{
+    //    //    FilePath = filePath,
+    //    //    TargetDevice = targetDevice,           
+    //    //};
 
-        //_transferTasks.Add(transferTask);
-        _transferCount++;
+    //    //_transferTasks.Add(transferTask);
+    //    _transferCount++;
 
-        try
-        {
-            //UpdateNotification(null, "正在发送文件...");
+    //    try
+    //    {
+    //        //UpdateNotification(null, "正在发送文件...");
 
-            //transferTask.TransferTask = _serviceManager.SendFileAsync(filePath, targetDevice);
-            //var result = await transferTask.TransferTask;
-            var result = await _serviceManager.SendFileAsync(filePath, targetDevice);
+    //        //transferTask.TransferTask = _serviceManager.SendFileAsync(filePath, targetDevice);
+    //        //var result = await transferTask.TransferTask;
+    //        var result = await _serviceManager.SendFileAsync(filePath, targetDevice);
            
-            //if (_transferTasks.Count == 0)
+    //        //if (_transferTasks.Count == 0)
            
 
-            return result;
-        }
-        catch (Exception)
-        {
-            //_transferTasks.Remove(transferTask);
-            //if (_transferTasks.Count == 0)
-            //{
-            //    StopSelf();
-            //}           
-            throw;
-        }
-        finally 
-        {
-            if (_transferCount > 0)
-            {
-                _transferCount--;
-            }
-            //if (_transferTasks.Count == 0)
-            if (_transferCount <= 0)
-            {
-                StopSelf();
-            }
-        }
-    }
+    //        return result;
+    //    }
+    //    catch (Exception)
+    //    {
+    //        //_transferTasks.Remove(transferTask);
+    //        //if (_transferTasks.Count == 0)
+    //        //{
+    //        //    StopSelf();
+    //        //}           
+    //        throw;
+    //    }
+    //    finally 
+    //    {
+    //        if (_transferCount > 0)
+    //        {
+    //            _transferCount--;
+    //        }
+    //        //if (_transferTasks.Count == 0)
+    //        if (_transferCount <= 0)
+    //        {
+    //            StopSelf();
+    //        }
+    //    }
+    //}
 
     private void RemoveCompletedTask(string transferId)
     {
@@ -209,11 +246,15 @@ public class FileTransferService : Service
         {
             var channel = new NotificationChannel(
                 CHANNEL_ID,
-                "文件传输服务",
+                CHANNEL_NAME,
                 NotificationImportance.Default)
             {
-                Description = "用于在后台保持文件传输活跃"
+                Description = CHANNEL_DESCRIPTION
             };
+
+            // 设置通知渠道的其他属性
+            channel.EnableLights(true);
+            channel.EnableVibration(false);
 
             var notificationManager = GetSystemService(NotificationService) as NotificationManager;
             notificationManager?.CreateNotificationChannel(channel);
@@ -246,13 +287,16 @@ public class FileTransferService : Service
     );
 #endif
 
+        // 使用NotificationCompat确保向后兼容
         var builder = new NotificationCompat.Builder(this, CHANNEL_ID)
             ?.SetContentTitle(title)
             ?.SetContentText(message)
             ?.SetSmallIcon(Resource.Mipmap.appicon)
             ?.SetContentIntent(pendingIntent)
             ?.SetOngoing(true)
-            ?.SetPriority(NotificationCompat.PriorityDefault);
+            ?.SetPriority(NotificationCompat.PriorityDefault)
+            ?.SetVisibility(NotificationCompat.VisibilityPublic)
+            ?.SetAutoCancel(false);
 
         return builder?.Build();
     }
@@ -264,7 +308,6 @@ public class FileTransferService : Service
 
         if (info != null)
         {
-            message = $"{info.FileName} - {info.ProgressPercentage}%";
             if (info.Status == TransferStatus.Completed)
             {
                 message = $"{info.FileName} - 传输完成";
@@ -273,17 +316,22 @@ public class FileTransferService : Service
             {
                 message = $"{info.FileName} - 传输失败";
             }
+            else
+            {
+                message = $"{info.FileName} - {info.ProgressPercentage}%";
+            }
         }
 
         var notification = CreateNotification(title, message);
         var notificationManager = GetSystemService(NotificationService) as NotificationManager;
         notificationManager?.Notify(NOTIFICATION_ID, notification);
     }
+    
     public class LocalBinder : Binder
     {
-        public FileTransferService Service { get; private set; }
+        public AndroidDataSyncForegroundService Service { get; private set; }
 
-        public LocalBinder(FileTransferService service)
+        public LocalBinder(AndroidDataSyncForegroundService service)
         {
             Service = service;
         }

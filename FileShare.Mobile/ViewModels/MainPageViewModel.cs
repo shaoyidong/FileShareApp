@@ -19,7 +19,7 @@ public partial class MainPageViewModel : ViewModelBase
     private readonly SynchronizationContext _uiContext;
     private readonly IAlertService _alertService;
     private readonly string _localDeviceId;
-    private readonly IFileTransferForegroundService _fileTransferService;   
+    private readonly IFileTransferForegroundService _foregroundService;   
 
     private string _statusMessage = "准备就绪";
     public string StatusMessage
@@ -66,7 +66,7 @@ public partial class MainPageViewModel : ViewModelBase
     {
         _uiContext = SynchronizationContext.Current?? new SynchronizationContext();
         _serviceManager = fileShareServiceManager;
-        _fileTransferService = fileTransferService;
+        _foregroundService = fileTransferService;
         _alertService = alertService;
         Devices = new ObservableCollection<FileShare.Core.Models.DeviceInfo>();
         TransferTasks = new ObservableCollection<FileTransferViewModel>();
@@ -267,6 +267,7 @@ public partial class MainPageViewModel : ViewModelBase
         
         try
         {
+            await _foregroundService.StartServiceAsync();
             // 打开文件选择器
             var result = await FilePicker.PickAsync(new PickOptions
             {
@@ -281,7 +282,14 @@ public partial class MainPageViewModel : ViewModelBase
                     StatusMessage = $"正在发送文件: {result.FileName}";
                 }, null);
 
-                await _fileTransferService.SendFileAsync(result.FullPath, SelectedDevice).ConfigureAwait(false);
+                await _serviceManager.SendFileAsync(result.FullPath, SelectedDevice).ConfigureAwait(false);
+            }
+            else
+            {
+                if (!TransferTasks.Any(t => t.Status == TransferStatus.Pending || t.Status == TransferStatus.Transferring))
+                {
+                    _foregroundService.StopService();
+                }
             }
         }
         catch (Exception ex)
@@ -394,8 +402,9 @@ public partial class MainPageViewModel : ViewModelBase
         },null);
     }
     
-    private void OnTransferRequestSendAndReceive(FileTransferInfo info)
+    private async void OnTransferRequestSendAndReceive(FileTransferInfo info)
     {
+        await _foregroundService.StartServiceAsync();
         _uiContext.Post(async (o) =>
         {
             // 创建FileTransferViewModel实例
@@ -461,7 +470,7 @@ public partial class MainPageViewModel : ViewModelBase
     
     private void OnTransferCompleted(FileTransferInfo updatedInfo, string? errorMessage)
     {
-        _uiContext.Post((o) =>
+        _uiContext.Send((o) =>
         {
             // 查找对应的FileTransferViewModel并更新
             var viewModel = TransferTasks.FirstOrDefault(t => t.TransferId == updatedInfo.TransferId);
@@ -489,6 +498,10 @@ public partial class MainPageViewModel : ViewModelBase
                 }
             }
         },null);
+        if (!TransferTasks.Any(t=>t.Status == TransferStatus.Pending || t.Status == TransferStatus.Transferring))
+        {
+            _foregroundService.StopService();
+        }
     } 
     
     public void Dispose()
@@ -498,6 +511,6 @@ public partial class MainPageViewModel : ViewModelBase
         _timerCheckDeviceOnline?.Dispose();
         
         // 停止文件传输服务
-        _fileTransferService?.StopService();
+        _foregroundService?.StopService();
     }
 }

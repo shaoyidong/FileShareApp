@@ -1,13 +1,11 @@
-using Microsoft.Maui.Controls.PlatformConfiguration;
-using Microsoft.Maui.Controls.PlatformConfiguration.iOSSpecific;
 
 namespace FileShare.Mobile;
 
 public partial class App : Microsoft.Maui.Controls.Application
 {
-	public App()
+    public App()
 	{
-		InitializeComponent();       
+		InitializeComponent();      
     }
 
 	protected override Window CreateWindow(IActivationState? activationState)
