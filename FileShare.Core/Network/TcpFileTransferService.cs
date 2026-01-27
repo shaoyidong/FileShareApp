@@ -20,12 +20,14 @@ public class TcpFileTransferService : IDisposable
 {
     private const int BUFFER_SIZE = 65536; // 64KB缓冲区
     private const int REQUEST_TIMEOUT_MS = 30000; // 请求超时时间（30秒）
+    private const double PROGRESS_THRESHOLD = 0.5;
     private readonly int _port;
     private readonly TcpListener _listener;
     private readonly CancellationTokenSource _cts;
     private readonly ConcurrentDictionary<string, FileTransferInfo> _incomingTransfers; // 接收的文件传输
     private readonly ConcurrentDictionary<string, TaskCompletionSource<bool>> _pendingTransferRequests; // 等待用户确认的传输请求
     private readonly ConcurrentDictionary<string, CancellationTokenSource> _transferCancellationTokens; // 传输取消令牌
+    private readonly ConcurrentDictionary<string, double> _lastProgressValues; // 上次进度值，用于优化事件触发
     private readonly IPlatformDirectoryService _directoryService;
     private bool _disposedValue;
 
@@ -52,6 +54,7 @@ public class TcpFileTransferService : IDisposable
         _incomingTransfers = new ConcurrentDictionary<string, FileTransferInfo>();
         _pendingTransferRequests = new ConcurrentDictionary<string, TaskCompletionSource<bool>>();
         _transferCancellationTokens = new ConcurrentDictionary<string, CancellationTokenSource>();
+        _lastProgressValues = new ConcurrentDictionary<string, double>(); // 初始化进度跟踪字典
         _directoryService = directoryService;
     }
 
@@ -406,9 +409,7 @@ public class TcpFileTransferService : IDisposable
                         await fileStream.WriteAsync(buffer, 0, bytesRead, cts.Token).ConfigureAwait(false);
                         totalBytesRead += bytesRead;
 
-                        // 更新进度
-                        transferInfo.TransferredSize = totalBytesRead;
-                        OnTransferProgressUpdated?.Invoke(transferInfo);
+                        UpdateTransferProgress(transferInfo, totalBytesRead);
                     }
                 }
 
@@ -502,8 +503,30 @@ public class TcpFileTransferService : IDisposable
             {
                 _incomingTransfers.TryRemove(transferInfo.TransferId, out _);
                 _transferCancellationTokens.TryRemove(request.TransferId, out _);
+                _lastProgressValues.TryRemove(transferInfo.TransferId, out _); // 清理进度跟踪数据
                 cts?.Dispose();
             }
+        }
+    }
+
+    private void UpdateTransferProgress(FileTransferInfo transferInfo, long totalBytesRead)
+    {
+        // 更新进度
+        transferInfo.TransferredSize = totalBytesRead;
+
+        // 计算当前进度百分比
+        double currentProgress = transferInfo.ProgressPercentage;
+
+        // 获取上次进度值，如果不存在则默认为-1
+        double lastProgress = -1;
+        _lastProgressValues.TryGetValue(transferInfo.TransferId, out lastProgress);
+
+        // 只有当进度变化超过0.5%时才触发事件        
+        if (Math.Abs(currentProgress - lastProgress) >= PROGRESS_THRESHOLD || lastProgress < 0)
+        {
+            OnTransferProgressUpdated?.Invoke(transferInfo);
+            // 更新上次进度值
+            _lastProgressValues[transferInfo.TransferId] = currentProgress;
         }
     }
 
@@ -717,6 +740,7 @@ public class TcpFileTransferService : IDisposable
             if (transferId != null)
             {
                 _transferCancellationTokens.TryRemove(transferId, out _);
+                _lastProgressValues.TryRemove(transferId, out _); // 清理进度跟踪数据
                 userCts?.Dispose();
                 timeoutCts?.Dispose();
                 // 清理传输连接信息
@@ -798,8 +822,7 @@ public class TcpFileTransferService : IDisposable
                 totalBytesRead += bytesRead;
 
                 // 更新进度
-                transferInfo.TransferredSize = totalBytesRead;
-                OnTransferProgressUpdated?.Invoke(transferInfo);
+                UpdateTransferProgress(transferInfo, totalBytesRead);
             }
             return true;
         }
