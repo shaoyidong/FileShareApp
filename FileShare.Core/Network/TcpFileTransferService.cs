@@ -19,7 +19,7 @@ namespace FileShare.Core.Network;
 public class TcpFileTransferService : IDisposable
 {
     private const int BUFFER_SIZE = 65536; // 64KB缓冲区
-    private const int REQUEST_TIMEOUT_MS = 30000; // 请求超时时间（30秒）
+    private const int REQUEST_TIMEOUT_MS = 60000; // 请求超时时间（60秒）
     private const double PROGRESS_THRESHOLD = 0.5;
     private readonly int _port;
     private readonly TcpListener _listener;
