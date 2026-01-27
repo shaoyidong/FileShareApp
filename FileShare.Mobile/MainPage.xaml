@@ -69,7 +69,7 @@
 		</Style>
 	</ContentPage.Resources>
 
-	<ScrollView>
+	
 		<StackLayout Padding="0" Spacing="13">
 			<!-- 状态栏 -->
 			<Border Margin="16,8,16,0"
@@ -171,84 +171,86 @@
 					<Shadow Brush="#000000" Opacity="0.1" Radius="4" Offset="0,2" />
 				</Border.Shadow>
 				<Border.StrokeShape>
-					<RoundRectangle CornerRadius="12" />
-				</Border.StrokeShape>
-				<StackLayout >
+				<RoundRectangle CornerRadius="12" />
+			</Border.StrokeShape>
+			<ScrollView HeightRequest="400" VerticalOptions="FillAndExpand">
+				<StackLayout Spacing="10">
 					<Label Text="传输任务" 
-                       Style="{StaticResource TitleLabel}" 
-                       Margin="0,0,0,12" />
-
+						   Style="{StaticResource TitleLabel}" 
+						   Margin="0,0,0,12" />
 					<!-- 传输任务列表 -->
 					<CollectionView ItemsSource="{Binding TransferTasks}"                               
-                              BackgroundColor="Transparent">
+					          BackgroundColor="Transparent" 
+					          VerticalOptions="FillAndExpand">
 						<CollectionView.ItemsLayout>
 							<LinearItemsLayout Orientation="Vertical" ItemSpacing="5" />
 						</CollectionView.ItemsLayout>
 						<CollectionView.ItemTemplate>
 							<DataTemplate x:DataType="vm:FileTransferViewModel">
 								<Border BackgroundColor="#ecf0f1" 
-                                   StrokeShape="RoundRectangle 12" 
-                                   Padding="10,12,6,12"                                    
-                                   Stroke="#bdc3c7" 
-                                   StrokeThickness="1">
+									   StrokeShape="RoundRectangle 12" 
+									   Padding="10,12,6,12"                                     
+									   Stroke="#bdc3c7" 
+									   StrokeThickness="1">
 									<StackLayout Spacing="10">
 										<Grid ColumnDefinitions="Auto,*,Auto">
 											<Label Text="{Binding DirectionText,StringFormat='({0})'}" 
-												   TextColor="{Binding Direction, Converter={StaticResource TransferDirectionToColorConverter}}"
-												   FontAttributes="None" 
-												   FontSize="16" />
+											   TextColor="{Binding Direction, Converter={StaticResource TransferDirectionToColorConverter}}"
+											   FontAttributes="None" 
+											   FontSize="16" />
 											<Label Text="{Binding FileName}" Grid.Column="1"
-                                               FontAttributes="Bold" Margin="0,0,0,5"
-                                               FontSize="16" 
-                                               TextColor="#2c3e50" 
-                                               LineBreakMode="TailTruncation" />
+												   FontAttributes="Bold" Margin="0,0,0,5"
+												   FontSize="16" 
+												   TextColor="#2c3e50" 
+												   LineBreakMode="TailTruncation" />
 											<Button Text="✕"  Grid.Column="2" VerticalOptions="Start"
-													Command="{Binding Path=RemoveTransferCommand, Source={RelativeSource AncestorType={x:Type vm:MainPageViewModel}}, x:DataType='vm:MainPageViewModel'}"
-													CommandParameter="{Binding}" 
-													Style="{StaticResource RemoveButton}"/>
+												Command="{Binding Path=RemoveTransferCommand, Source={RelativeSource AncestorType={x:Type vm:MainPageViewModel}}, x:DataType='vm:MainPageViewModel'}"
+												CommandParameter="{Binding}" 
+												Style="{StaticResource RemoveButton}"/>
 										</Grid>
 										<Grid ColumnDefinitions="*,Auto">
 											<StackLayout Grid.Column="1" Orientation="Horizontal">
 												<Label  Text="{Binding FormattedTransferredSize,StringFormat='{0}'}" 
-														FontSize="14" 
-														TextColor="#7f8c8d" />
-												<Label  Text="{Binding FormattedFileSize,StringFormat='/{0}'}" 
-														FontSize="14" 
-														TextColor="#7f8c8d" />												
-											</StackLayout>											
+													FontSize="14" 
+													TextColor="#7f8c8d" />
+												<Label  Text="{Binding FormattedFileSize,StringFormat='/ {0}'}" 
+													FontSize="14" 
+													TextColor="#7f8c8d" />
+											</StackLayout>
 											<Label Grid.Column="0" Text="{Binding StatusText}" 
-                                               FontSize="14" 
-                                               FontAttributes="None" 
-                                               TextColor="{Binding Status, Converter={StaticResource StatusToColorConverter}}" 
-                                               HorizontalOptions="Start" />
+												   FontSize="14" 
+												   FontAttributes="None" 
+												   TextColor="{Binding Status, Converter={StaticResource StatusToColorConverter}}" 
+												   HorizontalOptions="Start" />
 										</Grid>
 
 										<Grid ColumnDefinitions="*,Auto">
 											<ProgressBar Progress="{Binding ProgressFraction}" 
-															 ProgressColor="#3498db"
-															 HeightRequest="10"
-															 BackgroundColor="#bdc3c7"/>
+												     ProgressColor="#3498db"
+												     HeightRequest="10"
+												     BackgroundColor="#bdc3c7"/>
 											<Label Grid.Column="1" Text="{Binding ProgressFraction, StringFormat='{0:P1}'}" 
-													   FontSize="14"
-													   TextColor="#3498db" 
-													   HorizontalOptions="End" 
-													   Margin="10,0,0,0" />
-										</Grid>										
+												   FontSize="14"
+												   TextColor="#3498db" 
+												   HorizontalOptions="End" 
+												   Margin="10,0,0,0" />
+										</Grid>
 									</StackLayout>
 								</Border>
 							</DataTemplate>
 						</CollectionView.ItemTemplate>
 						<CollectionView.EmptyView>
 							<Label Text="暂无传输任务" 
-                               FontSize="14" 
-                               TextColor="#95a5a6" 
-                               HorizontalOptions="Center" 
-                               VerticalOptions="Center" 
-                               Margin="0,40,0,0" />
+								   FontSize="14" 
+								   TextColor="#95a5a6" 
+								   HorizontalOptions="Center" 
+								   VerticalOptions="Center" 
+								   Margin="0,40,0,0" />
 						</CollectionView.EmptyView>
 					</CollectionView>
 				</StackLayout>
+			</ScrollView>				
 			</Border>
 		</StackLayout>
-	</ScrollView>
+
 </ContentPage>

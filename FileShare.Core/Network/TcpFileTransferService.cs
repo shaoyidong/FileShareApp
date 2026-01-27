@@ -621,7 +621,7 @@ public class TcpFileTransferService : IDisposable
                         {
                             // 发送文件数据，增加文件传输的超时时间
                             // 初始设置超时，后续会根据进度更新重置
-                            timeoutCts.CancelAfter(TimeSpan.FromMicroseconds(REQUEST_TIMEOUT_MS));
+                            timeoutCts.CancelAfter(TimeSpan.FromMilliseconds(REQUEST_TIMEOUT_MS));
 
                             var result = await SendFileDataAsync(stream, filePath, transferInfo, cts.Token, timeoutCts).ConfigureAwait(false);
                             //发送流程未被接收方取消
@@ -877,7 +877,7 @@ public class TcpFileTransferService : IDisposable
             _lastProgressValues[transferInfo.TransferId] = currentProgress;
 
             // 重置超时时间，只要有进度更新就不触发超时
-            timeoutCts?.CancelAfter(TimeSpan.FromMicroseconds(REQUEST_TIMEOUT_MS));
+            timeoutCts?.CancelAfter(TimeSpan.FromMilliseconds(REQUEST_TIMEOUT_MS));
         }
     }
 
