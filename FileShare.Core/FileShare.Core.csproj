@@ -18,6 +18,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite.Core" Version="10.0.2" />
     <PackageReference Include="SQLitePCLRaw.bundle_green" Version="2.1.11" />
+    <PackageReference Include="Dapper" Version="2.1.66" />
   </ItemGroup>
 
 </Project>

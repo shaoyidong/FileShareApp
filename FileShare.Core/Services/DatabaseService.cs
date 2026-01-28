@@ -1,6 +1,8 @@
 using FileShare.Core.Models;
 using Microsoft.Data.Sqlite;
+using System.Data;
 using System.IO;
+using Dapper;
 
 namespace FileShare.Core.Services;
 
@@ -40,24 +42,16 @@ public class DatabaseService : IDatabaseService
         
         // 创建表
         using var connection = new SqliteConnection(_connectionString);
-        {
-            connection.Open();
-            try
-            {
-                var createTableCmd = connection.CreateCommand();
-                createTableCmd.CommandText = @"
+        connection.Open();
+        
+        const string createTableSql = @"
             CREATE TABLE IF NOT EXISTS DeviceId (
                 ID INTEGER PRIMARY KEY AUTOINCREMENT,
                 DeviceId TEXT NOT NULL UNIQUE,
                 CreatedAt DATETIME NOT NULL
             );";
-                createTableCmd.ExecuteNonQuery();
-            }
-            catch (Exception)
-            {
-                throw;
-            }
-        }
+        
+        connection.Execute(createTableSql);
     }
     
     /// <summary>
@@ -67,34 +61,28 @@ public class DatabaseService : IDatabaseService
     public string GetOrCreateDeviceId()
     {
         using var connection = new SqliteConnection(_connectionString);
+        connection.Open();
+        
+        const string selectSql = "SELECT * FROM DeviceId ORDER BY CreatedAt DESC LIMIT 1;";
+        var deviceIdEntity = connection.QueryFirstOrDefault<DeviceIdEntity>(selectSql);
+        
+        if (deviceIdEntity != null)
         {
-            connection.Open();
-            var selectCmd = connection.CreateCommand();
-            selectCmd.CommandText = "SELECT * FROM DeviceId ORDER BY CreatedAt DESC LIMIT 1;";
-            //var deviceId = new DeviceIdEntity()
-
-            using var reader = selectCmd.ExecuteReader();
-            {
-                if (reader.Read())
-                {
-                    return reader.GetString(1);
-                }
-                else
-                {
-                    var newDeviceId = Guid.NewGuid().ToString();
-
-                    var insertCmd = connection.CreateCommand();
-                    insertCmd.CommandText = "INSERT INTO DeviceId (DeviceId, CreatedAt) VALUES (@deviceId, @createdAt);";
-                    insertCmd.Parameters.AddWithValue("@deviceId", newDeviceId);
-                    // 建议使用ISO8601格式存储日期时间
-                    insertCmd.Parameters.AddWithValue("@createdAt", DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss.fff"));
-                    insertCmd.ExecuteNonQuery();
-
-                    return newDeviceId;
-                }
-            }
+            return deviceIdEntity.DeviceId;
         }
         
+        // 创建新设备ID
+        var newDeviceId = Guid.NewGuid().ToString();
+        var newEntity = new DeviceIdEntity
+        {
+            DeviceId = newDeviceId,
+            CreatedAt = DateTime.UtcNow
+        };
+        
+        const string insertSql = "INSERT INTO DeviceId (DeviceId, CreatedAt) VALUES (@DeviceId, @CreatedAt);";
+        connection.Execute(insertSql, newEntity);
+        
+        return newDeviceId;
     }
     
     /// <summary>
