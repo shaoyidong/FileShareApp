@@ -4,6 +4,8 @@ using FileShare.Mobile.ViewModels;
 using Microsoft.Extensions.Logging;
 using CommunityToolkit.Maui;
 using Syncfusion.Maui.Toolkit.Hosting;
+using System.IO;
+using Microsoft.Maui.Storage;
 
 namespace FileShare.Mobile;
 
@@ -55,10 +57,19 @@ options =>
 #else
 		builder.Services.AddSingleton<IPlatformDirectoryService, DesktopDirectoryService>();	
 #endif
+        builder.Services.AddSingleton<IDatabaseService>((serviceProvider) =>
+        {
+            // 获取应用数据目录
+            var appDataDirectory = FileSystem.AppDataDirectory;
+            var databasePath = Path.Combine(appDataDirectory, "fileshare.db");
+            return new DatabaseService(databasePath);
+        });
+
         builder.Services.AddSingleton<IFileShareServiceManager, FileShareServiceManager>((serviceProvider) =>
         {
             var platformDirectoryService = serviceProvider.GetRequiredService<IPlatformDirectoryService>();
-            var isMobileOs = System.OperatingSystem.IsAndroid() || System.OperatingSystem.IsIOS();          
+            var databaseService = serviceProvider.GetRequiredService<IDatabaseService>();
+            var isMobileOs = System.OperatingSystem.IsAndroid() || System.OperatingSystem.IsIOS();
             var isTablet = isMobileOs && FileShare.Mobile.Helpers.DeviceTypeHelper.IsTablet();
             var deviceType = isTablet ? Core.Models.DeviceType.Tablet :
                              isMobileOs ? Core.Models.DeviceType.Mobile :
@@ -67,6 +78,7 @@ options =>
             // 根据需要把 isTablet 用于不同的逻辑：例如传不同 DeviceType 或启用不同 UI/行为
             return new FileShareServiceManager(
                 platformDirectoryService,
+                databaseService,
                 Microsoft.Maui.Devices.DeviceInfo.Name,
                 deviceType);
         });

@@ -13,6 +13,7 @@ public class FileShareServiceManager : IFileShareServiceManager
     private readonly UdpDiscoveryService _discoveryService;
     private readonly TcpFileTransferService _fileTransferService;
     private readonly DeviceInfo _localDevice;
+    private readonly IDatabaseService _databaseService;
     
     /// <summary>
     /// 设备列表更新事件
@@ -37,14 +38,19 @@ public class FileShareServiceManager : IFileShareServiceManager
     /// <summary>
     /// 构造函数
     /// </summary>
+    /// <param name="directoryService">平台目录服务</param>
+    /// <param name="databaseService">数据库服务</param>
     /// <param name="deviceName">本地设备名称</param>
     /// <param name="deviceType">设备类型</param>
     /// <param name="discoveryPort">设备发现端口</param>
     /// <param name="transferPort">文件传输端口</param>
     public FileShareServiceManager(
         IPlatformDirectoryService directoryService,
+        IDatabaseService databaseService,
         string deviceName, DeviceType deviceType, int discoveryPort = 5236, int transferPort = 5237)
     {
+        _databaseService = databaseService;
+        
         // 生成设备ID
         var deviceId = GetOrCreateDeviceId();
         
@@ -97,8 +103,7 @@ public class FileShareServiceManager : IFileShareServiceManager
     /// </summary>
     private string GetOrCreateDeviceId()
     {
-        // 在实际应用中，应该从持久化存储中读取设备ID，如果不存在则生成新的
-        return Guid.NewGuid().ToString();
+        return _databaseService.GetOrCreateDeviceId();
     }
     
     /// <summary>

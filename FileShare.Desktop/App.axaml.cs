@@ -4,11 +4,13 @@ using Avalonia.Data.Core;
 using Avalonia.Data.Core.Plugins;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
+using FileShare.Core.Services;
 using FileShare.Desktop.Services;
 using FileShare.Desktop.ViewModels;
 using FileShare.Desktop.Views;
 using System;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Threading;
 
@@ -42,9 +44,16 @@ namespace FileShare.Desktop
                 // More info: https://docs.avaloniaui.net/docs/guides/development-guides/data-validation#manage-validationplugins
                 DisableAvaloniaDataAnnotationValidation();
                 
+                // 创建数据库服务实例
+                var appDataDirectory = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+                var fileShareDirectory = Path.Combine(appDataDirectory, "FileShare");
+                var databasePath = Path.Combine(fileShareDirectory, "fileshare.db");
+                var databaseService = new DatabaseService(databasePath);
+                
                 // 创建服务管理器实例
-                var serviceManager = new FileShare.Core.Services.FileShareServiceManager(
-                    new FileShare.Core.Services.DesktopDirectoryService(),
+                var serviceManager = new FileShareServiceManager(
+                    new DesktopDirectoryService(),
+                    databaseService,
                     Environment.MachineName,
                     FileShare.Core.Models.DeviceType.Desktop);
                 
