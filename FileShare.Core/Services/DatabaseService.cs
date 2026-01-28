@@ -9,6 +9,7 @@ namespace FileShare.Core.Services;
 /// <summary>
 /// 数据库服务实现
 /// </summary>
+[DapperAot]
 public class DatabaseService : IDatabaseService
 {
     private readonly string _connectionString;
