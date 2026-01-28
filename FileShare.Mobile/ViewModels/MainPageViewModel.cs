@@ -19,7 +19,8 @@ public partial class MainPageViewModel : ViewModelBase
     private readonly SynchronizationContext _uiContext;
     private readonly IAlertService _alertService;
     private readonly string _localDeviceId;
-    private readonly IFileTransferForegroundService _foregroundService;   
+    private readonly IFileTransferForegroundService _foregroundService;
+    private readonly IPickerService _filePickerService;
 
     private string _statusMessage = "准备就绪";
     public string StatusMessage
@@ -62,12 +63,14 @@ public partial class MainPageViewModel : ViewModelBase
     public MainPageViewModel(IPlatformDirectoryService directoryService
         , IFileShareServiceManager fileShareServiceManager
         , IFileTransferForegroundService fileTransferService
-        , IAlertService alertService)
+        , IAlertService alertService
+        , IPickerService filePickerService)
     {
         _uiContext = SynchronizationContext.Current?? new SynchronizationContext();
         _serviceManager = fileShareServiceManager;
         _foregroundService = fileTransferService;
         _alertService = alertService;
+        _filePickerService = filePickerService;
         Devices = new ObservableCollection<FileShare.Core.Models.DeviceInfo>();
         TransferTasks = new ObservableCollection<FileTransferViewModel>();
         SentTransferTasks = new ObservableCollection<FileTransferViewModel>();
@@ -100,88 +103,88 @@ public partial class MainPageViewModel : ViewModelBase
         _ = InitializeAsync();
         //InitializeFileTransferService();
 #if DEBUG
-        _timerCheckDeviceOnline.Elapsed -= Timer_Elapsed;
-        Devices.Add(new Core.Models.DeviceInfo
-        {
-            DeviceId = "HuaWei Mate 60",
-            DeviceName = "HuaWei Mate 60",
-            DeviceType = Core.Models.DeviceType.Mobile,
-            IpAddress = "ipaddrss",
-            LastSeen = DateTime.Now
-        });
-        Devices.Add(new Core.Models.DeviceInfo
-        {
-            DeviceId = "123",
-            DeviceName = "Mac Pad",
-            DeviceType = Core.Models.DeviceType.Tablet,
-            IpAddress = "127.0.0.1",
-            LastSeen = DateTime.Now
-        });
-        Devices.Add(new Core.Models.DeviceInfo
-        {
-            DeviceId = "1234",
-            DeviceName = "jiaolong 15Pro",
-            DeviceType = Core.Models.DeviceType.Desktop,
-            IpAddress = "127.0.0.3",
-            LastSeen = DateTime.Now
-        });
+        //_timerCheckDeviceOnline.Elapsed -= Timer_Elapsed;
+        //Devices.Add(new Core.Models.DeviceInfo
+        //{
+        //    DeviceId = "HuaWei Mate 60",
+        //    DeviceName = "HuaWei Mate 60",
+        //    DeviceType = Core.Models.DeviceType.Mobile,
+        //    IpAddress = "ipaddrss",
+        //    LastSeen = DateTime.Now
+        //});
+        //Devices.Add(new Core.Models.DeviceInfo
+        //{
+        //    DeviceId = "123",
+        //    DeviceName = "Mac Pad",
+        //    DeviceType = Core.Models.DeviceType.Tablet,
+        //    IpAddress = "127.0.0.1",
+        //    LastSeen = DateTime.Now
+        //});
+        //Devices.Add(new Core.Models.DeviceInfo
+        //{
+        //    DeviceId = "1234",
+        //    DeviceName = "jiaolong 15Pro",
+        //    DeviceType = Core.Models.DeviceType.Desktop,
+        //    IpAddress = "127.0.0.3",
+        //    LastSeen = DateTime.Now
+        //});
 
-        FileTransferViewModel fileTransferViewModel = new FileTransferViewModel
-        {
-            TransferId = Guid.NewGuid().ToString(),
-            FileName = "示例文件.txt",
-            FileSize = 1024 * 1024 * 5,
-            TransferredSize = 1024 * 1024 * 2,
-            ProgressPercentage = 40,
-            Status = TransferStatus.Pending,
-            SenderId = "123",
-            ReceiverId = _localDeviceId,
-        };
-        FileTransferViewModel fileTransferViewModel2 = new FileTransferViewModel
-        {
-            TransferId = Guid.NewGuid().ToString(),
-            FileName = "示例文件2.txt",
-            FileSize = 1024 * 1024 * 5,
-            TransferredSize = 1024 * 1024 * 2,
-            ProgressPercentage = 40,
-            Status = TransferStatus.Transferring,
-            SenderId = "1233",
-            ReceiverId = _localDeviceId,
-        };
-        TransferTasks.Add(fileTransferViewModel);
-        TransferTasks.Add(fileTransferViewModel2);
-        ReceivedTransferTasks.Add(fileTransferViewModel);
-        ReceivedTransferTasks.Add(fileTransferViewModel2);
+        //FileTransferViewModel fileTransferViewModel = new FileTransferViewModel
+        //{
+        //    TransferId = Guid.NewGuid().ToString(),
+        //    FileName = "示例文件.txt",
+        //    FileSize = 1024 * 1024 * 5,
+        //    TransferredSize = 1024 * 1024 * 2,
+        //    ProgressPercentage = 40,
+        //    Status = TransferStatus.Pending,
+        //    SenderId = "123",
+        //    ReceiverId = _localDeviceId,
+        //};
+        //FileTransferViewModel fileTransferViewModel2 = new FileTransferViewModel
+        //{
+        //    TransferId = Guid.NewGuid().ToString(),
+        //    FileName = "示例文件2.txt",
+        //    FileSize = 1024 * 1024 * 5,
+        //    TransferredSize = 1024 * 1024 * 2,
+        //    ProgressPercentage = 40,
+        //    Status = TransferStatus.Transferring,
+        //    SenderId = "1233",
+        //    ReceiverId = _localDeviceId,
+        //};
+        //TransferTasks.Add(fileTransferViewModel);
+        //TransferTasks.Add(fileTransferViewModel2);
+        //ReceivedTransferTasks.Add(fileTransferViewModel);
+        //ReceivedTransferTasks.Add(fileTransferViewModel2);
 
-        FileTransferViewModel fileTransferViewModel3 = new FileTransferViewModel
-        {
-            TransferId = Guid.NewGuid().ToString(),
-            FileName = "示例文件3.txt",
-            FileSize = 1024 * 1024 * 5,
-            TransferredSize = 1024 * 1024 * 2,
-            ProgressPercentage = 40,
-            Status = TransferStatus.Pending,
-            Direction = TransferDirection.Receive,
-            SenderId = _localDeviceId,
-            ReceiverId = "1234",
-        };
-        FileTransferViewModel fileTransferViewModel4 = new FileTransferViewModel
-        {
-            TransferId = Guid.NewGuid().ToString(),
-            FileName = "示例文件4.txt",
-            FileSize = 1024 * 1024 * 5,
-            TransferredSize = 1024 * 1024 * 2,
-            ProgressPercentage = 40,
-            Status = TransferStatus.Transferring,
-            Direction = TransferDirection.Receive,
-            SenderId = _localDeviceId,
-            ReceiverId = "1234",
-        };
+        //FileTransferViewModel fileTransferViewModel3 = new FileTransferViewModel
+        //{
+        //    TransferId = Guid.NewGuid().ToString(),
+        //    FileName = "示例文件3.txt",
+        //    FileSize = 1024 * 1024 * 5,
+        //    TransferredSize = 1024 * 1024 * 2,
+        //    ProgressPercentage = 40,
+        //    Status = TransferStatus.Pending,
+        //    Direction = TransferDirection.Receive,
+        //    SenderId = _localDeviceId,
+        //    ReceiverId = "1234",
+        //};
+        //FileTransferViewModel fileTransferViewModel4 = new FileTransferViewModel
+        //{
+        //    TransferId = Guid.NewGuid().ToString(),
+        //    FileName = "示例文件4.txt",
+        //    FileSize = 1024 * 1024 * 5,
+        //    TransferredSize = 1024 * 1024 * 2,
+        //    ProgressPercentage = 40,
+        //    Status = TransferStatus.Transferring,
+        //    Direction = TransferDirection.Receive,
+        //    SenderId = _localDeviceId,
+        //    ReceiverId = "1234",
+        //};
 
-        TransferTasks.Add(fileTransferViewModel3);
-        TransferTasks.Add(fileTransferViewModel4);
-        SentTransferTasks.Add(fileTransferViewModel3);
-        SentTransferTasks.Add(fileTransferViewModel4);
+        //TransferTasks.Add(fileTransferViewModel3);
+        //TransferTasks.Add(fileTransferViewModel4);
+        //SentTransferTasks.Add(fileTransferViewModel3);
+        //SentTransferTasks.Add(fileTransferViewModel4);
 #endif
     }
 
@@ -211,7 +214,7 @@ public partial class MainPageViewModel : ViewModelBase
         {
             await _serviceManager.StartServicesAsync();
             _timerCheckDeviceOnline.Start();
-            StatusMessage = "服务已启动";
+            StatusMessage = "准备就绪";
         }
         catch (Exception ex)
         {
@@ -269,7 +272,7 @@ public partial class MainPageViewModel : ViewModelBase
         {
             await _foregroundService.StartServiceAsync();
             // 打开文件选择器
-            var result = await FilePicker.PickAsync(new PickOptions
+            var result = await _filePickerService.PickFileAsync(new PickOptions
             {
                 PickerTitle = "选择要发送的文件",
                 

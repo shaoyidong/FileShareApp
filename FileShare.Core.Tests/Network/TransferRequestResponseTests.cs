@@ -76,12 +76,10 @@ public class TransferRequestResponseTests
         // Arrange & Act: 获取所有枚举值
         var sendFileRequestValue = (int)TransferRequestType.SendFileRequest;
         var sendFileDataValue = (int)TransferRequestType.SendFileData;
-        var cancelTransferValue = (int)TransferRequestType.CancelTransfer;
         
         // Assert: 验证枚举值是否符合预期
         Assert.Equal(0, sendFileRequestValue);
         Assert.Equal(1, sendFileDataValue);
-        Assert.Equal(2, cancelTransferValue);
     }
     
     /// <summary>
@@ -178,14 +176,10 @@ public class TransferRequestResponseTests
         
         request.Type = TransferRequestType.SendFileData;
         var isSendFileData = request.Type == TransferRequestType.SendFileData;
-        
-        request.Type = TransferRequestType.CancelTransfer;
-        var isCancelTransfer = request.Type == TransferRequestType.CancelTransfer;
-        
+
         // Assert: 验证请求类型赋值是否正确
         Assert.True(isSendFileRequest);
         Assert.True(isSendFileData);
-        Assert.True(isCancelTransfer);
     }
     
     /// <summary>

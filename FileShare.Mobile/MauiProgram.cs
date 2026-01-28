@@ -78,6 +78,7 @@ options =>
         builder.Services.AddSingleton<IFileTransferForegroundService, DefaultFileTransferForegroundService>();
 #endif
         builder.Services.AddSingleton<IAlertService,AlertService>();
+        builder.Services.AddSingleton<IPickerService,MauiPickerService>();
         builder.Services.AddSingleton<MainPageViewModel>();
 
 		return builder.Build();
