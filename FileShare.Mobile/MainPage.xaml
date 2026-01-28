@@ -17,16 +17,16 @@
 		<Style TargetType="Label" x:Key="TitleLabel">
 			<Setter Property="FontSize" Value="18" />
 			<Setter Property="FontAttributes" Value="Bold" />
-			<Setter Property="TextColor" Value="#2c3e50" />
+			<Setter Property="TextColor" Value="{AppThemeBinding Light={StaticResource DarkOnLightBackground}, Dark={StaticResource LightOnDarkBackground}}" />
 		</Style>
 
 		<Style TargetType="Label" x:Key="StatusLabel">
 			<Setter Property="FontSize" Value="14" />
-			<Setter Property="TextColor" Value="#3498db" />
+			<Setter Property="TextColor" Value="{StaticResource Primary}" />
 		</Style>
 
 		<Style TargetType="Button" x:Key="PrimaryButton">
-			<Setter Property="BackgroundColor" Value="#3498db" />
+			<Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
 			<Setter Property="TextColor" Value="White" />
 			<Setter Property="CornerRadius" Value="12" />
 			<Setter Property="Padding" Value="15,10" />
@@ -35,7 +35,7 @@
 		</Style>
 
 		<Style TargetType="Button" x:Key="SecondaryButton">
-			<Setter Property="BackgroundColor" Value="#95a5a6" />
+			<Setter Property="BackgroundColor" Value="{AppThemeBinding Light={StaticResource Gray400}, Dark={StaticResource Gray600}}" />
 			<Setter Property="TextColor" Value="White" />
 			<Setter Property="CornerRadius" Value="8" />
 			<Setter Property="Padding" Value="10,6" />
@@ -43,7 +43,7 @@
 		</Style>
 
 		<Style TargetType="Button" x:Key="AcceptButton">
-			<Setter Property="BackgroundColor" Value="#2ecc71" />
+			<Setter Property="BackgroundColor" Value="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource Primary}}" />
 			<Setter Property="TextColor" Value="White" />
 			<Setter Property="CornerRadius" Value="8" />
 			<Setter Property="Padding" Value="12,8" />
@@ -51,7 +51,7 @@
 		</Style>
 
 		<Style TargetType="Button" x:Key="RejectButton">
-			<Setter Property="BackgroundColor" Value="#f39c12" />
+			<Setter Property="BackgroundColor" Value="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource Primary}}" />
 			<Setter Property="TextColor" Value="White" />
 			<Setter Property="CornerRadius" Value="8" />
 			<Setter Property="Padding" Value="12,8" />
@@ -62,35 +62,41 @@
 			<Setter Property="BackgroundColor" Value="Transparent" />
 			<Setter Property="TextColor" Value="#e74c3c" />
 			<Setter Property="CornerRadius" Value="0" />
-			<Setter Property="Padding" Value="0,0" />
-			<Setter Property="FontSize" Value="15" />					
+			<Setter Property="Padding" Value="12,0" />
+			<Setter Property="FontSize" Value="15" />
 			<Setter Property="MinimumHeightRequest" Value="0"/>
 			<Setter Property="MinimumWidthRequest" Value="0"/>
 		</Style>
 	</ContentPage.Resources>
 
-	
-		<StackLayout Padding="0" Spacing="13">
-			<!-- 状态栏 -->
-			<Border Margin="16,8,16,0"
-        Padding="12"        
-        Stroke="Transparent" 
-                StrokeThickness="0"
-        StrokeShape="RoundRectangle 12">
-				<Border.Shadow >
-					<Shadow Brush="#000000" Opacity="0.1" Radius="4" Offset="0,2" />
-				</Border.Shadow>
-				<Grid>
-					<Grid.ColumnDefinitions>
-						<ColumnDefinition Width="*" />
-						<ColumnDefinition Width="Auto" />
-					</Grid.ColumnDefinitions>
-					<Label Text="{Binding StatusMessage}" 
-           Style="{StaticResource StatusLabel}" 
-           VerticalOptions="Center" 
-           HorizontalOptions="Start" 
-           LineBreakMode="TailTruncation" />
-					<!--<Button Text="刷新设备" Grid.Column="1"
+	<Grid Padding="0">
+		<Grid.RowDefinitions>
+			<RowDefinition Height="Auto" />
+			<RowDefinition Height="*" />
+			<RowDefinition Height="1.2*" />
+		</Grid.RowDefinitions>
+
+		<!-- 状态栏 -->
+		<Border Grid.Row="0" Margin="16,8,16,13"
+		        Padding="12"        
+		        Stroke="Transparent" 
+		        StrokeThickness="0"
+		        StrokeShape="RoundRectangle 12"
+		        Background="{AppThemeBinding Light={StaticResource LightSecondaryBackground}, Dark={StaticResource DarkSecondaryBackground}}">
+			<Border.Shadow >
+				<Shadow Brush="#000000" Opacity="0.1" Radius="4" Offset="0,2" />
+			</Border.Shadow>
+			<Grid>
+				<Grid.ColumnDefinitions>
+					<ColumnDefinition Width="*" />
+					<ColumnDefinition Width="Auto" />
+				</Grid.ColumnDefinitions>
+				<Label Text="{Binding StatusMessage}" 
+	           Style="{StaticResource StatusLabel}" 
+	           VerticalOptions="Center" 
+	           HorizontalOptions="Start" 
+	           LineBreakMode="TailTruncation" />
+				<!--<Button Text="刷新设备" Grid.Column="1"
             Command="{Binding RefreshDevicesCommand}"
             IsEnabled="{Binding IsNotScanning}"
             Margin="10,0,0,0" 
@@ -98,99 +104,98 @@
             HorizontalOptions="End" 
             Style="{StaticResource SecondaryButton}" 
             WidthRequest="120" />-->
-				</Grid>
-			</Border>
+			</Grid>
+		</Border>
 
-			<!-- 设备列表 -->
-			<Border Margin="16,0,16,0" Padding="16" BackgroundColor="White" StrokeThickness="0" StrokeShape="RoundRectangle 12">
-				<Border.Shadow >
-					<Shadow Brush="#000000" Opacity="0.1" Radius="4" Offset="0,2" />
-				</Border.Shadow>
-				<StackLayout >
-					<Label Text="可用设备" 
-                       Style="{StaticResource TitleLabel}" 
-                       Margin="0,0,0,12" />
+		<!-- 设备列表 -->
+		<Border Grid.Row="1" Margin="16,0,16,13" Padding="16" Background="{AppThemeBinding Light={StaticResource LightSecondaryBackground}, Dark={StaticResource DarkSecondaryBackground}}" StrokeThickness="0" StrokeShape="RoundRectangle 12">
+			<Border.Shadow >
+				<Shadow Brush="#000000" Opacity="0.1" Radius="4" Offset="0,2" />
+			</Border.Shadow>
+			<Grid RowDefinitions="auto,*,auto" >
+				<Label Text="可用设备" 
+	                       Style="{StaticResource TitleLabel}" 
+	                       Margin="0,0,0,12" />
 
-					<CollectionView ItemsSource="{Binding Devices}" 
-                              SelectedItem="{Binding SelectedDevice}"
-                              SelectionMode="Single" 
-                              BackgroundColor="Transparent" 
-                              HeightRequest="200">
-						<CollectionView.ItemsLayout>
-							<LinearItemsLayout Orientation="Vertical" ItemSpacing="12" />
-						</CollectionView.ItemsLayout>
-						<CollectionView.ItemTemplate>
-							<DataTemplate x:DataType="coreModel:DeviceInfo">
-								<Border BackgroundColor="#ecf0f1" 
-                                   StrokeShape="RoundRectangle 12" 
-                                   Padding="16"                                   
-                                   Stroke="#bdc3c7" 
-                                   StrokeThickness="1">
-									<StackLayout Orientation="Vertical" Spacing="6">
-										<Grid ColumnDefinitions="*,Auto">
-											<Label Text="{Binding DeviceName}" 
-                                               FontSize="16" 
-                                               FontAttributes="Bold" 
-                                               TextColor="#2c3e50" />
-											<Border Grid.Column="1" StrokeShape="RoundRectangle 8" BackgroundColor="#3498db" Padding="6,2"    >
-												<Label Text="{Binding DeviceType}" 
-													   FontSize="12" 
-													   TextColor="#7f8c8d" 
-													   HorizontalOptions="End" 
-													   VerticalOptions="Center" />
-											</Border>
-										</Grid>
-										<Label Text="{Binding IpAddress}" 
-                                           FontSize="14" 
-                                           TextColor="#7f8c8d" />
-									</StackLayout>
-								</Border>
-							</DataTemplate>
-						</CollectionView.ItemTemplate>
-						<CollectionView.EmptyView>
-							<Label Text="暂无可用设备，请点击刷新按钮" 
-                               FontSize="14" 
-                               TextColor="#95a5a6" 
-                               HorizontalOptions="Center" 
-                               VerticalOptions="Center" 
-                               Margin="0,40,0,0" />
-						</CollectionView.EmptyView>
-					</CollectionView>
+				<CollectionView Grid.Row="1" ItemsSource="{Binding Devices}" 
+	                              SelectedItem="{Binding SelectedDevice}"
+	                              SelectionMode="Single" 
+	                              BackgroundColor="Transparent" 
+	                             >
+					<CollectionView.ItemsLayout>
+						<GridItemsLayout  Orientation="Vertical" Span="2" VerticalItemSpacing="5" HorizontalItemSpacing="5" />
+					</CollectionView.ItemsLayout>
+					<CollectionView.ItemTemplate>
+						<DataTemplate x:DataType="coreModel:DeviceInfo">
+							<Border Background="{AppThemeBinding Light={StaticResource LightBackground}, Dark={StaticResource DarkBackground}}" 
+	                                   StrokeShape="RoundRectangle 12" 
+	                                   Padding="10"                                    
+	                                   Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}" 
+	                                   StrokeThickness="1">
+								<StackLayout Orientation="Vertical" Spacing="3">
+									<Label Text="{Binding DeviceName}" 
+	                                               FontSize="16" 
+	                                               FontAttributes="Bold" 
+	                                               TextColor="{AppThemeBinding Light={StaticResource DarkOnLightBackground}, Dark={StaticResource LightOnDarkBackground}}" />
+									<Label Text="{Binding DeviceType}"  
+												   FontSize="14" 
+												   TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" 
+												   HorizontalOptions="Start" 
+												   VerticalOptions="Center" />
+									<Label Text="{Binding IpAddress}"  
+											   FontSize="14" 
+											   TextColor="{StaticResource Primary}" />
+								</StackLayout>
+							</Border>
+						</DataTemplate>
+					</CollectionView.ItemTemplate>
+					<CollectionView.EmptyView>
+						<Label Text="暂无可用设备，请点击刷新按钮" 
+	                               FontSize="14" 
+	                               TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" 
+	                               HorizontalOptions="Center" 
+	                               VerticalOptions="Center" 
+	                               Margin="0,40,0,0" />
+					</CollectionView.EmptyView>
+				</CollectionView>
 
-					<Button Text="发送文件" 
-                        Command="{Binding SendFileCommand}"
-                        HorizontalOptions="Fill"
-                        Margin="0,16,0,0"
-                        Style="{StaticResource PrimaryButton}" 
-                        IsEnabled="{Binding SelectedDevice}" />
-				</StackLayout>
-			</Border>
-			<!-- 传输任务 -->
-			<Border Margin="16,0,16,32" Padding="16" BackgroundColor="White">
-				<Border.Shadow >
-					<Shadow Brush="#000000" Opacity="0.1" Radius="4" Offset="0,2" />
-				</Border.Shadow>
-				<Border.StrokeShape>
+				<Button Text="发送文件" Grid.Row="2"
+	                        Command="{Binding SendFileCommand}"
+	                        HorizontalOptions="Fill"
+	                        Margin="0,16,0,0"
+	                        Style="{StaticResource PrimaryButton}" 
+	                        IsEnabled="{Binding SelectedDevice}" />
+			</Grid>
+		</Border>
+
+		<!-- 传输任务 -->
+		<Border Grid.Row="2" Margin="16,0,16,13" Padding="16" Background="{AppThemeBinding Light={StaticResource LightSecondaryBackground}, Dark={StaticResource DarkSecondaryBackground}}">
+			<Border.Shadow >
+				<Shadow Brush="#000000" Opacity="0.1" Radius="4" Offset="0,2" />
+			</Border.Shadow>
+			<Border.StrokeShape>
 				<RoundRectangle CornerRadius="12" />
 			</Border.StrokeShape>
-			<ScrollView HeightRequest="400" VerticalOptions="FillAndExpand">
-				<StackLayout Spacing="10">
-					<Label Text="传输任务" 
-						   Style="{StaticResource TitleLabel}" 
-						   Margin="0,0,0,12" />
+			<Grid>
+				<Grid.RowDefinitions>
+					<RowDefinition Height="auto"/>
+					<RowDefinition Height="*"/>
+				</Grid.RowDefinitions>
+				<Label Text="传输任务" 
+					   Style="{StaticResource TitleLabel}" 
+					   Margin="0,0,0,12" />
 					<!-- 传输任务列表 -->
-					<CollectionView ItemsSource="{Binding TransferTasks}"                               
-					          BackgroundColor="Transparent" 
-					          VerticalOptions="FillAndExpand">
+					<CollectionView Grid.Row="1" ItemsSource="{Binding TransferTasks}"                                
+					          BackgroundColor="Transparent">
 						<CollectionView.ItemsLayout>
 							<LinearItemsLayout Orientation="Vertical" ItemSpacing="5" />
 						</CollectionView.ItemsLayout>
 						<CollectionView.ItemTemplate>
 							<DataTemplate x:DataType="vm:FileTransferViewModel">
-								<Border BackgroundColor="#ecf0f1" 
+								<Border Background="{AppThemeBinding Light={StaticResource LightBackground}, Dark={StaticResource DarkBackground}}" 
 									   StrokeShape="RoundRectangle 12" 
-									   Padding="10,12,6,12"                                     
-									   Stroke="#bdc3c7" 
+									   Padding="10,10,10,8"                                      
+									   Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}" 
 									   StrokeThickness="1">
 									<StackLayout Spacing="10">
 										<Grid ColumnDefinitions="Auto,*,Auto">
@@ -201,7 +206,7 @@
 											<Label Text="{Binding FileName}" Grid.Column="1"
 												   FontAttributes="Bold" Margin="0,0,0,5"
 												   FontSize="16" 
-												   TextColor="#2c3e50" 
+												   TextColor="{AppThemeBinding Light={StaticResource DarkOnLightBackground}, Dark={StaticResource LightOnDarkBackground}}" 
 												   LineBreakMode="TailTruncation" />
 											<Button Text="✕"  Grid.Column="2" VerticalOptions="Start"
 												Command="{Binding Path=RemoveTransferCommand, Source={RelativeSource AncestorType={x:Type vm:MainPageViewModel}}, x:DataType='vm:MainPageViewModel'}"
@@ -212,10 +217,10 @@
 											<StackLayout Grid.Column="1" Orientation="Horizontal">
 												<Label  Text="{Binding FormattedTransferredSize,StringFormat='{0}'}" 
 													FontSize="14" 
-													TextColor="#7f8c8d" />
+													TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
 												<Label  Text="{Binding FormattedFileSize,StringFormat='/ {0}'}" 
 													FontSize="14" 
-													TextColor="#7f8c8d" />
+													TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
 											</StackLayout>
 											<Label Grid.Column="0" Text="{Binding StatusText}" 
 												   FontSize="14" 
@@ -226,12 +231,12 @@
 
 										<Grid ColumnDefinitions="*,Auto">
 											<ProgressBar Progress="{Binding ProgressFraction}" 
-												     ProgressColor="#3498db"
+												     ProgressColor="{StaticResource Primary}"
 												     HeightRequest="10"
-												     BackgroundColor="#bdc3c7"/>
+												     BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}"/>
 											<Label Grid.Column="1" Text="{Binding ProgressFraction, StringFormat='{0:P1}'}" 
 												   FontSize="14"
-												   TextColor="#3498db" 
+												   TextColor="{StaticResource Primary}" 
 												   HorizontalOptions="End" 
 												   Margin="10,0,0,0" />
 										</Grid>
@@ -242,15 +247,13 @@
 						<CollectionView.EmptyView>
 							<Label Text="暂无传输任务" 
 								   FontSize="14" 
-								   TextColor="#95a5a6" 
+								   TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" 
 								   HorizontalOptions="Center" 
 								   VerticalOptions="Center" 
 								   Margin="0,40,0,0" />
 						</CollectionView.EmptyView>
 					</CollectionView>
-				</StackLayout>
-			</ScrollView>				
-			</Border>
-		</StackLayout>
-
+			</Grid>
+		</Border>
+	</Grid>
 </ContentPage>
