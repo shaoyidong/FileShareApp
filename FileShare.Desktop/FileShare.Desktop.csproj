@@ -13,6 +13,15 @@
   <ItemGroup>
     <Folder Include="Models\" />
     <AvaloniaResource Include="Assets\**" />
+    <Folder Include="runtimes\linux-arm64\native\" />
+    <Folder Include="runtimes\linux-arm\native\" />
+    <Folder Include="runtimes\linux-x64\native\" />
+    <Folder Include="runtimes\osx-arm64\native\" />
+    <Folder Include="runtimes\osx-x64\native\" />
+    <Folder Include="runtimes\win-arm64\native\" />
+    <Folder Include="runtimes\win-arm\native\" />
+    <Folder Include="runtimes\win-x64\native\" />
+    <Folder Include="runtimes\win-x86\native\" />
   </ItemGroup>
 
   <ItemGroup>

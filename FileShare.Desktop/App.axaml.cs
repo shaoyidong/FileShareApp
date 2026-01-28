@@ -10,6 +10,7 @@ using FileShare.Desktop.ViewModels;
 using FileShare.Desktop.Views;
 using System;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -69,6 +70,7 @@ namespace FileShare.Desktop
             base.OnFrameworkInitializationCompleted();
         }
 
+        [UnconditionalSuppressMessage("Trim", "IL2026")]
         private void DisableAvaloniaDataAnnotationValidation()
         {
             // Get an array of plugins to remove
