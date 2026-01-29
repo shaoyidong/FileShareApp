@@ -15,7 +15,6 @@ namespace FileShare.Mobile.ViewModels;
 public partial class MainPageViewModel : ViewModelBase
 {
     private readonly IFileShareServiceManager _serviceManager;
-    private readonly System.Timers.Timer _timerCheckDeviceOnline;
     private readonly SynchronizationContext _uiContext;
     private readonly IAlertService _alertService;
     private readonly string _localDeviceId;
@@ -87,6 +86,7 @@ public partial class MainPageViewModel : ViewModelBase
         
         // 注册事件处理
         _serviceManager.OnDeviceDiscovered += OnDeviceDiscovered;
+        _serviceManager.OnDeviceRemoved += OnDeviceRemoved;
         _serviceManager.OnTransferRequestSendAndReceive += OnTransferRequestSendAndReceive;
         _serviceManager.OnTransferProgressUpdated += OnTransferProgressUpdated;
         _serviceManager.OnTransferCompleted += OnTransferCompleted;
@@ -94,10 +94,6 @@ public partial class MainPageViewModel : ViewModelBase
         // 初始化命令
         RefreshDevicesCommand = new RelayCommand(async () => RefreshDevicesAsync());
         SendFileCommand = new RelayCommand(async () => SendFileAsync());
-
-        // 初始化设备在线检测定时器
-        _timerCheckDeviceOnline = new System.Timers.Timer(5000);
-        _timerCheckDeviceOnline.Elapsed += Timer_Elapsed;
         
         // 启动服务
         _ = InitializeAsync();
@@ -213,7 +209,6 @@ public partial class MainPageViewModel : ViewModelBase
         try
         {
             await _serviceManager.StartServicesAsync();
-            _timerCheckDeviceOnline.Start();
             StatusMessage = "准备就绪";
         }
         catch (Exception ex)
@@ -405,6 +400,27 @@ public partial class MainPageViewModel : ViewModelBase
         },null);
     }
     
+    private void OnDeviceRemoved(FileShare.Core.Models.DeviceInfo device)
+    {
+        // 更新设备列表，过滤掉本地设备
+        var localDevice = _serviceManager.GetLocalDeviceInfo();
+        if (device.DeviceId == localDevice.DeviceId)
+        {
+            return;
+        }
+        
+        _uiContext.Post((o) =>
+        {
+            // 检查设备是否存在
+            var existingDevice = Devices.FirstOrDefault(d => d.DeviceId == device.DeviceId);
+            if (existingDevice != null)
+            {
+                Devices.Remove(existingDevice);
+                StatusMessage = $"设备已离线: {device.DeviceName}";
+            }
+        },null);
+    }
+    
     private async void OnTransferRequestSendAndReceive(FileTransferInfo info)
     {
         await _foregroundService.StartServiceAsync().ConfigureAwait(false);
@@ -414,19 +430,19 @@ public partial class MainPageViewModel : ViewModelBase
             var transferViewModel = FileTransferViewModel.FromModel(info);
             
             // 添加到总任务列表
-            TransferTasks.Add(transferViewModel);
+            TransferTasks.Insert(0, transferViewModel);
             
             // 根据发送者ID判断是发送任务还是接收任务
             if (info.SenderId == _localDeviceId)
             {
                 // 发送任务
-                SentTransferTasks.Add(transferViewModel);
+                SentTransferTasks.Insert(0, transferViewModel);
                 StatusMessage = $"正在发送文件: {info.FileName}";
             }
             else
             {
                 // 接收任务
-                ReceivedTransferTasks.Add(transferViewModel);
+                ReceivedTransferTasks.Insert(0, transferViewModel);
                 StatusMessage = $"收到文件传输请求: {info.FileName}";
                 
                 var senderDevice = Devices.FirstOrDefault(d => d.DeviceId == info.SenderId);
@@ -510,8 +526,6 @@ public partial class MainPageViewModel : ViewModelBase
     public void Dispose()
     {
         _serviceManager.Dispose();
-        _timerCheckDeviceOnline?.Stop();
-        _timerCheckDeviceOnline?.Dispose();
         
         // 停止文件传输服务
         _foregroundService?.StopService();

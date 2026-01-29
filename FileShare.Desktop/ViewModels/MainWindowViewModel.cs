@@ -23,10 +23,9 @@ namespace FileShare.Desktop.ViewModels
         public string Greeting { get; } = "Welcome to Avalonia!";
 
 
-        private readonly IFileShareServiceManager _serviceManager;
+            private readonly IFileShareServiceManager _serviceManager;
         private readonly SynchronizationContext _uiContext;
         private readonly IClassicDesktopStyleApplicationLifetime? _appLifetime;
-        private readonly System.Timers.Timer _timerCheckDeviceOnline;
 
         private string _statusMessage = "准备就绪";
         private bool _isScanning;
@@ -85,6 +84,7 @@ namespace FileShare.Desktop.ViewModels
 
             // 注册事件处理
             _serviceManager.OnDeviceDiscovered += OnDeviceDiscovered;
+            _serviceManager.OnDeviceRemoved += OnDeviceRemoved;
             _serviceManager.OnTransferRequestSendAndReceive += OnTransferRequestSendAndReceive;
             _serviceManager.OnTransferProgressUpdated += OnTransferProgressUpdated;
             _serviceManager.OnTransferCompleted += OnTransferCompleted;
@@ -96,8 +96,6 @@ namespace FileShare.Desktop.ViewModels
             RejectTransferCommand = new RelayCommand<FileTransferViewModel>(RejectTransfer);
             RemoveTransferCommand = new RelayCommand<FileTransferViewModel>(RemoveTransfer);
 
-            _timerCheckDeviceOnline = new System.Timers.Timer(5000);
-            _timerCheckDeviceOnline.Elapsed += Timer_Elapsed;
             // 启动服务
             _ = InitializeAsync();
         }        
@@ -124,7 +122,6 @@ namespace FileShare.Desktop.ViewModels
             try
             {
                 await _serviceManager.StartServicesAsync();
-                _timerCheckDeviceOnline.Start();
                 StatusMessage = "准备就绪";
             }
             catch (Exception ex)
@@ -249,6 +246,28 @@ namespace FileShare.Desktop.ViewModels
 
             StatusMessage = $"发现设备: {device.DeviceName}";
         }
+        
+        private void OnDeviceRemoved(DeviceInfo device)
+        {
+            // 更新设备列表，过滤掉本地设备
+            var localDevice = _serviceManager.GetLocalDeviceInfo();
+
+            if (device.DeviceId == localDevice.DeviceId)
+            {
+                return;
+            }
+
+            _uiContext.Send(_ =>
+            {
+                var existingDevice = Devices.FirstOrDefault(d => d.DeviceId == device.DeviceId);
+                if (existingDevice != null)
+                {
+                    Devices.Remove(existingDevice);
+                }
+            }, null);
+
+            StatusMessage = $"设备已离线: {device.DeviceName}";
+        }
 
         private async void RemoveTransfer(FileTransferViewModel? model)
         {
@@ -302,19 +321,19 @@ namespace FileShare.Desktop.ViewModels
             var transferViewModel = FileTransferViewModel.FromModel(info);
             
             // 添加到总任务列表
-            TransferTasks.Add(transferViewModel);
+            TransferTasks.Insert(0, transferViewModel);
             
             // 根据发送者ID判断是发送任务还是接收任务
             if (info.SenderId == _localDeviceId)
             {
                 // 发送任务
-                SentTransferTasks.Add(transferViewModel);
+                SentTransferTasks.Insert(0,transferViewModel);
                 StatusMessage = $"正在发送文件: {info.FileName}";
             }
             else
             {
                 // 接收任务
-                ReceivedTransferTasks.Add(transferViewModel);
+                ReceivedTransferTasks.Insert(0,transferViewModel);
                 StatusMessage = $"收到文件传输请求: {info.FileName}";
             }
         }
@@ -383,8 +402,6 @@ namespace FileShare.Desktop.ViewModels
         public void Dispose()
         {
             _serviceManager.Dispose();
-            _timerCheckDeviceOnline?.Stop();
-            _timerCheckDeviceOnline?.Dispose();
         }
 
     }

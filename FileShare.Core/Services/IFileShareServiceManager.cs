@@ -14,6 +14,11 @@ public interface IFileShareServiceManager : IDisposable
     event Action<DeviceInfo>? OnDeviceDiscovered;
     
     /// <summary>
+    /// 设备离线事件
+    /// </summary>
+    event Action<DeviceInfo>? OnDeviceRemoved;
+    
+    /// <summary>
     /// 文件传输请求事件
     /// </summary>
     event Action<FileTransferInfo>? OnTransferRequestSendAndReceive;

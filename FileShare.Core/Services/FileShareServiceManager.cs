@@ -21,6 +21,11 @@ public class FileShareServiceManager : IFileShareServiceManager
     public event Action<DeviceInfo>? OnDeviceDiscovered;
     
     /// <summary>
+    /// 设备离线事件
+    /// </summary>
+    public event Action<DeviceInfo>? OnDeviceRemoved;
+    
+    /// <summary>
     /// 文件传输请求事件
     /// </summary>
     public event Action<FileTransferInfo>? OnTransferRequestSendAndReceive;
@@ -70,6 +75,7 @@ public class FileShareServiceManager : IFileShareServiceManager
         
         // 注册事件处理
         _discoveryService.OnDeviceDiscovered += device => OnDeviceDiscovered?.Invoke(device);
+        _discoveryService.OnDeviceRemoved += device => OnDeviceRemoved?.Invoke(device);
         _fileTransferService.OnTransferRequestSendAndReceive += info => OnTransferRequestSendAndReceive?.Invoke(info);
         _fileTransferService.OnTransferProgressUpdated += info => OnTransferProgressUpdated?.Invoke(info);
         _fileTransferService.OnTransferCompleted += (info, message) => OnTransferCompleted?.Invoke(info, message);
