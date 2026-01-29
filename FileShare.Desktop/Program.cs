@@ -2,6 +2,7 @@
 using Avalonia.Media;
 using System;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
 
@@ -77,34 +78,77 @@ namespace FileShare.Desktop
 
         private static void ExtractAndLoadNativeLibs()
         {
-            var tempDir = Path.Combine(Path.GetTempPath(), "FlieShare_NativeLibs", GetCurrentRuntimeIdentifier());
-            Directory.CreateDirectory(tempDir);
-
-            var assembly = Assembly.GetExecutingAssembly();
-            // 计算当前运行时预期的RID，作为资源查找的“后缀”
-            var currentRid = GetCurrentRuntimeIdentifier();
-
-            // 获取程序集中所有嵌入的资源名
-            var allResourceNames = assembly.GetManifestResourceNames();
-
-            // 筛选出位于我们约定的“runtimes/{rid}/native/”路径下的资源
-            // 资源名格式通常是：<默认命名空间>.runtimes.<rid>.native.<文件名>
-            foreach (var resourceName in allResourceNames)
+            try
             {
-                if (resourceName.Contains($".runtimes.{currentRid}.native."))
+                var tempDir = Path.Combine(Path.GetTempPath(), "FileShare.Desktop_NativeLibs");
+                Directory.CreateDirectory(tempDir);
+
+                // 记录日志以便调试
+                var logPath = Path.Combine(tempDir, "load_log.txt");
+                File.WriteAllText(logPath, $"Starting extraction at {DateTime.Now}\n");
+
+                var assembly = Assembly.GetExecutingAssembly();
+                var currentRid = GetCurrentRuntimeIdentifier();
+                File.AppendAllText(logPath, $"Current RID: {currentRid}\n");
+
+                // 获取所有嵌入式资源
+                var allResourceNames = assembly.GetManifestResourceNames();
+                File.AppendAllText(logPath, $"Total embedded resources: {allResourceNames.Length}\n");
+
+                foreach (var name in allResourceNames)
                 {
-                    // 从资源名中提取出原始文件名
+                    File.AppendAllText(logPath, $"Resource: {name}\n");
+                }
+
+                // 查找并加载当前平台的Native库
+                var nativeResources = allResourceNames
+                    .Where(name => name.EndsWith(".dll") || name.EndsWith(".so") || name.EndsWith(".dylib"))
+                    .ToList();
+
+                File.AppendAllText(logPath, $"Found {nativeResources.Count} native resources for {currentRid}\n");
+
+                foreach (var resourceName in nativeResources)
+                {
                     var fileName = resourceName.Substring(resourceName.LastIndexOf('.') + 1);
                     var targetPath = Path.Combine(tempDir, fileName);
 
+                    File.AppendAllText(logPath, $"Processing: {fileName}\n");
+
+                    // 提取文件
                     if (!File.Exists(targetPath))
                     {
-                        using var resourceStream = assembly.GetManifestResourceStream(resourceName);
-                        using var fileStream = File.OpenWrite(targetPath);
-                        resourceStream!.CopyTo(fileStream);
+                        using var stream = assembly.GetManifestResourceStream(resourceName);
+                        if (stream == null)
+                        {
+                            File.AppendAllText(logPath, $"ERROR: Stream is null for {resourceName}\n");
+                            continue;
+                        }
+
+                        using var fileStream = File.Create(targetPath);
+                        stream.CopyTo(fileStream);
+                        File.AppendAllText(logPath, $"Extracted: {fileName} ({stream.Length} bytes)\n");
                     }
-                    NativeLibrary.Load(targetPath);
+
+                    // 尝试加载DLL
+                    if (fileName.EndsWith(".dll") || fileName.EndsWith(".so") || fileName.EndsWith(".dylib"))
+                    {
+                        try
+                        {
+                            NativeLibrary.Load(targetPath);
+                            File.AppendAllText(logPath, $"Successfully loaded: {fileName}\n");
+                        }
+                        catch (Exception ex)
+                        {
+                            File.AppendAllText(logPath, $"ERROR loading {fileName}: {ex.Message}\n");
+                        }
+                    }
                 }
+            }
+            catch (Exception ex)
+            {
+                var errorLog = Path.Combine(Path.GetTempPath(), "NativeLibError.txt");
+                File.WriteAllText(errorLog, $"ExtractAndLoadNativeLibs failed: {ex}\n{ex.StackTrace}");
+                throw;
             }
         }
 
