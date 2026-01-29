@@ -29,6 +29,34 @@
 		</EmbeddedResource>
 	</ItemGroup>
 
+	<!-- 定义一个目标，在发布流程的核心步骤之前运行 -->
+	<!--<Target Name="EmbedNativeLibrariesForPublish"  BeforeTargets="IlcCompile">
+		<Message Text="=== 开始为发布嵌入本机库 ===" Importance="high" />
+		<Message Text="当前 RuntimeIdentifier: $(RuntimeIdentifier)" Importance="high" />
+
+		--><!-- 检查目标平台的原生库目录是否存在 --><!--
+		<PropertyGroup>
+			<_NativeLibSourceDir>runtimes\$(RuntimeIdentifier)\native</_NativeLibSourceDir>
+		</PropertyGroup>
+
+		<Message Text="正在查找库文件: $(_NativeLibSourceDir)" Importance="high" />
+
+		--><!--<ItemGroup>
+			 --><!--收集该平台原生目录下的所有文件--><!-- 
+			<_NativeLibFiles Include="$(_NativeLibSourceDir)\*" />
+
+			 --><!--将找到的每个文件转换为一个 EmbeddedResource 项--><!-- 
+			<EmbeddedResource Include="@(_NativeLibFiles)">
+				<LogicalName>%(FileName)%(Extension)</LogicalName>
+			</EmbeddedResource>
+		</ItemGroup>--><!--
+
+		--><!-- 输出找到的文件列表，用于调试 --><!--
+		<Message Text="为 $(RuntimeIdentifier) 嵌入以下文件：" Importance="high" Condition="'@(_NativeLibFiles)' != ''" />
+		<Message Text="  %(_NativeLibFiles.Identity)" Importance="high" Condition="'@(_NativeLibFiles)' != ''" />
+		<Warning Text="未找到平台 '$(RuntimeIdentifier)' 的本机库文件，目录 '$(_NativeLibSourceDir)' 不存在或为空。单文件发布可能失败。" Condition="'@(_NativeLibFiles)' == ''" />
+	</Target>-->
+	
 	<ItemGroup>
 		<PackageReference Include="Avalonia" Version="11.3.11" />
 		<PackageReference Include="Avalonia.Desktop" Version="11.3.11" />
