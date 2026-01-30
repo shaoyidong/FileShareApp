@@ -1,6 +1,7 @@
 ﻿using Avalonia;
 using Avalonia.Media;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -84,8 +85,9 @@ namespace FileShare.Desktop
                 Directory.CreateDirectory(tempDir);
 
                 // 记录日志以便调试
-                var logPath = Path.Combine(tempDir, "load_log.txt");
-                File.WriteAllText(logPath, $"Starting extraction at {DateTime.Now}\n");
+                var logPath = Path.Combine(tempDir, "load_log.txt");               
+
+                File.WriteAllText(logPath, $"Starting extraction at {DateTime.Now}\n");                
 
                 var assembly = Assembly.GetExecutingAssembly();
                 var currentRid = GetCurrentRuntimeIdentifier();
@@ -107,11 +109,13 @@ namespace FileShare.Desktop
 
                 File.AppendAllText(logPath, $"Found {nativeResources.Count} native resources for {currentRid}\n");
 
+                var libraryMap = new Dictionary<string, string>();
+
                 foreach (var resourceName in nativeResources)
                 {
                     var fileName = resourceName;
                     var targetPath = Path.Combine(tempDir, fileName);
-
+                    libraryMap[fileName] = targetPath;
                     File.AppendAllText(logPath, $"Processing: {fileName}\n");
 
                     // 提取文件
@@ -142,6 +146,58 @@ namespace FileShare.Desktop
                             File.AppendAllText(logPath, $"ERROR loading {fileName}: {ex.Message}\n");
                         }
                     }
+                }
+                // 设置DLL导入解析器，拦截后续的加载请求
+                NativeLibrary.SetDllImportResolver(assembly, (libraryName, assembly, searchPath) =>
+                {
+                    File.AppendAllText(logPath, $"DllImportResolver: {libraryName}\n");
+                    // 尝试匹配已知的库
+                    foreach (var kvp in libraryMap)
+                    {
+                        var libFileName = kvp.Key;
+                        var libPath = kvp.Value;
+
+                        // 检查是否匹配（考虑不同命名方式）
+                        if (libFileName.StartsWith(libraryName, StringComparison.OrdinalIgnoreCase) ||
+                            libFileName.Contains(libraryName, StringComparison.OrdinalIgnoreCase))
+                        {
+                            if (File.Exists(libPath))
+                            {
+                                File.AppendAllText(logPath, $"Successfully intercept: {libraryName}\n");
+                                return NativeLibrary.Load(libPath);
+                            }
+                        }
+                    }
+
+                    // 默认加载方式
+                    return IntPtr.Zero;
+                });
+
+                //同时为入口程序集设置
+                var entryAssembly = Assembly.GetEntryAssembly();
+                if (entryAssembly != assembly)
+                {
+                    NativeLibrary.SetDllImportResolver(entryAssembly, (libraryName, assembly, searchPath) =>
+                    {
+                        File.AppendAllText(logPath, $"DllImportResolver: {libraryName}\n");
+                        foreach (var kvp in libraryMap)
+                        {
+                            var libFileName = kvp.Key;
+                            var libPath = kvp.Value;
+
+                            if (libFileName.StartsWith(libraryName, StringComparison.OrdinalIgnoreCase) ||
+                                libFileName.Contains(libraryName, StringComparison.OrdinalIgnoreCase))
+                            {
+                                if (File.Exists(libPath))
+                                {
+                                    File.AppendAllText(logPath, $"Successfully intercept: {libraryName}\n");
+                                    return NativeLibrary.Load(libPath);
+                                }
+                            }
+                        }
+
+                        return IntPtr.Zero;
+                    });
                 }
             }
             catch (Exception ex)
