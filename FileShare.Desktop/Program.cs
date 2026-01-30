@@ -109,7 +109,7 @@ namespace FileShare.Desktop
 
                 foreach (var resourceName in nativeResources)
                 {
-                    var fileName = resourceName.Substring(resourceName.LastIndexOf('.') + 1);
+                    var fileName = resourceName;
                     var targetPath = Path.Combine(tempDir, fileName);
 
                     File.AppendAllText(logPath, $"Processing: {fileName}\n");
