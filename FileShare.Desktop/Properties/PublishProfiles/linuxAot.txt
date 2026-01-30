@@ -1,0 +1,10 @@
+﻿关键步骤：在WSL环境中执行还原（不要带任何发布参数）
+dotnet restore --runtime linux-x64
+
+dotnet publish -c Release -r linux-x64 \
+  --self-contained true \
+  /p:PublishAot=true \
+  /p:PublishReadyToRun=true \
+  /p:DebugType=None \
+  /p:DebugSymbols=false \
+  -o "bin/Release/net10.0/publish/linux-x64/"
