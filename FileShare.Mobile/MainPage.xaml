@@ -17,17 +17,17 @@
 		<Style TargetType="Label" x:Key="TitleLabel">
 			<Setter Property="FontSize" Value="18" />
 			<Setter Property="FontAttributes" Value="Bold" />
-			<Setter Property="TextColor" Value="{AppThemeBinding Light={StaticResource DarkOnLightBackground}, Dark={StaticResource LightOnDarkBackground}}" />
+			<!--<Setter Property="TextColor" Value="{AppThemeBinding Light={StaticResource DarkOnLightBackground}, Dark={StaticResource LightOnDarkBackground}}" />-->
 		</Style>
 
 		<Style TargetType="Label" x:Key="StatusLabel">
 			<Setter Property="FontSize" Value="14" />
-			<Setter Property="TextColor" Value="{StaticResource Primary}" />
+			<Setter Property="TextColor" Value="{AppThemeBinding Light={StaticResource Primary},Dark={StaticResource PrimaryDark}}" />
 		</Style>
 
 		<Style TargetType="Button" x:Key="PrimaryButton">
-			<Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
-			<Setter Property="TextColor" Value="White" />
+			<Setter Property="BackgroundColor" Value="{AppThemeBinding Light={StaticResource Primary},Dark={StaticResource PrimaryDark}}" />
+			<!--<Setter Property="TextColor" Value="White" />-->
 			<Setter Property="CornerRadius" Value="12" />
 			<Setter Property="Padding" Value="15,10" />
 			<Setter Property="FontSize" Value="16" />
@@ -36,7 +36,7 @@
 
 		<Style TargetType="Button" x:Key="SecondaryButton">
 			<Setter Property="BackgroundColor" Value="{AppThemeBinding Light={StaticResource Gray400}, Dark={StaticResource Gray600}}" />
-			<Setter Property="TextColor" Value="White" />
+			<!--<Setter Property="TextColor" Value="White" />-->
 			<Setter Property="CornerRadius" Value="8" />
 			<Setter Property="Padding" Value="10,6" />
 			<Setter Property="FontSize" Value="14" />
@@ -44,7 +44,7 @@
 
 		<Style TargetType="Button" x:Key="AcceptButton">
 			<Setter Property="BackgroundColor" Value="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource Primary}}" />
-			<Setter Property="TextColor" Value="White" />
+			<!--<Setter Property="TextColor" Value="White" />-->
 			<Setter Property="CornerRadius" Value="8" />
 			<Setter Property="Padding" Value="12,8" />
 			<Setter Property="FontSize" Value="14" />
@@ -52,7 +52,7 @@
 
 		<Style TargetType="Button" x:Key="RejectButton">
 			<Setter Property="BackgroundColor" Value="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource Primary}}" />
-			<Setter Property="TextColor" Value="White" />
+			<!--<Setter Property="TextColor" Value="White" />-->
 			<Setter Property="CornerRadius" Value="8" />
 			<Setter Property="Padding" Value="12,8" />
 			<Setter Property="FontSize" Value="14" />
@@ -84,7 +84,7 @@
 		        StrokeShape="RoundRectangle 12"
 		        Background="{AppThemeBinding Light={StaticResource LightSecondaryBackground}, Dark={StaticResource DarkSecondaryBackground}}">
 			<Border.Shadow >
-				<Shadow Brush="#000000" Opacity="0.1" Radius="4" Offset="0,2" />
+				<Shadow Brush="{AppThemeBinding Light=#000000,Dark=#FFFFFF}" Opacity="0.1" Radius="4" Offset="0,2" />
 			</Border.Shadow>
 			<Grid>
 				<Grid.ColumnDefinitions>
@@ -110,7 +110,7 @@
 		<!-- 设备列表 -->
 		<Border Grid.Row="1" Margin="16,0,16,13" Padding="16" Background="{AppThemeBinding Light={StaticResource LightSecondaryBackground}, Dark={StaticResource DarkSecondaryBackground}}" StrokeThickness="0" StrokeShape="RoundRectangle 12">
 			<Border.Shadow >
-				<Shadow Brush="#000000" Opacity="0.1" Radius="4" Offset="0,2" />
+				<Shadow Brush="{AppThemeBinding Light=#000000,Dark=#FFFFFF}" Opacity="0.1" Radius="4" Offset="0,2" />
 			</Border.Shadow>
 			<Grid RowDefinitions="auto,*,auto" >
 				<Label Text="可用设备" 
@@ -144,7 +144,7 @@
 												   VerticalOptions="Center" />
 									<Label Text="{Binding IpAddress}"  
 											   FontSize="14" 
-											   TextColor="{StaticResource Primary}" />
+											   TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}" />
 								</StackLayout>
 							</Border>
 						</DataTemplate>
@@ -171,7 +171,7 @@
 		<!-- 传输任务 -->
 		<Border Grid.Row="2" Margin="16,0,16,13" Padding="16" Background="{AppThemeBinding Light={StaticResource LightSecondaryBackground}, Dark={StaticResource DarkSecondaryBackground}}">
 			<Border.Shadow >
-				<Shadow Brush="#000000" Opacity="0.1" Radius="4" Offset="0,2" />
+				<Shadow Brush="{AppThemeBinding Light=#000000,Dark=#FFFFFF}" Opacity="0.1" Radius="4" Offset="0,2" />
 			</Border.Shadow>
 			<Border.StrokeShape>
 				<RoundRectangle CornerRadius="12" />
@@ -231,12 +231,12 @@
 
 										<Grid ColumnDefinitions="*,Auto">
 											<ProgressBar Progress="{Binding ProgressFraction}" 
-												     ProgressColor="{StaticResource Primary}"
+												     ProgressColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}"
 												     HeightRequest="10"
 												     BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}"/>
 											<Label Grid.Column="1" Text="{Binding ProgressFraction, StringFormat='{0:P1}'}" 
 												   FontSize="14"
-												   TextColor="{StaticResource Primary}" 
+												   TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}" 
 												   HorizontalOptions="End" 
 												   Margin="10,0,0,0" />
 										</Grid>
