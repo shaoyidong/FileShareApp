@@ -67,6 +67,7 @@ namespace FileShare.Desktop.ViewModels
                 if (SetProperty(ref _status, value))
                 {
                     OnPropertyChanged(nameof(StatusText));
+                    OnPropertyChanged(nameof(ShowAcceptReject));
                 }
             }
         }
@@ -102,6 +103,30 @@ namespace FileShare.Desktop.ViewModels
             _ => "未知状态"
         };
 
+        private TransferDirection _direction;
+        public TransferDirection Direction
+        {
+            get { return _direction; }
+            set
+            {
+                if (SetProperty(ref _direction, value))
+                {
+                    OnPropertyChanged(nameof(DirectionText));
+                    OnPropertyChanged(nameof(ShowAcceptReject));
+                }
+            }
+        }
+
+        public string DirectionText => Direction switch
+        {
+            TransferDirection.Send => "发送",
+            TransferDirection.Receive => "接收",
+            _ => "未知状态"
+        };
+
+        // 只有在接收且处于 Pending 时显示接受/拒绝
+        public bool ShowAcceptReject => Direction == TransferDirection.Receive && Status == TransferStatus.Pending;
+
         // 格式化文件大小的辅助方法
         private string FormatFileSize(long size)
         {
@@ -130,7 +155,8 @@ namespace FileShare.Desktop.ViewModels
                 SenderId = model.SenderId,
                 ReceiverId = model.ReceiverId,
                 ProgressPercentage = model.ProgressPercentage,
-                SavePath = model.SavePath
+                SavePath = model.SavePath,
+                Direction = model.Direction
             };
         }
     }
