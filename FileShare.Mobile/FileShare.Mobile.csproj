@@ -45,6 +45,9 @@
 		<AndroidSigningKeyStore>FileShare.keystore</AndroidSigningKeyStore>
 		<!--<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'tizen'">6.5</SupportedOSPlatformVersion>-->		
 	</PropertyGroup>
+	<PropertyGroup Condition="'$(TargetFramework)|$(Platform)'=='net10.0-android|AnyCPU'">
+		<RuntimeIdentifiers>android-x64;android-x86;android-arm64;android-arm</RuntimeIdentifiers>
+	</PropertyGroup>
 	<PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Release|net10.0-android|AnyCPU'">
 	  <AndroidPackageFormat>apk</AndroidPackageFormat>
 	  <AndroidEnableMultiDex>False</AndroidEnableMultiDex>
