@@ -4,6 +4,7 @@
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
     xmlns:local="clr-namespace:FileShare.Mobile"
+    xmlns:views="clr-namespace:FileShare.Mobile.Views"
 	xmlns:sf="clr-namespace:Syncfusion.Maui.Toolkit.SegmentedControl;assembly=Syncfusion.Maui.Toolkit"
 	Shell.FlyoutBehavior="Flyout" FlyoutWidth="220" 
     Title="FileShare.Mobile"
@@ -17,13 +18,11 @@
                    TextColor="White"/>
 		</Grid>
 	</Shell.FlyoutHeader>	
-	<!--<TabBar>-->
-		<ShellContent
+	<ShellContent
             Title="主页"
             Icon="{StaticResource IconHome}"
-            ContentTemplate="{DataTemplate local:MainPage}"
+            ContentTemplate="{DataTemplate local:MainPage}" 
             Route="MainPage" />
-	<!--</TabBar>-->
 	<Shell.FlyoutFooter>
 		<Grid Padding="10">
 			<sf:SfSegmentedControl x:Name="ThemeSegmentedControl" 

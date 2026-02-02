@@ -20,6 +20,8 @@ public partial class MainPageViewModel : ViewModelBase
     private readonly string _localDeviceId;
     private readonly IFileTransferForegroundService _foregroundService;
     private readonly IPickerService _filePickerService;
+    private readonly INavigation _navigation;
+    private readonly IAppManagementService _appManagementService;
 
     private string _statusMessage = "准备就绪";
     public string StatusMessage
@@ -53,6 +55,7 @@ public partial class MainPageViewModel : ViewModelBase
 
     public ICommand RefreshDevicesCommand { get; }
     public ICommand SendFileCommand { get; }
+    public ICommand NavigateToAppListCommand { get; }
 
     public ObservableCollection<FileShare.Core.Models.DeviceInfo> Devices { get; }
     public ObservableCollection<FileTransferViewModel> TransferTasks { get; }
@@ -63,24 +66,22 @@ public partial class MainPageViewModel : ViewModelBase
         , IFileShareServiceManager fileShareServiceManager
         , IFileTransferForegroundService fileTransferService
         , IAlertService alertService
-        , IPickerService filePickerService)
+        , IPickerService filePickerService
+        , INavigation navigation
+        , IAppManagementService appManagementService)
     {
         _uiContext = SynchronizationContext.Current?? new SynchronizationContext();
         _serviceManager = fileShareServiceManager;
         _foregroundService = fileTransferService;
         _alertService = alertService;
         _filePickerService = filePickerService;
+        _navigation = navigation;
+        _appManagementService = appManagementService;
         Devices = new ObservableCollection<FileShare.Core.Models.DeviceInfo>();
         TransferTasks = new ObservableCollection<FileTransferViewModel>();
         SentTransferTasks = new ObservableCollection<FileTransferViewModel>();
         ReceivedTransferTasks = new ObservableCollection<FileTransferViewModel>();
 
-        // 初始化服务管理器
-        //_serviceManager = new FileShareServiceManager(
-        //    directoryService,
-        //    Microsoft.Maui.Devices.DeviceInfo.Name,
-        //    FileShare.Core.Models.DeviceType.Mobile);
-        
         // 保存本地设备ID
         _localDeviceId = _serviceManager.GetLocalDeviceInfo().DeviceId;
         
@@ -94,6 +95,7 @@ public partial class MainPageViewModel : ViewModelBase
         // 初始化命令
         RefreshDevicesCommand = new RelayCommand(async () => RefreshDevicesAsync());
         SendFileCommand = new RelayCommand(async () => SendFileAsync());
+        NavigateToAppListCommand = new RelayCommand(async () => await NavigateToAppList());
         
         // 启动服务
         _ = InitializeAsync();
@@ -528,5 +530,22 @@ public partial class MainPageViewModel : ViewModelBase
         
         // 停止文件传输服务
         _foregroundService?.StopService();
+    }
+    
+    private async Task NavigateToAppList()
+    {
+        try
+        {
+            // 导航前检查当前状态
+            System.Diagnostics.Debug.WriteLine($"导航前 - Shell.CurrentPage: {Shell.Current?.CurrentPage?.GetType().Name}");
+            System.Diagnostics.Debug.WriteLine($"导航前 - Shell.NavigationStack 数量: {Shell.Current?.Navigation?.NavigationStack?.Count}");
+            await Shell.Current.GoToAsync("/AppListPage");
+            // 导航后检查
+            System.Diagnostics.Debug.WriteLine($"导航后 - Shell.CurrentPage: {Shell.Current?.CurrentPage?.GetType().Name}");
+        }        
+        catch (Exception ex)
+        {
+            await _alertService.DisplayToastAsync("错误, 导航到应用列表页面失败: " + ex.Message);
+        }
     }
 }

@@ -7,7 +7,7 @@
     xmlns:helpers="clr-namespace:FileShare.Mobile.Helpers"
     xmlns:vm="clr-namespace:FileShare.Mobile.ViewModels"
     x:Name="MainPageView"
-    Title="局域网文件传输"
+    Title="局域网文件传输" 
     Padding="0"
     x:DataType="vm:MainPageViewModel">
 
@@ -198,14 +198,20 @@
                     </CollectionView.EmptyView>
                 </CollectionView>
 
-                <Button
-                    Grid.Row="2"
-                    Margin="0,16,0,0"
-                    Command="{Binding SendFileCommand}"
-                    HorizontalOptions="Fill"
-                    IsEnabled="{Binding SelectedDevice}"
-                    Style="{StaticResource PrimaryButton}"
-                    Text="发送文件" />
+                <Grid Grid.Row="2" ColumnDefinitions="*,*" ColumnSpacing="10" Margin="0,16,0,0">
+                    <Button
+                        Command="{Binding SendFileCommand}"
+                        HorizontalOptions="Fill"
+                        IsEnabled="{Binding SelectedDevice}"
+                        Style="{StaticResource PrimaryButton}"
+                        Text="发送文件" />
+                    <Button
+                        Grid.Column="1"
+                        Command="{Binding NavigateToAppListCommand}"
+                        HorizontalOptions="Fill"
+                        Style="{StaticResource PrimaryButton}"
+                        Text="发送应用" />
+                </Grid>
             </Grid>
         </Border>
 
