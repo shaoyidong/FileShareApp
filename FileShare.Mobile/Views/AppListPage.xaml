@@ -1,21 +1,29 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
-             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
-             xmlns:viewmodels="clr-namespace:FileShare.Mobile.ViewModels"
-             xmlns:fonts="clr-namespace:Fonts"
-             x:Class="FileShare.Mobile.Views.AppListPage"
-             Title="已安装应用">
-
-	<Shell.TitleView>
+<ContentPage
+    x:Class="FileShare.Mobile.Views.AppListPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:fonts="clr-namespace:Fonts"
+    xmlns:viewmodels="clr-namespace:FileShare.Mobile.ViewModels"
+    Title="已安装应用">
+    <!--  工具栏项会显示在导航栏右侧  -->
+    <ContentPage.ToolbarItems>
+        <ToolbarItem
+            Command="{Binding RefreshCommand}"
+            IconImageSource="{StaticResource IconArrowSync}"
+            Order="Primary"
+            Priority="0" />
+    </ContentPage.ToolbarItems>
+    <!--<Shell.TitleView>
 		<Grid ColumnDefinitions="*,auto">
-			<Label 
+			<Label
 				Text="已安装应用"
 				Style="{StaticResource Title3}"
 				VerticalOptions="Center"
 				TextColor="{AppThemeBinding Light={StaticResource DarkOnLightBackground}, Dark={StaticResource LightOnDarkBackground}}"
 			/>
-			<Button 
-				Grid.Column="1" 
+			<Button
+				Grid.Column="1"
 				FontSize="{StaticResource IconSize}"
 				Command="{Binding RefreshCommand}"
 				HorizontalOptions="End"
@@ -26,41 +34,47 @@
 				BackgroundColor="Transparent"
 			/>
 		</Grid>
-	</Shell.TitleView>
+	</Shell.TitleView>-->
 
-	<StackLayout>
-		<ActivityIndicator IsRunning="{Binding IsLoading}" />
-		<CollectionView ItemsSource="{Binding Apps}" ItemSizingStrategy="MeasureAllItems">
-			<CollectionView.ItemTemplate>
-				<DataTemplate>
-					<Grid Padding="10" ColumnDefinitions="Auto, *">
-						<Image
+    <StackLayout>
+        <ActivityIndicator IsRunning="{Binding IsLoading}" />
+        <CollectionView ItemSizingStrategy="MeasureAllItems" ItemsSource="{Binding Apps}">
+            <CollectionView.ItemTemplate>
+                <DataTemplate>
+                    <Grid Padding="10" ColumnDefinitions="Auto, *">
+                        <Image
                             Grid.Column="0"
-                            Source="{Binding IconPath}"
                             Aspect="AspectFit"
-                            WidthRequest="64"
                             HeightRequest="64"
+                            Source="{Binding IconPath}"
                             VerticalOptions="Start"
-                        />
-						<StackLayout
+                            WidthRequest="64" />
+                        <StackLayout
                             Grid.Column="1"
                             Padding="10,0,0,0"
-                            Spacing="4"
-                        >
-							<Label Text="{Binding AppName}" FontAttributes="Bold" />
-							<Label Text="{Binding ApkSize, StringFormat='大小: {0:N0} bytes'}" FontSize="Small" TextColor="Gray" />
-							<Label Text="{Binding VersionName, StringFormat='版本: {0}'}" FontSize="Small" TextColor="Gray" />
-							<Label Text="{Binding PackageName}" FontSize="Small" TextColor="Gray" />
-							<Button
-                                Text="发送 APK"
+                            Spacing="4">
+                            <Label FontAttributes="Bold" Text="{Binding AppName}" />
+                            <Label
+                                FontSize="Small"
+                                Text="{Binding ApkSize, StringFormat='大小: {0:N0} bytes'}"
+                                TextColor="Gray" />
+                            <Label
+                                FontSize="Small"
+                                Text="{Binding VersionName, StringFormat='版本: {0}'}"
+                                TextColor="Gray" />
+                            <Label
+                                FontSize="Small"
+                                Text="{Binding PackageName}"
+                                TextColor="Gray" />
+                            <Button
+                                Margin="0,8,0,0"
                                 Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:AppListViewModel}}, Path=SendAppCommand}"
                                 CommandParameter="{Binding}"
-                                Margin="0,8,0,0"
-                            />
-						</StackLayout>
-					</Grid>
-				</DataTemplate>
-			</CollectionView.ItemTemplate>
-		</CollectionView>
-	</StackLayout>
+                                Text="发送 APK" />
+                        </StackLayout>
+                    </Grid>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+    </StackLayout>
 </ContentPage>
