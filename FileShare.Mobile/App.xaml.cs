@@ -9,7 +9,7 @@ public partial class App : Microsoft.Maui.Controls.Application
     }
 
 	protected override Window CreateWindow(IActivationState? activationState)
-	{
+    {
         // 显式创建根 Window，根 Page 使用 AppShell（Shell 内已包含 MainPage）
         var window = new Window(new AppShell());
 

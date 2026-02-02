@@ -6,6 +6,7 @@ using CommunityToolkit.Maui;
 using Syncfusion.Maui.Toolkit.Hosting;
 using System.IO;
 using Microsoft.Maui.Storage;
+using FileShare.Mobile.Views;
 
 namespace FileShare.Mobile;
 
@@ -51,11 +52,20 @@ options =>
 #if ANDROID
         // 注册服务
         builder.Services.AddSingleton<IPlatformDirectoryService, AndroidDirectoryService>();
+        builder.Services.AddSingleton<IAppManagementService, AndroidAppManagementService>();
+        builder.Services.AddSingleton<IPermissionService, AndroidPermissionService>();
+        builder.Services.AddSingleton<IFileTransferForegroundService, AndroidFileTransferForegroundService>();
 #elif IOS
         // 注册服务
         builder.Services.AddSingleton<IPlatformDirectoryService, IosDirectoryService>();
+        builder.Services.AddSingleton<IAppManagementService, DefaultAppManagementService>();
+        builder.Services.AddSingleton<IPermissionService, DefaultPermissionService>();
+        builder.Services.AddSingleton<IFileTransferForegroundService, IosFileTransferForegroundService>();
 #else
-		builder.Services.AddSingleton<IPlatformDirectoryService, DesktopDirectoryService>();	
+		builder.Services.AddSingleton<IPlatformDirectoryService, DesktopDirectoryService>();
+        builder.Services.AddSingleton<IAppManagementService, DefaultAppManagementService>();
+        builder.Services.AddSingleton<IPermissionService, DefaultPermissionService>();
+        builder.Services.AddSingleton<IFileTransferForegroundService, DefaultFileTransferForegroundService>();
 #endif
         builder.Services.AddSingleton<IDatabaseService>((serviceProvider) =>
         {
@@ -82,17 +92,13 @@ options =>
                 Microsoft.Maui.Devices.DeviceInfo.Name,
                 deviceType);
         });
-#if ANDROID
-        builder.Services.AddSingleton<IFileTransferForegroundService, AndroidFileTransferForegroundService>();
-#elif IOS
-        builder.Services.AddSingleton<IFileTransferForegroundService, IosFileTransferForegroundService>();
-#else
-        builder.Services.AddSingleton<IFileTransferForegroundService, DefaultFileTransferForegroundService>();
-#endif
+
+        builder.Services.AddSingleton<INavigation>((serviceProvider) => Microsoft.Maui.Controls.Application.Current?.Windows?.FirstOrDefault()?.Navigation!);
         builder.Services.AddSingleton<IAlertService,AlertService>();
         builder.Services.AddSingleton<IPickerService,MauiPickerService>();
         builder.Services.AddSingleton<MainPageViewModel>();
+        builder.Services.AddSingletonWithShellRoute<AppListPage, AppListViewModel>("AppListPage");
 
-		return builder.Build();
+        return builder.Build();
 	}
 }
