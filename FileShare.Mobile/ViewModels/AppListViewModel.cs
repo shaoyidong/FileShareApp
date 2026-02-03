@@ -1,8 +1,13 @@
 using FileShare.Core.Services;
+using FileShare.Mobile.Model;
 using FileShare.Mobile.Services;
+using CommunityToolkit.Mvvm.Messaging;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Windows.Input;
+using CommunityToolkit.Mvvm.Messaging.Messages;
+using FileShare.Mobile.Messages;
 
 namespace FileShare.Mobile.ViewModels;
 
@@ -22,17 +27,53 @@ public class AppListViewModel : ViewModelBase
         set => SetProperty(ref _isLoading, value);
     }
     
-    public ICommand SendAppCommand { get; }
+    private InstalledAppInfo? _selectedApp;
+    public InstalledAppInfo? SelectedApp
+    {
+        get => _selectedApp;
+        set 
+        {
+            if (SetProperty(ref _selectedApp, value) && value != null)
+            {
+                SelectAppCommand.Execute(value);
+            }
+        }
+    }
     public ICommand RefreshCommand { get; }
-    
+    public ICommand SelectAppCommand { get; }
+        
     public AppListViewModel(IAppManagementService appManagementService, IFileShareServiceManager fileShareService, IAlertService alertService, IPermissionService permissionService)
     {
         _appManagementService = appManagementService;
         _fileShareService = fileShareService;
         _alertService = alertService;
         _permissionService = permissionService;
-        //SendAppCommand = new Command<InstalledAppInfo>(async (app) => await SendAppAsync(app));
         RefreshCommand = new Command(async () => await LoadAppsAsync());
+        SelectAppCommand = new Command<InstalledAppInfo>(async (app) => await SelectAppAsync(app));
+    }
+    
+    public async Task SelectAppAsync(InstalledAppInfo app)
+    {
+        try
+        {
+            var apkPath = await _appManagementService.GetApkFilePathAsync(app.PackageName);
+            if (!string.IsNullOrEmpty(apkPath))
+            {
+                // 使用WeakReferenceMessenger发送APK路径回MainPageViewModel
+                WeakReferenceMessenger.Default.Send(new AppSelectedMessage(apkPath));
+                
+                // 返回上一页
+                await Shell.Current.GoToAsync("..");
+            }
+            else
+            {
+                await _alertService.DisplayToastAsync("错误, 提取APK文件失败");
+            }
+        }
+        catch (Exception ex)
+        {
+            await _alertService.DisplayToastAsync("错误, 选择应用失败: " + ex.Message);
+        }
     }
     
     public async Task LoadAppsAsync()
@@ -72,35 +113,4 @@ public class AppListViewModel : ViewModelBase
             IsLoading = false;
         }
     }
-    
-    //public async Task SendAppAsync(InstalledAppInfo app)
-    //{
-    //    try
-    //    {
-    //        // 创建临时目录
-    //        var tempDir = Path.Combine(FileSystem.CacheDirectory, "temp_apks");
-    //        Directory.CreateDirectory(tempDir);
-            
-    //        // 构建目标文件路径
-    //        var apkFileName = $"{app.AppName}_{app.VersionName}.apk";
-    //        var destinationPath = Path.Combine(tempDir, apkFileName);
-            
-    //        // 提取APK文件
-    //        var success = await _appManagementService.ExtractApkAsync(app.PackageName, destinationPath);
-            
-    //        if (success && File.Exists(destinationPath))
-    //        {
-    //            // 使用现有的文件共享机制发送文件
-    //            await _fileShareService.SendFileAsync(destinationPath);
-    //        }
-    //        else
-    //        {
-    //            await _alertService.ShowAlertAsync("错误", "提取APK文件失败");
-    //        }
-    //    }
-    //    catch (Exception ex)
-    //    {
-    //        await _alertService.ShowAlertAsync("错误", "发送应用失败: " + ex.Message);
-    //    }
-    //}
 }

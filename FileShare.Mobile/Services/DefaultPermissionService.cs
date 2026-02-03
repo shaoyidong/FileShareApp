@@ -1,4 +1,4 @@
-namespace FileShare.Core.Services;
+namespace FileShare.Mobile.Services;
 
 /// <summary>
 /// 默认权限管理服务实现

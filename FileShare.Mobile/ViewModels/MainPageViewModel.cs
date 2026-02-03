@@ -1,7 +1,9 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
 using FileShare.Core.Models;
 using FileShare.Core.Services;
+using FileShare.Mobile.Messages;
 using FileShare.Mobile.Services;
 using Microsoft.Maui.Storage;
 using System.Collections.ObjectModel;
@@ -91,6 +93,12 @@ public partial class MainPageViewModel : ViewModelBase
         _serviceManager.OnTransferRequestSendAndReceive += OnTransferRequestSendAndReceive;
         _serviceManager.OnTransferProgressUpdated += OnTransferProgressUpdated;
         _serviceManager.OnTransferCompleted += OnTransferCompleted;
+
+        // 订阅WeakReferenceMessenger消息，接收从AppListPage返回的APK路径
+        WeakReferenceMessenger.Default.Register<AppSelectedMessage>(this, async (recipient, message) =>
+        {
+            await HandleAppSelected(message.Value);
+        });
 
         // 初始化命令
         RefreshDevicesCommand = new RelayCommand(async () => RefreshDevicesAsync());
@@ -282,22 +290,27 @@ public partial class MainPageViewModel : ViewModelBase
                 }, null);
 
                 await _serviceManager.SendFileAsync(result.FullPath, SelectedDevice).ConfigureAwait(false);
-            }
-            else
-            {
-                if (!TransferTasks.Any(t => t.Status == TransferStatus.Pending || t.Status == TransferStatus.Transferring))
-                {
-                    _foregroundService.StopService();
-                }
-            }
+            }          
         }
         catch (Exception ex)
         {
             StatusMessage = $"发送文件失败: {ex.Message}";
             await _alertService.DisplayToastAsync(ex.Message).ConfigureAwait(false);
         }
+        finally
+        {
+            StopForegroundServiceIfNoTasksRunning();
+        }
     }
-    
+
+    private void StopForegroundServiceIfNoTasksRunning()
+    {
+        if (!TransferTasks.Any(t => t.Status == TransferStatus.Pending || t.Status == TransferStatus.Transferring))
+        {
+            _foregroundService.StopService();
+        }
+    }
+
     [RelayCommand]
     private async Task AcceptTransfer(FileTransferViewModel viewModel)
     {
@@ -518,10 +531,7 @@ public partial class MainPageViewModel : ViewModelBase
                 }
             }
         },null);
-        if (!TransferTasks.Any(t=>t.Status == TransferStatus.Pending || t.Status == TransferStatus.Transferring))
-        {
-            _foregroundService.StopService();
-        }
+        StopForegroundServiceIfNoTasksRunning();
     } 
     
     public void Dispose()
@@ -532,16 +542,53 @@ public partial class MainPageViewModel : ViewModelBase
         _foregroundService?.StopService();
     }
     
-    private async Task NavigateToAppList()
+    private async Task HandleAppSelected(string apkPath)
     {
+        if (SelectedDevice == null)
+        {
+            await _alertService.DisplayToastAsync("请先选择目标设备").ConfigureAwait(false);
+            return;
+        }
+        
         try
         {
-            // 导航前检查当前状态
-            System.Diagnostics.Debug.WriteLine($"导航前 - Shell.CurrentPage: {Shell.Current?.CurrentPage?.GetType().Name}");
-            System.Diagnostics.Debug.WriteLine($"导航前 - Shell.NavigationStack 数量: {Shell.Current?.Navigation?.NavigationStack?.Count}");
+            if (!string.IsNullOrEmpty(apkPath))
+            {
+                // 启动前台服务
+                await _foregroundService.StartServiceAsync().ConfigureAwait(false);
+                
+                // 更新状态消息
+                _uiContext.Post((o) =>
+                {
+                    StatusMessage = $"正在发送应用: {Path.GetFileName(apkPath)}";
+                }, null);
+                
+                // 执行发送流程
+                await _serviceManager.SendFileAsync(apkPath, SelectedDevice).ConfigureAwait(false);
+            }
+        }
+        catch (Exception ex)
+        {
+            await _alertService.DisplayToastAsync("错误, 发送应用失败: " + ex.Message);
+        }
+        finally
+        {
+            StopForegroundServiceIfNoTasksRunning();
+        }
+    }
+    
+    private async Task NavigateToAppList()
+    {
+        if (SelectedDevice == null)
+        {
+            await _alertService.DisplayToastAsync("请先选择目标设备").ConfigureAwait(false);
+            return;
+        }
+        
+        try
+        {
+            // 导航到AppListPage
             await Shell.Current.GoToAsync("/AppListPage");
-            // 导航后检查
-            System.Diagnostics.Debug.WriteLine($"导航后 - Shell.CurrentPage: {Shell.Current?.CurrentPage?.GetType().Name}");
         }        
         catch (Exception ex)
         {

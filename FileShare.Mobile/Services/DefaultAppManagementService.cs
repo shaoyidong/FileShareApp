@@ -1,7 +1,8 @@
+using FileShare.Mobile.Model;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
-namespace FileShare.Core.Services;
+namespace FileShare.Mobile.Services;
 
 /// <summary>
 /// 默认应用管理服务实现（用于非Android平台）

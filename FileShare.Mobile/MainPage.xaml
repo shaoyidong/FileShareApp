@@ -191,28 +191,31 @@
                             Margin="0,40,0,0"
                             FontSize="14"
                             HorizontalOptions="Center"
-                            Text="暂无可用设备，请点击刷新按钮"
+                            Text="暂无可用设备，请确保设备连接同一Wifi"
                             TextColor="{AppThemeBinding Light={StaticResource Gray500},
                                                         Dark={StaticResource Gray400}}"
                             VerticalOptions="Center" />
                     </CollectionView.EmptyView>
                 </CollectionView>
 
-                <Grid Grid.Row="2" ColumnDefinitions="*,*" ColumnSpacing="10" Margin="0,16,0,0">
-                    <Button
+				<Grid Grid.Row="2" ColumnDefinitions="*,*" ColumnSpacing="10" Margin="0,16,0,0">
+					<Button
+                        Grid.Column="0"
+                        Grid.ColumnSpan="{OnPlatform Android=1, Default=2}"
                         Command="{Binding SendFileCommand}"
                         HorizontalOptions="Fill"
                         IsEnabled="{Binding SelectedDevice}"
                         Style="{StaticResource PrimaryButton}"
                         Text="发送文件" />
-                    <Button
+					<Button
                         Grid.Column="1"
+                        IsVisible="{OnPlatform Android=true, Default=false}"
                         Command="{Binding NavigateToAppListCommand}"
                         HorizontalOptions="Fill"
                         Style="{StaticResource PrimaryButton}"
                         Text="发送应用" />
-                </Grid>
-            </Grid>
+				</Grid>
+			</Grid>
         </Border>
 
         <!--  传输任务  -->

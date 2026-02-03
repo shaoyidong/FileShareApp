@@ -1,4 +1,4 @@
-namespace FileShare.Core.Services;
+namespace FileShare.Mobile.Services;
 
 /// <summary>
 /// 权限管理服务接口
