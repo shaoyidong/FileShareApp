@@ -9,8 +9,10 @@ namespace FileShare.Mobile.Services;
 #if ANDROID
 using Android.Content;
 using Android.Content.PM;
+using Android.Graphics;
 using Android.Graphics.Drawables;
 using Android.OS;
+using FileShare.Mobile.Model;
 
 public class AndroidAppManagementService : IAppManagementService
 {
@@ -46,14 +48,29 @@ public class AndroidAppManagementService : IAppManagementService
                     }
                     
                     // 获取应用图标
-                    string? iconPath = null;
+                    ImageSource? imageSource = null;
                     try
                     {
-                        var icon = _packageManager.GetApplicationIcon(appInfo);
-                        if (icon != null)
+                        var drawable = _packageManager.GetApplicationIcon(appInfo);
+                        // 将 Drawable 转换为 Bitmap
+                        if (drawable is BitmapDrawable bitmapDrawable)
                         {
-                            // 这里可以添加将Drawable转换为Bitmap并保存为临时文件的逻辑
-                            // 由于这需要更多的代码，暂时设置为null
+                            var bitmap = bitmapDrawable.Bitmap;
+                            imageSource = ConvertBitmapToImageSource(bitmap!);
+                        }
+                        else
+                        {
+                            // 处理其他类型的 Drawable
+                            var bitmap = Bitmap.CreateBitmap(
+                                Math.Min(drawable.IntrinsicWidth,64),
+                                Math.Min(drawable.IntrinsicHeight,64),
+                                Bitmap.Config.Argb8888!);
+
+                            var canvas = new Canvas(bitmap);
+                            drawable.SetBounds(0, 0, canvas.Width, canvas.Height);
+                            drawable.Draw(canvas);
+
+                            imageSource = ConvertBitmapToImageSource(bitmap);
                         }
                     }
                     catch { }
@@ -65,7 +82,7 @@ public class AndroidAppManagementService : IAppManagementService
                         VersionName = packageInfo?.VersionName ?? "",
                         ApkSize = apkSize,
                         IsSystemApp = isSystemApp,
-                        IconPath = iconPath
+                        Icon = imageSource
                     });
                 }
                 catch { }
@@ -75,7 +92,30 @@ public class AndroidAppManagementService : IAppManagementService
             return apps.OrderBy(a => a.AppName).ToList();
         });
     }
-    
+
+    private ImageSource ConvertBitmapToImageSource(Bitmap bitmap)
+    {
+        // 保存 bitmap 数据到 byte[]
+        byte[] imageData;
+        using (var stream = new MemoryStream())
+        {
+            bitmap.Compress(Bitmap.CompressFormat.Png!, 100, stream);
+            imageData = stream.ToArray();
+        }
+
+        // 回收 Bitmap 内存
+        if (!bitmap.IsRecycled)
+        {
+            bitmap.Recycle();
+        }
+        
+        // 在委托内部创建新的 MemoryStream
+        return ImageSource.FromStream(() => new MemoryStream(imageData));
+
+        // 方法2：使用 PlatformImage（需要 Microsoft.Maui.Graphics）
+        // return bitmap.ToImageSource();
+    }
+
     public async Task<string?> GetApkFilePathAsync(string packageName)
     {
         return await Task.Run(() => {
@@ -103,11 +143,11 @@ public class AndroidAppManagementService : IAppManagementService
                 }
                 
                 // 确保目标目录存在
-                var destDir = Path.GetDirectoryName(destinationPath);
-                if (!string.IsNullOrEmpty(destDir) && !Directory.Exists(destDir))
-                {
-                    Directory.CreateDirectory(destDir);
-                }
+                //var destDir = Path.GetDirectoryName(destinationPath);
+                //if (!string.IsNullOrEmpty(destDir) && !Directory.Exists(destDir))
+                //{
+                //    Directory.CreateDirectory(destDir);
+                //}
                 
                 // 复制APK文件
                 File.Copy(apkPath, destinationPath, true);
