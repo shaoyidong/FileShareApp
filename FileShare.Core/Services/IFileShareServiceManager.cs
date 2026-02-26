@@ -1,5 +1,6 @@
-using System;
 using FileShare.Core.Models;
+using FileShare.Core.Models.Entities;
+using System;
 
 namespace FileShare.Core.Services;
 
@@ -74,4 +75,23 @@ public interface IFileShareServiceManager : IDisposable
     /// </summary>
     /// <param name="transferId">传输ID</param>
     void CancelTransfer(string transferId);
+
+    /// <summary>
+    /// 删除一条接收历史
+    /// </summary>
+    /// <param name="id"></param>
+    /// <returns></returns>
+    Task<bool> DeleteSingleReceiveHistoryAsync(int id);
+
+    /// <summary>
+    /// 清空接收历史
+    /// </summary>
+    /// <returns></returns>
+    Task<bool> ClearReceiveHistoryAsync();
+
+    /// <summary>
+    /// 获取所有接收历史
+    /// </summary>
+    /// <returns></returns>
+    Task<IEnumerable<ReceiveHistoryEntity>> GetAllReceiveHistoryAsync();
 }

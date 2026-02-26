@@ -374,6 +374,7 @@ public class TcpFileTransferService : IDisposable
             if (string.IsNullOrEmpty(savePath))
             {
                 savePath = FileTypeHelper.GetDirectoryByFileType(request.FileName, _directoryService);
+                transferInfo.SavePath = savePath;
             }
             var tempFilePath = Path.Combine(savePath, request.FileName);
 
