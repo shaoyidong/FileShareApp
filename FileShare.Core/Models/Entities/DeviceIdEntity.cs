@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace FileShare.Core.Models;
+namespace FileShare.Core.Models.Entities;
 
 /// <summary>
 /// 设备ID实体类
