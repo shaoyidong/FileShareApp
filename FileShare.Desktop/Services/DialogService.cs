@@ -53,5 +53,13 @@ namespace FileShare.Desktop.Services
             var result = actualOwner == null ? await box.ShowWindowAsync() : await box.ShowWindowDialogAsync(actualOwner);
             return result == MsBox.Avalonia.Enums.ButtonResult.Yes;
         }
+
+        public async Task<bool> ShowInfomationDialogAsync(string title, string message, Window? owner = null)
+        {
+            var actualOwner = owner ?? _appLifetime.MainWindow;
+            var box = MessageBoxManager.GetMessageBoxStandard(title, message, MsBox.Avalonia.Enums.ButtonEnum.Ok);
+            var result = actualOwner == null ? await box.ShowWindowAsync() : await box.ShowWindowDialogAsync(actualOwner);
+            return result == MsBox.Avalonia.Enums.ButtonResult.Yes;
+        }
     }
 }

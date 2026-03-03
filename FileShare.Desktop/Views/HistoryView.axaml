@@ -1,0 +1,138 @@
+<UserControl
+    x:Class="FileShare.Desktop.Views.HistoryView"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:vm="using:FileShare.Desktop.ViewModels"
+    xmlns:converters="using:FileShare.Desktop.Converters"
+    xmlns:fonts="using:FileShare.Desktop.Assets.Fonts"
+    x:DataType="vm:HistoryViewModel"
+    mc:Ignorable="d">
+    <UserControl.Styles>
+        <Style Selector="Button.secondary-button">
+            <Setter Property="Background" Value="#E6E6E6" />
+            <Setter Property="Foreground" Value="#333333" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Padding" Value="8,4" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Margin" Value="0,0,8,0" />
+        </Style>
+        <Style Selector="Button.icon-button">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="4" />
+            <Setter Property="FontSize" Value="16" />
+        </Style>
+        <Style Selector="Button.fluentIcon-button">
+			<Setter Property="Background" Value="Transparent" />	
+			<Setter Property="FontFamily" Value="{StaticResource FluentIcons}"/>
+			<Setter Property="BorderThickness" Value="0" />
+			<Setter Property="Padding" Value="4" />
+			<Setter Property="FontSize" Value="16" />
+		</Style>	
+        <Style Selector="ContextMenu">
+            <Setter Property="Background" Value="White" />
+            <Setter Property="BorderBrush" Value="#E0E0E0" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+        <Style Selector="MenuItem">
+            <Setter Property="Padding" Value="8,4" />
+            <Setter Property="FontSize" Value="14" />
+        </Style>
+        <Style Selector="MenuItem:pointerover">
+            <Setter Property="Background" Value="#E6E6E6" />
+        </Style>
+    </UserControl.Styles>
+    <Grid Margin="8">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="60" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <Border Grid.Row="0" Margin="0,0,0,8" Padding="10" CornerRadius="12" Background="#F5F5F5">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+                <Button Command="{Binding BackCommand}" Classes="icon-button" Content="←" ToolTip.Tip="返回" />
+                <TextBlock Grid.Column="1" Text="历史" FontSize="16" FontWeight="Bold" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
+                    <Button Command="{Binding DeleteHistoryCommand}" Classes="fluentIcon-button" Content="{x:Static fonts:FluentUI.delete_16_regular}" ToolTip.Tip="清空记录" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- History List -->
+        <Border Grid.Row="1" Padding="16" CornerRadius="12" Background="#F5F5F5">
+            <Grid>
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <ItemsControl ItemsSource="{Binding ReceiveHistory}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <UniformGrid VerticalAlignment="Top" Columns="2" RowSpacing="8" ColumnSpacing="8"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="White" Padding="12" BorderThickness="1" BorderBrush="#E0E0E0" CornerRadius="8">
+                                    <Grid ColumnDefinitions="Auto,*,Auto">
+                                        <!-- File Preview / Icon -->
+                                        <Border Grid.Column="0" Width="48" Height="48" Background="#F0F0F0" CornerRadius="4" Margin="0,0,12,0">
+                                            <ContentControl Content="{Binding}" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                <ContentControl.ContentTemplate>
+                                                    <DataTemplate>
+                                                        <Grid>
+                                                            <Image IsVisible="{Binding, Converter={x:Static converters:FileTypeToImageSourceConverter.Instance}, ConverterParameter=isImage}" 
+                                                                   Source="{Binding, Converter={x:Static converters:FileTypeToImageSourceConverter.Instance}}" 
+                                                                   Width="40" Height="40" Stretch="Uniform" />
+                                                            <TextBlock IsVisible="{Binding, Converter={x:Static converters:FileTypeToImageSourceConverter.Instance}, ConverterParameter=isIcon}" 
+                                                                      Text="{Binding, Converter={x:Static converters:FileTypeToImageSourceConverter.Instance}}" 
+                                                                      FontFamily="{StaticResource FluentIcons}" 
+                                                                      FontSize="24" 
+                                                                      HorizontalAlignment="Center" 
+                                                                      VerticalAlignment="Center" />
+                                                        </Grid>
+                                                    </DataTemplate>
+                                                </ContentControl.ContentTemplate>
+                                            </ContentControl>
+                                        </Border>
+
+                                        <!-- File Info -->
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding FileName}" FontSize="14" FontWeight="Bold" Foreground="#333333" />
+                                            <TextBlock  FontSize="12" Foreground="#666666" Margin="0,4,0,0" >
+                                                <Run Text="{Binding CreatedAt, StringFormat='yyyy/MM/dd HH:mm'}"/>
+                                                -
+                                                <Run Text="{Binding FileSize, Mode=OneWay , Converter={x:Static converters:FileSizeToFormatFileSizeConverter.Instance}}"/>
+                                                -
+                                                <Run Text="{Binding SenderDeviceName }"/>
+                                            </TextBlock>
+                                        </StackPanel>
+
+                                        <!-- Context Menu Button -->
+                                        <Button Grid.Column="2" Classes="icon-button" Content="⋯" Tag="{Binding}">
+                                            <Button.Flyout>
+											    <MenuFlyout>
+											    <MenuItem Header="打开文件" Command="{Binding $parent[UserControl].DataContext.OpenFileCommand}" CommandParameter="{Binding $parent[Button].Tag}" />
+                                                <MenuItem Header="在文件管理器中显示" Command="{Binding $parent[UserControl].DataContext.ShowInFileManagerCommand}" CommandParameter="{Binding $parent[Button].Tag}" />
+                                                <MenuItem Header="从历史记录中删除" Command="{Binding $parent[UserControl].DataContext.DeleteSingleHistoryCommand}" CommandParameter="{Binding $parent[Button].Tag}" />
+                                            </MenuFlyout>	
+                                            </Button.Flyout>
+                                        </Button>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+
+                <!-- Empty State -->
+                <!--<TextBlock Grid.Row="0" Text="暂无接收历史" FontSize="14" Foreground="#999999" HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="{Binding ReceiveHistory.Count, Converter={x:Static conv:BoolConverters.NotEqual}, ConverterParameter=0}" />-->
+
+                <!-- Loading Indicator -->
+                <Border Grid.Row="0" Background="White" Opacity="0.8" IsVisible="{Binding IsLoading}">
+                    <TextBlock Text="加载中..." FontSize="14" Foreground="#0078D4" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

@@ -33,5 +33,14 @@ namespace FileShare.Desktop.Services
         /// <param name="owner">对话框所有者</param>
         /// <returns>用户是否点击了确认按钮</returns>
         Task<bool> ShowConfirmationDialogAsync(string title, string message,Window? owner=null);
+
+        /// <summary>
+        /// 显示确认对话框
+        /// </summary>
+        /// <param name="title">对话框标题</param>
+        /// <param name="message">对话框消息</param>
+        /// <param name="owner">对话框所有者</param>
+        /// <returns>用户是否点击了确认按钮</returns>
+        Task<bool> ShowInfomationDialogAsync(string title, string message, Window? owner = null);
     }
 }
