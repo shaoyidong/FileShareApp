@@ -13,6 +13,7 @@
 	<ItemGroup>
 		<Folder Include="Models\" />
 		<AvaloniaResource Include="Assets\**" />
+		<AvaloniaResource Remove="Assets\Fonts\FluentUI.cs" />
 		<Folder Include="runtimes\linux-arm64\native\" />
 		<Folder Include="runtimes\linux-arm\native\" />
 		<Folder Include="runtimes\osx-arm64\native\" />
@@ -72,5 +73,11 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\FileShare.Core\FileShare.Core.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Compile Update="Assets\Fonts\FluentUI.cs">
+	    <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+	  </Compile>
 	</ItemGroup>
 </Project>
