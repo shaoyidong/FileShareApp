@@ -23,6 +23,8 @@
             <Color x:Key="DirectionSend">#449c12</Color>
             <Color x:Key="DirectionReceive">#3498db</Color>
             <Color x:Key="DirectionUnknown">#7f8c8d</Color>
+
+            <FontFamily x:Key="FluentIcons">avares://FileShare.Desktop/Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons</FontFamily>
         </ResourceDictionary>
     </Application.Resources>
     
