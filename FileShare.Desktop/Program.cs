@@ -1,5 +1,6 @@
 ﻿using Avalonia;
 using Avalonia.Media;
+using FileShare.Desktop.Helpers;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -85,6 +86,8 @@ namespace FileShare.Desktop
                 if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
                 {
                     tempDir = AppContext.BaseDirectory;
+                    // 确保系统SQLite软链接存在
+                    SqliteLibraryLinker.EnsureSystemSqliteLink();
                 }
                 else
                 {
@@ -117,14 +120,28 @@ namespace FileShare.Desktop
 
                 File.AppendAllText(logPath, $"Found {nativeResources.Count} native resources for {currentRid}\n");
 
+                // 定义在Linux上需要排除提取的库（使用纯文件名）
+                var excludedOnLinux = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    "libe_sqlite3.so"   // 请根据实际资源名调整，如果资源名包含路径，这里只需文件名
+                };
+
                 foreach (var resourceName in nativeResources)
                 {
                     var fileName = resourceName;
                     var targetPath = Path.Combine(tempDir, fileName);
+
                     File.AppendAllText(logPath, $"Processing: {fileName}\n");
 
+                    bool shouldSkipExtract = false;
+                    if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux) && excludedOnLinux.Contains(fileName))
+                    {
+                        shouldSkipExtract = true;
+                        File.AppendAllText(logPath, $"Skipping extraction for {fileName} on Linux, expecting system-provided library.\n");
+                    }
+
                     // 提取文件
-                    if (!File.Exists(targetPath))
+                    if (!shouldSkipExtract && !File.Exists(targetPath))
                     {
                         using var stream = assembly.GetManifestResourceStream(resourceName);
                         if (stream == null)
