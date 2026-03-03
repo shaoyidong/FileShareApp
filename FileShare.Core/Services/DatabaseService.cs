@@ -58,6 +58,7 @@ public class DatabaseService : IDatabaseService
                 SenderId TEXT NOT NULL,
                 SenderDeviceName TEXT,
                 FileName TEXT NOT NULL,
+                FileSize INTEGER NOT NULL,
                 SavePath TEXT NOT NULL,
                 CreatedAt DATETIME NOT NULL
             );";
@@ -106,7 +107,7 @@ public class DatabaseService : IDatabaseService
         using var connection = new SqliteConnection(_connectionString);
         await connection.OpenAsync();
         
-        const string insertSql = "INSERT INTO ReceiveHistory (SenderId, SenderDeviceName, FileName, SavePath, CreatedAt) VALUES (@SenderId, @SenderDeviceName, @FileName, @SavePath, @CreatedAt);";
+        const string insertSql = "INSERT INTO ReceiveHistory (SenderId, SenderDeviceName, FileName, FileSize, SavePath, CreatedAt) VALUES (@SenderId, @SenderDeviceName, @FileName, @FileSize, @SavePath, @CreatedAt);";
         var result = await connection.ExecuteAsync(insertSql, receiveHistory);
         
         return result > 0;
@@ -136,10 +137,11 @@ public class DatabaseService : IDatabaseService
     {
         using var connection = new SqliteConnection(_connectionString);
         await connection.OpenAsync();
-        
-        const string deleteSql = "TRUNCATE TABLE ReceiveHistory;";
+
+        // SQLite 不支持 TRUNCATE，使用 DELETE 清空表
+        const string deleteSql = @"DELETE FROM ReceiveHistory;
+                                   DELETE FROM sqlite_sequence WHERE name = 'ReceiveHistory';";
         await connection.ExecuteAsync(deleteSql);
-        
         return true;
     }
     

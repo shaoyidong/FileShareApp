@@ -91,6 +91,7 @@ public class FileShareServiceManager : IFileShareServiceManager
                     SenderId = info.SenderId,
                     SenderDeviceName = senderDeviceName,
                     FileName = info.FileName,
+                    FileSize = info.FileSize,
                     SavePath = info.SavePath??string.Empty,
                     CreatedAt = DateTime.UtcNow,
                 };
