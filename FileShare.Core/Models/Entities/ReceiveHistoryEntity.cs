@@ -29,6 +29,11 @@ namespace FileShare.Core.Models.Entities
         public required string FileName { get; set; }
 
         /// <summary>
+        /// 文件大小（字节）
+        /// </summary>
+        public required long FileSize { get; set; }
+
+        /// <summary>
         /// 保存目录
         /// </summary>
         public required string SavePath { get; set; }
