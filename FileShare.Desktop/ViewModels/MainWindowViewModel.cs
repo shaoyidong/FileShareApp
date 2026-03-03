@@ -22,8 +22,8 @@ namespace FileShare.Desktop.ViewModels
     {
         public string Greeting { get; } = "Welcome to Avalonia!";
 
-
-            private readonly IFileShareServiceManager _serviceManager;
+        private readonly IFileShareServiceManager _serviceManager;
+        private readonly IDialogService _dialogService;
         private readonly SynchronizationContext _uiContext;
         private readonly IClassicDesktopStyleApplicationLifetime? _appLifetime;
 
@@ -32,6 +32,9 @@ namespace FileShare.Desktop.ViewModels
         [ObservableProperty]
         private DeviceInfo? _selectedDevice;
         private string _localDeviceId;
+
+        [ObservableProperty]
+        private object _currentView;
 
         public string StatusMessage
         {
@@ -56,8 +59,8 @@ namespace FileShare.Desktop.ViewModels
         public ICommand AcceptTransferCommand { get; }
         public ICommand RejectTransferCommand { get; }
         public ICommand RemoveTransferCommand { get; }
+        public ICommand ShowHistoryCommand { get; }
 
-        private readonly IDialogService _dialogService;
         /// <summary>
         /// 构造函数，用于依赖注入
         /// </summary>
@@ -66,7 +69,7 @@ namespace FileShare.Desktop.ViewModels
         /// <param name="appLifetime">应用程序生命周期</param>
         /// <param name="uiContext">UI上下文</param>
         public MainWindowViewModel(IFileShareServiceManager serviceManager, 
-                                  IDialogService dialogService,
+                                  IDialogService dialogService,                                 
                                   IClassicDesktopStyleApplicationLifetime appLifetime,
                                   SynchronizationContext uiContext)
         {
@@ -95,9 +98,21 @@ namespace FileShare.Desktop.ViewModels
             AcceptTransferCommand = new RelayCommand<FileTransferViewModel>(AcceptTransfer);
             RejectTransferCommand = new RelayCommand<FileTransferViewModel>(RejectTransfer);
             RemoveTransferCommand = new RelayCommand<FileTransferViewModel>(RemoveTransfer);
+            ShowHistoryCommand = new RelayCommand(ShowHistory);
+
+            // 初始化当前视图
+            CurrentView = this;
 
             // 启动服务
             _ = InitializeAsync();
+        }
+
+        private void ShowHistory()
+        {
+            CurrentView = new HistoryViewModel(_serviceManager, _dialogService, () => 
+            {
+                CurrentView = this;
+            });
         }        
 
         private void Timer_Elapsed(object? sender, ElapsedEventArgs e)
