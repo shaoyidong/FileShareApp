@@ -29,7 +29,7 @@
 			<Setter Property="FontFamily" Value="{StaticResource FluentIcons}"/>
 			<Setter Property="BorderThickness" Value="0" />
 			<Setter Property="Padding" Value="4" />
-			<Setter Property="FontSize" Value="16" />
+			<Setter Property="FontSize" Value="24" />
 		</Style>	
         <Style Selector="ContextMenu">
             <Setter Property="Background" Value="White" />
@@ -53,10 +53,10 @@
         <!-- Header -->
         <Border Grid.Row="0" Margin="0,0,0,8" Padding="10" CornerRadius="12" Background="#F5F5F5">
             <Grid ColumnDefinitions="Auto,*,Auto">
-                <Button Command="{Binding BackCommand}" Classes="icon-button" Content="←" ToolTip.Tip="返回" />
+                <Button Command="{Binding BackCommand}" Classes="fluentIcon-button" Content="{x:Static fonts:FluentUI.arrow_left_24_regular}" ToolTip.Tip="返回" />
                 <TextBlock Grid.Column="1" Text="历史" FontSize="16" FontWeight="Bold" VerticalAlignment="Center" HorizontalAlignment="Center" />
                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
-                    <Button Command="{Binding DeleteHistoryCommand}" Classes="fluentIcon-button" Content="{x:Static fonts:FluentUI.delete_16_regular}" ToolTip.Tip="清空记录" />
+                    <Button Command="{Binding DeleteHistoryCommand}" Classes="fluentIcon-button" Content="{x:Static fonts:FluentUI.delete_24_regular}" ToolTip.Tip="清空记录" />
                 </StackPanel>
             </Grid>
         </Border>
@@ -83,11 +83,11 @@
                                                         <Grid>
                                                             <Image IsVisible="{Binding, Converter={x:Static converters:FileTypeToImageSourceConverter.Instance}, ConverterParameter=isImage}" 
                                                                    Source="{Binding, Converter={x:Static converters:FileTypeToImageSourceConverter.Instance}}" 
-                                                                   Width="40" Height="40" Stretch="Uniform" />
+                                                                   Width="48" Height="48" Stretch="Uniform" />
                                                             <TextBlock IsVisible="{Binding, Converter={x:Static converters:FileTypeToImageSourceConverter.Instance}, ConverterParameter=isIcon}" 
                                                                       Text="{Binding, Converter={x:Static converters:FileTypeToImageSourceConverter.Instance}}" 
                                                                       FontFamily="{StaticResource FluentIcons}" 
-                                                                      FontSize="24" 
+                                                                      FontSize="48" 
                                                                       HorizontalAlignment="Center" 
                                                                       VerticalAlignment="Center" />
                                                         </Grid>
@@ -109,7 +109,7 @@
                                         </StackPanel>
 
                                         <!-- Context Menu Button -->
-                                        <Button Grid.Column="2" Classes="icon-button" Content="⋯" Tag="{Binding}">
+                                        <Button Grid.Column="2" Classes="fluentIcon-button" FontFamily="{StaticResource FluentIcons}" Content="{x:Static fonts:FluentUI.more_vertical_24_regular}" Tag="{Binding}">
                                             <Button.Flyout>
 											    <MenuFlyout>
 											    <MenuItem Header="打开文件" Command="{Binding $parent[UserControl].DataContext.OpenFileCommand}" CommandParameter="{Binding $parent[Button].Tag}" />

@@ -68,11 +68,11 @@ namespace FileShare.Desktop.Converters
         {
             if (FileTypeHelper.IsImageFile(extension))
             {
-                return FluentUI.image_24_regular;
+                return FluentUI.image_48_regular;
             }
             else if (FileTypeHelper.IsVideoFile(extension))
             {
-                return FluentUI.video_24_regular;
+                return FluentUI.video_48_regular;
             }
             else if (FileTypeHelper.IsAudioFile(extension))
             {
@@ -80,15 +80,15 @@ namespace FileShare.Desktop.Converters
             }
             else if (FileTypeHelper.IsDocumentFile(extension))
             {
-                return FluentUI.document_24_regular;
+                return FluentUI.document_48_regular;
             }
             else if (FileTypeHelper.IsCompressedFile(extension))
             {
                 return FluentUI.folder_zip_24_regular;
-            }            
+            }
             else
             {
-                return FluentUI.document_24_regular;
+                return FluentUI.document_48_regular;
             }
         }
     }
