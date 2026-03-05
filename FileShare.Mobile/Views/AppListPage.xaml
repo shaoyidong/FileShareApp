@@ -5,6 +5,8 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
     xmlns:fonts="clr-namespace:Fonts"
     xmlns:viewmodels="clr-namespace:FileShare.Mobile.ViewModels"
+    xmlns:models="clr-namespace:FileShare.Mobile.Models"
+    x:DataType="viewmodels:AppListViewModel"
     Title="已安装应用">
     <!--  工具栏项会显示在导航栏右侧  -->
     <ContentPage.ToolbarItems>
@@ -16,9 +18,9 @@
     </ContentPage.ToolbarItems>
     <Grid>
         <ActivityIndicator VerticalOptions="Center" HorizontalOptions="Center" IsRunning="{Binding IsLoading}" />
-        <CollectionView ItemSizingStrategy="MeasureAllItems" ItemsSource="{Binding Apps}" SelectionMode="Single" SelectedItem="{Binding SelectedApp}">
+        <CollectionView ItemSizingStrategy="MeasureAllItems" ItemsSource="{Binding Apps}" SelectionMode="Single" SelectedItem="{Binding SelectedApp}" >
             <CollectionView.ItemTemplate>
-                <DataTemplate>
+                <DataTemplate x:DataType="models:InstalledAppInfo">
                     <Grid Padding="10,0" ColumnDefinitions="Auto, *">
 						<Border Margin="0,3" Padding="10" >
 							<Image VerticalOptions="Center"

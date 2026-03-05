@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 
-namespace FileShare.Mobile.Model
+namespace FileShare.Mobile.Models
 {
     /// <summary>
     /// 已安装应用信息

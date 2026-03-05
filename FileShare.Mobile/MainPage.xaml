@@ -106,14 +106,6 @@
                     Style="{StaticResource StatusLabel}"
                     Text="{Binding StatusMessage}"
                     VerticalOptions="Center" />
-                <!--<Button Text="刷新设备" Grid.Column="1"
-            Command="{Binding RefreshDevicesCommand}"
-            IsEnabled="{Binding IsNotScanning}"
-            Margin="10,0,0,0"
-            VerticalOptions="Center"
-            HorizontalOptions="End"
-            Style="{StaticResource SecondaryButton}"
-            WidthRequest="120" />-->
             </Grid>
         </Border>
 

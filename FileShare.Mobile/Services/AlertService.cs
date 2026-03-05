@@ -1,4 +1,4 @@
-﻿using CommunityToolkit.Maui.Alerts;
+using CommunityToolkit.Maui.Alerts;
 using CommunityToolkit.Maui.Core;
 using Font = Microsoft.Maui.Font;
 
@@ -48,6 +48,15 @@ namespace FileShare.Mobile.Services
             var snackbar = Snackbar.Make(message,action,actionButtonText,duration);
 
             await snackbar.Show();
+        }
+
+        public async Task<string> DisplayActionSheetAsync(string title, string cancel, string? destruction, params string[] buttons)
+        {
+            var mainPage = Application.Current?.Windows?.FirstOrDefault()?.Page;
+            if (mainPage == null)
+                throw new InvalidOperationException("MainPage is not set. Ensure the app has a MainPage.");
+
+            return await mainPage.DisplayActionSheetAsync(title, cancel, destruction, buttons);
         }
     }
 }

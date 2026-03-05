@@ -28,4 +28,16 @@ public class DefaultPermissionService : IPermissionService
         // 默认实现：返回true，假设有权限
         return Task.FromResult(true);
     }
+
+    public Task<bool> RequestInstallPackagePermissionAsync()
+    {
+        // 默认实现：返回true，假设有权限
+        return Task.FromResult(true);
+    }
+
+    public Task<bool> CheckInstallPackagePermissionAsync()
+    {
+        // 默认实现：返回true，假设有权限
+        return Task.FromResult(true);
+    }
 }

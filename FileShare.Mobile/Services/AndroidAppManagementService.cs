@@ -12,7 +12,7 @@ using Android.Content.PM;
 using Android.Graphics;
 using Android.Graphics.Drawables;
 using Android.OS;
-using FileShare.Mobile.Model;
+using FileShare.Mobile.Models;
 
 public class AndroidAppManagementService : IAppManagementService
 {

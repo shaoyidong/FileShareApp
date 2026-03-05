@@ -1,5 +1,5 @@
 using FileShare.Core.Services;
-using FileShare.Mobile.Model;
+using FileShare.Mobile.Models;
 using FileShare.Mobile.Services;
 using CommunityToolkit.Mvvm.Messaging;
 using System.Collections.Generic;

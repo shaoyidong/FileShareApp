@@ -23,6 +23,11 @@
             Icon="{StaticResource IconHome}"
             ContentTemplate="{DataTemplate local:MainPage}" 
             Route="MainPage" />
+	<ShellContent
+            Title="历史记录"
+            Icon="{StaticResource IconHistory}"
+            ContentTemplate="{DataTemplate views:HistoryPage}" 
+            Route="HistoryPage" />
 	<Shell.FlyoutFooter>
 		<Grid Padding="10">
 			<sf:SfSegmentedControl x:Name="ThemeSegmentedControl" 
@@ -37,4 +42,35 @@
 			</sf:SfSegmentedControl>
 		</Grid>
 	</Shell.FlyoutFooter>
+    <!-- ② 使用 TabBar 实现底部导航栏 -->
+    <!--<TabBar>
+        --><!-- 主页选项卡 --><!--
+        <Tab Title="主页" Icon="{StaticResource IconHome}">
+            <ShellContent ContentTemplate="{DataTemplate local:MainPage}" Route="MainPage" />
+        </Tab>
+
+        --><!-- 历史记录选项卡 --><!--
+        <Tab Title="历史记录" Icon="{StaticResource IconHistory}">
+            <ShellContent ContentTemplate="{DataTemplate views:HistoryPage}" Route="HistoryPage" />
+        </Tab>
+
+        --><!-- ③ 如果需要放置主题切换控件，可以新增一个“设置”选项卡 -->
+        <!-- 需要先创建 SettingsPage.xaml，将 SfSegmentedControl 移到该页面中 --><!--
+        <Tab Title="设置" Icon="{StaticResource IconSettings}">
+            <ShellContent >
+                <Grid Padding="10">
+                    <sf:SfSegmentedControl x:Name="ThemeSegmentedControl" 
+    VerticalOptions="Center" HorizontalOptions="Center" SelectionChanged="SfSegmentedControl_SelectionChanged"
+    SegmentWidth="40" SegmentHeight="40">
+                        <sf:SfSegmentedControl.ItemsSource>
+                            <x:Array Type="{x:Type sf:SfSegmentItem}">
+                                <sf:SfSegmentItem ImageSource="{StaticResource IconLight}" SemanticProperties.Description="Light mode"/>
+                                <sf:SfSegmentItem ImageSource="{StaticResource IconDark}" SemanticProperties.Description="Dark mode"/>
+                            </x:Array>
+                        </sf:SfSegmentedControl.ItemsSource>
+                    </sf:SfSegmentedControl>
+                </Grid>
+            </ShellContent>
+        </Tab>
+    </TabBar>-->
 </Shell>
