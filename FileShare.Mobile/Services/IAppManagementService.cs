@@ -1,4 +1,4 @@
-using FileShare.Mobile.Model;
+using FileShare.Mobile.Models;
 
 namespace FileShare.Mobile.Services;
 

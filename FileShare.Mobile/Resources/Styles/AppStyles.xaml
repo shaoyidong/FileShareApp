@@ -55,6 +55,14 @@
     </OnIdiom>
 
     <FontImageSource
+        x:Key="IconHistory"
+        FontFamily="{x:Static f:FluentUI.FontFamily}"
+        Glyph="{x:Static f:FluentUI.history_24_regular}"
+        Size="{StaticResource IconSize}"
+        Color="{AppThemeBinding Light={StaticResource DarkOnLightBackground},
+                                Dark={StaticResource LightOnDarkBackground}}" />
+
+    <FontImageSource
         x:Key="IconHome"
         FontFamily="{x:Static f:FluentUI.FontFamily}"
         Glyph="{x:Static f:FluentUI.home_24_regular}"
@@ -113,7 +121,7 @@
     <FontImageSource
         x:Key="IconDelete"
         FontFamily="{x:Static f:FluentUI.FontFamily}"
-        Glyph="{x:Static f:FluentUI.delete_32_regular}"
+        Glyph="{x:Static f:FluentUI.delete_24_regular}"
         Size="{StaticResource IconSize}"
         Color="{AppThemeBinding Light={StaticResource DarkOnLightBackground},
                                 Dark={StaticResource LightOnDarkBackground}}" />

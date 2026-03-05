@@ -59,7 +59,7 @@ options =>
         // 注册服务
         builder.Services.AddSingleton<IPlatformDirectoryService, IosDirectoryService>();
         builder.Services.AddSingleton<IAppManagementService, DefaultAppManagementService>();
-        builder.Services.AddSingleton<IPermissionService, DefaultPermissionService>();
+        builder.Services.AddSingleton<IPermissionService, IosPermissionService>();
         builder.Services.AddSingleton<IFileTransferForegroundService, IosFileTransferForegroundService>();
 #else
 		builder.Services.AddSingleton<IPlatformDirectoryService, DesktopDirectoryService>();
@@ -97,6 +97,7 @@ options =>
         builder.Services.AddSingleton<IAlertService,AlertService>();
         builder.Services.AddSingleton<IPickerService,MauiPickerService>();
         builder.Services.AddSingleton<MainPageViewModel>();
+        builder.Services.AddSingleton<HistoryViewModel>();
         builder.Services.AddSingletonWithShellRoute<AppListPage, AppListViewModel>("AppListPage");
 
         return builder.Build();

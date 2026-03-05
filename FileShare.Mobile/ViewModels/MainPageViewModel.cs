@@ -22,7 +22,6 @@ public partial class MainPageViewModel : ViewModelBase
     private readonly string _localDeviceId;
     private readonly IFileTransferForegroundService _foregroundService;
     private readonly IPickerService _filePickerService;
-    private readonly INavigation _navigation;
     private readonly IAppManagementService _appManagementService;
 
     private string _statusMessage = "准备就绪";
@@ -69,7 +68,6 @@ public partial class MainPageViewModel : ViewModelBase
         , IFileTransferForegroundService fileTransferService
         , IAlertService alertService
         , IPickerService filePickerService
-        , INavigation navigation
         , IAppManagementService appManagementService)
     {
         _uiContext = SynchronizationContext.Current?? new SynchronizationContext();
@@ -77,7 +75,6 @@ public partial class MainPageViewModel : ViewModelBase
         _foregroundService = fileTransferService;
         _alertService = alertService;
         _filePickerService = filePickerService;
-        _navigation = navigation;
         _appManagementService = appManagementService;
         Devices = new ObservableCollection<FileShare.Core.Models.DeviceInfo>();
         TransferTasks = new ObservableCollection<FileTransferViewModel>();

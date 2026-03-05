@@ -28,4 +28,16 @@ public interface IPermissionService
     /// </summary>
     /// <returns>是否有权限</returns>
     Task<bool> CheckQueryAllPackagesPermissionAsync();
+
+    /// <summary>
+    /// 请求安装应用权限
+    /// </summary>
+    /// <returns></returns>
+    Task<bool> RequestInstallPackagePermissionAsync();
+
+    /// <summary>
+    /// 检查是否有安装应用权限
+    /// </summary>
+    /// <returns></returns>
+    Task<bool> CheckInstallPackagePermissionAsync();
 }

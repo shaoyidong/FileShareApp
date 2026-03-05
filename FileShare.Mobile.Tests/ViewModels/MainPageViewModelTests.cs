@@ -18,6 +18,7 @@ namespace FileShare.Mobile.Tests.ViewModels
     private readonly Mock<IFileTransferForegroundService> _mockForegroundService;
     private readonly Mock<IPlatformDirectoryService> _mockDirectoryService;
     private readonly Mock<IPickerService> _mockFilePickerService;
+    private readonly Mock<IAppManagementService> _mockAppManagementService;
     private readonly MainPageViewModel _viewModel;
     private readonly SynchronizationContext _testSynchronizationContext;
 
@@ -33,6 +34,7 @@ namespace FileShare.Mobile.Tests.ViewModels
             _mockForegroundService = new Mock<IFileTransferForegroundService>();
             _mockDirectoryService = new Mock<IPlatformDirectoryService>();
             _mockFilePickerService = new Mock<IPickerService>();
+            _mockAppManagementService = new Mock<IAppManagementService>();
 
             // 设置模拟对象的行为
             _mockServiceManager.Setup(m => m.GetLocalDeviceInfo())
@@ -61,7 +63,8 @@ namespace FileShare.Mobile.Tests.ViewModels
                 _mockServiceManager.Object,
                 _mockForegroundService.Object,
                 _mockAlertService.Object,
-                _mockFilePickerService.Object);
+                _mockFilePickerService.Object,
+                _mockAppManagementService.Object);
         }
 
         [Fact]

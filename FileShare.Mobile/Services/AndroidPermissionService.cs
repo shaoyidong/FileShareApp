@@ -1,9 +1,13 @@
 using FileShare.Core.Services;
+
 using Microsoft.Maui.ApplicationModel;
 
 namespace FileShare.Mobile.Services;
 
 #if ANDROID
+using FileShare.Mobile.Platforms.Android;
+using System.Runtime.Versioning;
+
 public class AndroidPermissionService : IPermissionService
 {
     public async Task<bool> RequestStoragePermissionAsync()
@@ -66,6 +70,56 @@ public class AndroidPermissionService : IPermissionService
     {
         // 默认返回true，因为我们已经在AndroidManifest.xml中添加了该权限
         return Task.FromResult(true);
+    }
+
+    [SupportedOSPlatform("android23.0")]
+    public async Task<bool> RequestInstallPackagePermissionAsync()
+    {
+        try
+        {
+            var status = await Permissions.RequestAsync<InstallPackagePermission>();
+            if (status != PermissionStatus.Granted)
+            {
+                return false;
+            }
+
+            status = await Permissions.RequestAsync<InstallPackagePermission>();
+            if (status != PermissionStatus.Granted)
+            {
+                return false;
+            }
+
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    [SupportedOSPlatform("android23.0")]
+    public async Task<bool> CheckInstallPackagePermissionAsync()
+    {
+        try
+        {
+            var status = await Permissions.CheckStatusAsync<InstallPackagePermission>();
+            if (status != PermissionStatus.Granted)
+            {
+                return false;
+            }
+
+            status = await Permissions.CheckStatusAsync<InstallPackagePermission>();
+            if (status != PermissionStatus.Granted)
+            {
+                return false;
+            }
+
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
     }
 }
 
