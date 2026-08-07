@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="FileShare.Mobile.Views.AppListPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:fonts="clr-namespace:Fonts"
+    xmlns:viewmodels="clr-namespace:FileShare.Mobile.ViewModels"
+    xmlns:models="clr-namespace:FileShare.Mobile.Models"
+    x:DataType="viewmodels:AppListViewModel"
+    Title="已安装应用">
+    <!--  工具栏项会显示在导航栏右侧  -->
+    <ContentPage.ToolbarItems>
+        <ToolbarItem
+            Command="{Binding RefreshCommand}"
+            IconImageSource="{StaticResource IconArrowSync}"
+            Order="Primary"
+            Priority="0" />
+    </ContentPage.ToolbarItems>
+    <Grid>
+        <ActivityIndicator VerticalOptions="Center" HorizontalOptions="Center" IsRunning="{Binding IsLoading}" />
+        <CollectionView ItemSizingStrategy="MeasureAllItems" ItemsSource="{Binding Apps}" SelectionMode="Single" SelectedItem="{Binding SelectedApp}" >
+            <CollectionView.ItemTemplate>
+                <DataTemplate x:DataType="models:InstalledAppInfo">
+                    <Grid Padding="10,0" ColumnDefinitions="Auto, *">
+						<Border Margin="0,3" Padding="10" >
+							<Image VerticalOptions="Center"
+								   Grid.Column="0" 
+								   Aspect="AspectFit" WidthRequest="48" HeightRequest="48"
+								   Source="{Binding Icon}"    />
+						</Border>                        
+                        <StackLayout VerticalOptions="Center"
+                            Grid.Column="1"
+                            Padding="10,0,0,0"
+                            Spacing="2">
+                            <Label FontAttributes="Bold" Text="{Binding AppName}" />
+							<StackLayout Orientation="Horizontal" Spacing="10">
+								<Label
+									FontSize="Small"
+									Text="{Binding FormattedApkSize, StringFormat='大小: {0:f1}'}"
+									TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+								<Label
+									FontSize="Small"
+									Text="{Binding VersionName, StringFormat='版本: {0}'}"
+									TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+							</StackLayout>                           
+                            <Label
+                                FontSize="Small"
+                                Text="{Binding PackageName}"
+                                TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />                           
+                        </StackLayout>
+                    </Grid>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+    </Grid>
+</ContentPage>

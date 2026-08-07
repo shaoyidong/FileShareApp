@@ -1,4 +1,5 @@
 using FileShare.Core.Models;
+using FileShare.Core.Models.Entities;
 using FileShare.Core.Network;
 using System.Net;
 using System.Net.Sockets;
@@ -78,7 +79,26 @@ public class FileShareServiceManager : IFileShareServiceManager
         _discoveryService.OnDeviceRemoved += device => OnDeviceRemoved?.Invoke(device);
         _fileTransferService.OnTransferRequestSendAndReceive += info => OnTransferRequestSendAndReceive?.Invoke(info);
         _fileTransferService.OnTransferProgressUpdated += info => OnTransferProgressUpdated?.Invoke(info);
-        _fileTransferService.OnTransferCompleted += (info, message) => OnTransferCompleted?.Invoke(info, message);
+        _fileTransferService.OnTransferCompleted += (info, message) =>
+        {
+            if (info.Status == TransferStatus.Completed && info.ReceiverId == _localDevice.DeviceId)
+            {
+                //存储接收记录
+                //查询发送设备名
+                string? senderDeviceName = _discoveryService.GetDiscoveredDevices()?.FirstOrDefault(d=>d.DeviceId == info.SenderId)?.DeviceName;
+                var receiveHistory = new ReceiveHistoryEntity()
+                {
+                    SenderId = info.SenderId,
+                    SenderDeviceName = senderDeviceName,
+                    FileName = info.FileName,
+                    FileSize = info.FileSize,
+                    SavePath = info.SavePath??string.Empty,
+                    CreatedAt = DateTime.UtcNow,
+                };
+                _databaseService.AddSingleReceiveHistoryAsync(receiveHistory);                
+            }
+            OnTransferCompleted?.Invoke(info, message);
+        };
     }
 
     /// <summary>
@@ -178,7 +198,22 @@ public class FileShareServiceManager : IFileShareServiceManager
         // 将取消请求传递给文件传输服务
         _fileTransferService.CancelTransfer(transferId);
     }
-    
+
+    public Task<bool> DeleteSingleReceiveHistoryAsync(int id)
+    {
+        return _databaseService.DeleteSingleReceiveHistoryAsync(id);
+    }
+
+    public Task<bool> ClearReceiveHistoryAsync()
+    {
+        return _databaseService.ClearReceiveHistoryAsync();
+    }
+
+    public Task<IEnumerable<ReceiveHistoryEntity>> GetAllReceiveHistoryAsync()
+    {
+        return _databaseService.GetAllReceiveHistoryAsync();
+    }
+
     public void Dispose()
     {
         // 在线程池中执行异步操作，避免死锁
@@ -188,5 +223,5 @@ public class FileShareServiceManager : IFileShareServiceManager
         _discoveryService.Dispose();
         _fileTransferService.Dispose();
         GC.SuppressFinalize(this);
-    }
+    }  
 }

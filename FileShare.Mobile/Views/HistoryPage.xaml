@@ -1,0 +1,173 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="FileShare.Mobile.Views.HistoryPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:coreModel="clr-namespace:FileShare.Core.Models.Entities;assembly=FileShare.Core"
+    xmlns:vm="clr-namespace:FileShare.Mobile.ViewModels"
+    xmlns:helpers="clr-namespace:FileShare.Mobile.Helpers"
+    xmlns:fonts="clr-namespace:Fonts"
+    x:DataType="vm:HistoryViewModel"
+    xmlns:toolkit="http://schemas.microsoft.com/dotnet/2022/maui/toolkit"
+    x:Name="historyPage"
+    Title="历史记录">
+    <ContentPage.ToolbarItems>
+        <ToolbarItem            
+            Command="{Binding DeleteHistoryCommand}"
+            Order="Primary"
+            Priority="0"
+            IconImageSource="{StaticResource IconDelete}"
+            SemanticProperties.Description="Clear"
+            ToolTipProperties.Text="清空历史"/>
+    </ContentPage.ToolbarItems>
+    <ContentPage.Resources>
+        <Style x:Key="TitleLabel" TargetType="Label">
+            <Setter Property="FontSize" Value="18" />
+            <Setter Property="FontAttributes" Value="Bold" />
+        </Style>
+
+        <Style x:Key="SecondaryButton" TargetType="Button">
+            <Setter Property="BackgroundColor" Value="{AppThemeBinding Light={StaticResource Gray400}, Dark={StaticResource Gray600}}" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Padding" Value="10,6" />
+            <Setter Property="FontSize" Value="14" />
+        </Style>
+
+        <Style x:Key="IconButton" TargetType="Button">
+            <Setter Property="BackgroundColor" Value="Transparent" />
+            <Setter Property="TextColor" Value="{AppThemeBinding Light={StaticResource DarkOnLightBackground}, Dark={StaticResource LightOnDarkBackground}}" />
+            <Setter Property="FontSize" Value="20" />
+            <Setter Property="Padding" Value="8" />
+        </Style>
+
+        <MenuFlyout x:Key="HistoryItemMenuFlyout" >
+            <MenuFlyoutItem Text="打开文件" Command="{Binding OpenFileCommand, Source={RelativeSource AncestorType={x:Type vm:HistoryViewModel}},x:DataType='vm:HistoryViewModel'}" CommandParameter="{Binding}" />
+            <MenuFlyoutItem Text="信息" Command="{Binding ShowFileInfoCommand,Source={RelativeSource AncestorType={x:Type vm:HistoryViewModel}},x:DataType='vm:HistoryViewModel'}" CommandParameter="{Binding}" />
+            <MenuFlyoutItem Text="从历史记录中删除" Command="{Binding DeleteSingleHistoryCommand,Source={RelativeSource AncestorType={x:Type vm:HistoryViewModel}},x:DataType='vm:HistoryViewModel'}" CommandParameter="{Binding}" />
+        </MenuFlyout>
+    </ContentPage.Resources>
+    <Grid>
+        <ActivityIndicator VerticalOptions="Center" HorizontalOptions="Center" IsRunning="{Binding IsLoading}" />
+        <CollectionView ItemSizingStrategy="MeasureAllItems" ItemsSource="{Binding ReceiveHistory}">
+            <CollectionView.ItemTemplate>
+                <DataTemplate x:DataType="coreModel:ReceiveHistoryEntity">
+                    <!--<Border
+             Padding="12"
+             Background="{AppThemeBinding Light={StaticResource LightBackground},
+                                          Dark={StaticResource DarkBackground}}"
+             Stroke="{AppThemeBinding Light={StaticResource Gray200},
+                                      Dark={StaticResource Gray600}}"
+             StrokeShape="RoundRectangle 12"
+             StrokeThickness="1">-->
+                    <Grid ColumnDefinitions="Auto,*,Auto" Padding="10,0" >
+                            <!-- File Preview / Icon -->
+                        <Border  Margin="0,3" Padding="6"                                
+                     Background="{AppThemeBinding Light={StaticResource Gray100},
+                                                  Dark={StaticResource Gray600}}"
+                     StrokeShape="RoundRectangle 8">
+                            <Grid WidthRequest="48" HeightRequest="48">
+                                <Image IsVisible="{Binding ., Converter={helpers:FileTypeToImageSourceConverter}, ConverterParameter=isImage}"
+                                       Source="{Binding ., Converter={helpers:FileTypeToImageSourceConverter}}"
+                                       
+                                       HorizontalOptions="Center" VerticalOptions="Center" />
+                                <Label IsVisible="{Binding ., Converter={helpers:FileTypeToImageSourceConverter}, ConverterParameter=isIcon}"
+                                       Text="{Binding ., Converter={helpers:FileTypeToImageSourceConverter}}"
+                                       FontFamily="{x:Static fonts:FluentUI.FontFamily}"
+                                       FontSize="48" VerticalTextAlignment="Center" HorizontalTextAlignment="Center"
+                                       HorizontalOptions="Center" VerticalOptions="Center" />
+                            </Grid>
+                            </Border>
+
+                            <!-- File Info -->
+                        <StackLayout  Padding="10,0,0,0"
+                     Grid.Column="1"
+                     VerticalOptions="Center">
+                                <Label
+                         FontAttributes="Bold"
+                         FontSize="16"
+                         LineBreakMode="TailTruncation"
+                         Text="{Binding FileName}"
+                         TextColor="{AppThemeBinding Light={StaticResource DarkOnLightBackground},
+                                                     Dark={StaticResource LightOnDarkBackground}}" />
+                                <StackLayout Orientation="Horizontal" >
+                                    <Label
+                                        FontSize="14"
+                                        Text="{Binding CreatedAt, StringFormat='{0:yyyy/M/d HH:mm}-'}"
+                                        TextColor="{AppThemeBinding Light={StaticResource Gray500},
+                                        Dark={StaticResource Gray400}}" />
+                                    <Label
+                                        FontSize="14" VerticalOptions="Center"
+                                        Text="{Binding FileSize, Converter={helpers:FileSizeToFormatFileSizeConverter}}"
+                                        TextColor="{AppThemeBinding Light={StaticResource Gray500},
+                                        Dark={StaticResource Gray400}}" />
+                                </StackLayout>                           
+                                <Label
+                         FontSize="14"
+                         Text="{Binding SenderDeviceName}"
+                         TextColor="{AppThemeBinding Light={StaticResource Primary},
+                                                     Dark={StaticResource PrimaryDark}}" />
+                            </StackLayout>
+
+                            <!-- Context Menu -->
+
+                        <Button 
+                            Grid.Column="2" Command="{Binding ShowOperationContextMenuCommand ,Source={RelativeSource AncestorType={x:Type vm:HistoryViewModel}},x:DataType='vm:HistoryViewModel'}"
+                            CommandParameter="{Binding}"
+                            Style="{StaticResource IconButton}" FontFamily="{x:Static fonts:FluentUI.FontFamily}" FontSize="24"
+                            Text="{x:Static fonts:FluentUI.more_vertical_24_regular}" >
+                            <FlyoutBase.ContextFlyout>
+                                <MenuFlyout>
+                                    <MenuFlyoutItem Text="打开文件" Command="{Binding OpenFileCommand, Source={RelativeSource AncestorType={x:Type vm:HistoryViewModel}},x:DataType='vm:HistoryViewModel'}" CommandParameter="{Binding}" />
+                                    <MenuFlyoutItem Text="信息" Command="{Binding ShowFileInfoCommand,Source={RelativeSource AncestorType={x:Type vm:HistoryViewModel}},x:DataType='vm:HistoryViewModel'}" CommandParameter="{Binding}" />
+                                    <MenuFlyoutItem Text="从历史记录中删除" Command="{Binding DeleteSingleHistoryCommand,Source={RelativeSource AncestorType={x:Type vm:HistoryViewModel}},x:DataType='vm:HistoryViewModel'}" CommandParameter="{Binding}" />
+                                </MenuFlyout>
+                            </FlyoutBase.ContextFlyout>
+                        </Button>
+                    </Grid>
+                    <!--</Border>-->
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+            <CollectionView.EmptyView>
+                <Label
+         Margin="0,40,0,0"
+         FontSize="14"
+         HorizontalOptions="Center"
+         Text="暂无历史记录"
+         TextColor="{AppThemeBinding Light={StaticResource Gray500},
+                                     Dark={StaticResource Gray400}}"
+         VerticalOptions="Center" />
+            </CollectionView.EmptyView>
+        </CollectionView>
+    </Grid>
+    <!--<Grid Padding="0">
+      
+        --><!-- History List --><!--
+        <Border
+            Grid.Row="1"
+            Margin="16,0,16,13"
+            Padding="16"
+            Background="{AppThemeBinding Light={StaticResource LightSecondaryBackground},
+                                         Dark={StaticResource DarkSecondaryBackground}}"
+            StrokeShape="RoundRectangle 12"
+            StrokeThickness="0">
+            <Border.Shadow>
+                <Shadow
+                    Brush="{AppThemeBinding Light=#000000,
+                                            Dark=#FFFFFF}"
+                    Opacity="0.1"
+                    Radius="4"
+                    Offset="0,2" />
+            </Border.Shadow>
+            <Grid>
+                <CollectionView
+                    BackgroundColor="Transparent"
+                    ItemsSource="{Binding ReceiveHistory}">
+                    <CollectionView.ItemsLayout>
+                        <LinearItemsLayout ItemSpacing="10" Orientation="Vertical" />
+                    </CollectionView.ItemsLayout>
+                   
+                </CollectionView>
+            </Grid>
+        </Border>
+    </Grid>-->
+</ContentPage>

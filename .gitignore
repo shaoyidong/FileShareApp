@@ -365,3 +365,6 @@ FodyWeavers.xsd
 #trae
 .trae/
 /MauiApp1
+
+#output
+/output

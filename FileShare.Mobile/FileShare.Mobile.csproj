@@ -45,6 +45,9 @@
 		<AndroidSigningKeyStore>FileShare.keystore</AndroidSigningKeyStore>
 		<!--<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'tizen'">6.5</SupportedOSPlatformVersion>-->		
 	</PropertyGroup>
+	<PropertyGroup Condition="'$(TargetFramework)|$(Platform)'=='net10.0-android|AnyCPU'">
+		<RuntimeIdentifiers>android-x64;android-x86;android-arm64;android-arm</RuntimeIdentifiers>
+	</PropertyGroup>
 	<PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Release|net10.0-android|AnyCPU'">
 	  <AndroidPackageFormat>apk</AndroidPackageFormat>
 	  <AndroidEnableMultiDex>False</AndroidEnableMultiDex>
@@ -94,13 +97,11 @@
 	</ItemGroup>-->
 
 	<ItemGroup>
-    <PackageReference Include="CommunityToolkit.Maui" Version="13.0.0" />
-    <PackageReference Include="Microsoft.Data.Sqlite.Core" Version="10.0.2" />
-    <PackageReference Include="Microsoft.Maui.Controls" Version="10.0.30" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.2" />
+    <PackageReference Include="CommunityToolkit.Maui" Version="14.0.1" />
+    <PackageReference Include="Microsoft.Maui.Controls" Version="10.0.41" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.3" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
-    <PackageReference Include="SQLitePCLRaw.bundle_green" Version="2.1.11" />
-    <PackageReference Include="Syncfusion.Maui.Toolkit" Version="1.0.8" />
+    <PackageReference Include="Syncfusion.Maui.Toolkit" Version="1.0.9" />
   </ItemGroup>
 
   <ItemGroup>

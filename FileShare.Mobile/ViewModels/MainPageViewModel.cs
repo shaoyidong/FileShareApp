@@ -1,7 +1,9 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
 using FileShare.Core.Models;
 using FileShare.Core.Services;
+using FileShare.Mobile.Messages;
 using FileShare.Mobile.Services;
 using Microsoft.Maui.Storage;
 using System.Collections.ObjectModel;
@@ -20,6 +22,7 @@ public partial class MainPageViewModel : ViewModelBase
     private readonly string _localDeviceId;
     private readonly IFileTransferForegroundService _foregroundService;
     private readonly IPickerService _filePickerService;
+    private readonly IAppManagementService _appManagementService;
 
     private string _statusMessage = "准备就绪";
     public string StatusMessage
@@ -53,6 +56,7 @@ public partial class MainPageViewModel : ViewModelBase
 
     public ICommand RefreshDevicesCommand { get; }
     public ICommand SendFileCommand { get; }
+    public ICommand NavigateToAppListCommand { get; }
 
     public ObservableCollection<FileShare.Core.Models.DeviceInfo> Devices { get; }
     public ObservableCollection<FileTransferViewModel> TransferTasks { get; }
@@ -63,24 +67,20 @@ public partial class MainPageViewModel : ViewModelBase
         , IFileShareServiceManager fileShareServiceManager
         , IFileTransferForegroundService fileTransferService
         , IAlertService alertService
-        , IPickerService filePickerService)
+        , IPickerService filePickerService
+        , IAppManagementService appManagementService)
     {
         _uiContext = SynchronizationContext.Current?? new SynchronizationContext();
         _serviceManager = fileShareServiceManager;
         _foregroundService = fileTransferService;
         _alertService = alertService;
         _filePickerService = filePickerService;
+        _appManagementService = appManagementService;
         Devices = new ObservableCollection<FileShare.Core.Models.DeviceInfo>();
         TransferTasks = new ObservableCollection<FileTransferViewModel>();
         SentTransferTasks = new ObservableCollection<FileTransferViewModel>();
         ReceivedTransferTasks = new ObservableCollection<FileTransferViewModel>();
 
-        // 初始化服务管理器
-        //_serviceManager = new FileShareServiceManager(
-        //    directoryService,
-        //    Microsoft.Maui.Devices.DeviceInfo.Name,
-        //    FileShare.Core.Models.DeviceType.Mobile);
-        
         // 保存本地设备ID
         _localDeviceId = _serviceManager.GetLocalDeviceInfo().DeviceId;
         
@@ -91,9 +91,16 @@ public partial class MainPageViewModel : ViewModelBase
         _serviceManager.OnTransferProgressUpdated += OnTransferProgressUpdated;
         _serviceManager.OnTransferCompleted += OnTransferCompleted;
 
+        // 订阅WeakReferenceMessenger消息，接收从AppListPage返回的APK路径
+        WeakReferenceMessenger.Default.Register<AppSelectedMessage>(this, async (recipient, message) =>
+        {
+            await HandleAppSelected(message.Value);
+        });
+
         // 初始化命令
         RefreshDevicesCommand = new RelayCommand(async () => RefreshDevicesAsync());
         SendFileCommand = new RelayCommand(async () => SendFileAsync());
+        NavigateToAppListCommand = new RelayCommand(async () => await NavigateToAppList());
         
         // 启动服务
         _ = InitializeAsync();
@@ -280,22 +287,27 @@ public partial class MainPageViewModel : ViewModelBase
                 }, null);
 
                 await _serviceManager.SendFileAsync(result.FullPath, SelectedDevice).ConfigureAwait(false);
-            }
-            else
-            {
-                if (!TransferTasks.Any(t => t.Status == TransferStatus.Pending || t.Status == TransferStatus.Transferring))
-                {
-                    _foregroundService.StopService();
-                }
-            }
+            }          
         }
         catch (Exception ex)
         {
             StatusMessage = $"发送文件失败: {ex.Message}";
             await _alertService.DisplayToastAsync(ex.Message).ConfigureAwait(false);
         }
+        finally
+        {
+            StopForegroundServiceIfNoTasksRunning();
+        }
     }
-    
+
+    private void StopForegroundServiceIfNoTasksRunning()
+    {
+        if (!TransferTasks.Any(t => t.Status == TransferStatus.Pending || t.Status == TransferStatus.Transferring))
+        {
+            _foregroundService.StopService();
+        }
+    }
+
     [RelayCommand]
     private async Task AcceptTransfer(FileTransferViewModel viewModel)
     {
@@ -516,10 +528,7 @@ public partial class MainPageViewModel : ViewModelBase
                 }
             }
         },null);
-        if (!TransferTasks.Any(t=>t.Status == TransferStatus.Pending || t.Status == TransferStatus.Transferring))
-        {
-            _foregroundService.StopService();
-        }
+        StopForegroundServiceIfNoTasksRunning();
     } 
     
     public void Dispose()
@@ -528,5 +537,59 @@ public partial class MainPageViewModel : ViewModelBase
         
         // 停止文件传输服务
         _foregroundService?.StopService();
+    }
+    
+    private async Task HandleAppSelected(string apkPath)
+    {
+        if (SelectedDevice == null)
+        {
+            await _alertService.DisplayToastAsync("请先选择目标设备").ConfigureAwait(false);
+            return;
+        }
+        
+        try
+        {
+            if (!string.IsNullOrEmpty(apkPath))
+            {
+                // 启动前台服务
+                await _foregroundService.StartServiceAsync().ConfigureAwait(false);
+                
+                // 更新状态消息
+                _uiContext.Post((o) =>
+                {
+                    StatusMessage = $"正在发送应用: {Path.GetFileName(apkPath)}";
+                }, null);
+                
+                // 执行发送流程
+                await _serviceManager.SendFileAsync(apkPath, SelectedDevice).ConfigureAwait(false);
+            }
+        }
+        catch (Exception ex)
+        {
+            await _alertService.DisplayToastAsync("错误, 发送应用失败: " + ex.Message);
+        }
+        finally
+        {
+            StopForegroundServiceIfNoTasksRunning();
+        }
+    }
+    
+    private async Task NavigateToAppList()
+    {
+        if (SelectedDevice == null)
+        {
+            await _alertService.DisplayToastAsync("请先选择目标设备").ConfigureAwait(false);
+            return;
+        }
+        
+        try
+        {
+            // 导航到AppListPage
+            await Shell.Current.GoToAsync("/AppListPage");
+        }        
+        catch (Exception ex)
+        {
+            await _alertService.DisplayToastAsync("错误, 导航到应用列表页面失败: " + ex.Message);
+        }
     }
 }

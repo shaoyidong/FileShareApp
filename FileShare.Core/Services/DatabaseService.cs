@@ -1,4 +1,5 @@
 using FileShare.Core.Models;
+using FileShare.Core.Models.Entities;
 using Microsoft.Data.Sqlite;
 using System.Data;
 using System.IO;
@@ -50,6 +51,16 @@ public class DatabaseService : IDatabaseService
                 ID INTEGER PRIMARY KEY AUTOINCREMENT,
                 DeviceId TEXT NOT NULL UNIQUE,
                 CreatedAt DATETIME NOT NULL
+            );
+            
+            CREATE TABLE IF NOT EXISTS ReceiveHistory (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                SenderId TEXT NOT NULL,
+                SenderDeviceName TEXT,
+                FileName TEXT NOT NULL,
+                FileSize INTEGER NOT NULL,
+                SavePath TEXT NOT NULL,
+                CreatedAt DATETIME NOT NULL
             );";
         
         connection.Execute(createTableSql);
@@ -84,6 +95,69 @@ public class DatabaseService : IDatabaseService
         connection.Execute(insertSql, newEntity);
         
         return newDeviceId;
+    }
+    
+    /// <summary>
+    /// 增加一条接收历史
+    /// </summary>
+    /// <param name="receiveHistory"></param>
+    /// <returns></returns>
+    public async Task<bool> AddSingleReceiveHistoryAsync(ReceiveHistoryEntity receiveHistory)
+    {
+        using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync();
+        
+        const string insertSql = "INSERT INTO ReceiveHistory (SenderId, SenderDeviceName, FileName, FileSize, SavePath, CreatedAt) VALUES (@SenderId, @SenderDeviceName, @FileName, @FileSize, @SavePath, @CreatedAt);";
+        var result = await connection.ExecuteAsync(insertSql, receiveHistory);
+        
+        return result > 0;
+    }
+    
+    /// <summary>
+    /// 删除一条接收历史
+    /// </summary>
+    /// <param name="id"></param>
+    /// <returns></returns>
+    public async Task<bool> DeleteSingleReceiveHistoryAsync(int id)
+    {
+        using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync();
+        
+        const string deleteSql = "DELETE FROM ReceiveHistory WHERE Id = @Id;";
+        var result = await connection.ExecuteAsync(deleteSql, new { Id = id });
+        
+        return result > 0;
+    }
+    
+    /// <summary>
+    /// 清空接收历史
+    /// </summary>
+    /// <returns></returns>
+    public async Task<bool> ClearReceiveHistoryAsync()
+    {
+        using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync();
+
+        // SQLite 不支持 TRUNCATE，使用 DELETE 清空表
+        const string deleteSql = @"DELETE FROM ReceiveHistory;
+                                   DELETE FROM sqlite_sequence WHERE name = 'ReceiveHistory';";
+        await connection.ExecuteAsync(deleteSql);
+        return true;
+    }
+    
+    /// <summary>
+    /// 获取所有接收历史
+    /// </summary>
+    /// <returns></returns>
+    public async Task<IEnumerable<ReceiveHistoryEntity>> GetAllReceiveHistoryAsync()
+    {
+        using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync();
+        
+        const string selectSql = "SELECT * FROM ReceiveHistory ORDER BY CreatedAt DESC;";
+        var result = await connection.QueryAsync<ReceiveHistoryEntity>(selectSql);
+        
+        return result;
     }
     
     /// <summary>

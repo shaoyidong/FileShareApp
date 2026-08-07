@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text;
 
@@ -17,5 +17,7 @@ namespace FileShare.Mobile.Services
         Task DisplaySnackbarAsync(string message, Action? action = null,
         string actionButtonText = "OK",
         TimeSpan? duration = null);
+
+        Task<string> DisplayActionSheetAsync(string title, string cancel, string? destruction, params string[] buttons);
     }
 }
