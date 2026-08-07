@@ -59,10 +59,10 @@ public class UdpDiscoveryServiceTests
     }
     
     /// <summary>
-    /// 测试 SendDiscoveryPacket 方法是否能正常执行（不抛出异常）
+    /// 测试 SendDiscoveryPacketAsync 方法是否能正常执行（不抛出异常）
     /// </summary>
     [Fact]
-    public void SendDiscoveryPacket_ExecutesWithoutException()
+    public async Task SendDiscoveryPacketAsync_ExecutesWithoutException()
     {
         // Arrange: 准备测试数据
         var deviceInfo = new DeviceInfo()
@@ -77,8 +77,10 @@ public class UdpDiscoveryServiceTests
         using var service = new UdpDiscoveryService(deviceInfo);
         Assert.NotNull(service);
         
-        // 这个方法应该能正常执行，不会抛出异常
-        service.SendDiscoveryPacket();
+        // 启动服务后再发送
+        await service.StartAsync();
+        await service.SendDiscoveryPacketAsync();
+        await service.StopAsync();
     }
     
     /// <summary>

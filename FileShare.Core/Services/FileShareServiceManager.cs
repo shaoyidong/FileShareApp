@@ -172,9 +172,9 @@ public class FileShareServiceManager : IFileShareServiceManager
     /// <summary>
     /// 手动刷新设备列表
     /// </summary>
-    public void RefreshDevices()
+    public async Task RefreshDevicesAsync()
     {
-        _discoveryService.SendDiscoveryPacket();
+        await _discoveryService.SendDiscoveryPacketAsync().ConfigureAwait(false);
     }
     
     /// <summary>

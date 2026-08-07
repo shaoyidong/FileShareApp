@@ -80,7 +80,7 @@ namespace FileShare.Desktop.Tests.ViewModels
 
             // Assert
             Assert.NotEqual(initialStatus, _viewModel.StatusMessage);
-            _mockServiceManager.Verify(m => m.RefreshDevices(), Times.Once);
+            _mockServiceManager.Verify(m => m.RefreshDevicesAsync(), Times.Once);
         }
 
         [Fact]

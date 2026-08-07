@@ -60,7 +60,7 @@ public interface IFileShareServiceManager : IDisposable
     /// <summary>
     /// 手动刷新设备列表
     /// </summary>
-    void RefreshDevices();
+    Task RefreshDevicesAsync();
     
     /// <summary>
     /// 处理文件传输请求

@@ -96,7 +96,7 @@ namespace FileShare.Mobile.Tests.ViewModels
             // Assert
             Assert.NotEqual(initialStatus, _viewModel.StatusMessage);
             Assert.Equal("扫描完成", _viewModel.StatusMessage);
-            _mockServiceManager.Verify(m => m.RefreshDevices(), Times.Once);
+            _mockServiceManager.Verify(m => m.RefreshDevicesAsync(), Times.Once);
         }
 
         [Fact]

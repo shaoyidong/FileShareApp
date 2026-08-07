@@ -247,7 +247,7 @@ public partial class MainPageViewModel : ViewModelBase
         {
             IsScanning = true;
             StatusMessage = "正在扫描设备...";
-            _serviceManager.RefreshDevices();
+            await _serviceManager.RefreshDevicesAsync();
             await Task.Delay(2000);
             StatusMessage = "扫描完成";
         }
