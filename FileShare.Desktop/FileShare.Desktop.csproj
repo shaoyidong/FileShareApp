@@ -58,20 +58,20 @@
 	</Target>-->
 	
 	<ItemGroup>
-		<PackageReference Include="Avalonia" Version="11.3.12" />
-		<PackageReference Include="Avalonia.Desktop" Version="11.3.12" />
-		<PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.12" />
-		<PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.12" />
+		<PackageReference Include="Avalonia" Version="11.3.19" />
+		<PackageReference Include="Avalonia.Desktop" Version="11.3.19" />
+		<PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.19" />
+		<PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.19" />
 		<!--Condition below is needed to remove Avalonia.Diagnostics package from build output in Release configuration.-->
-		<PackageReference Include="Avalonia.Diagnostics" Version="11.3.12">
+		<PackageReference Include="Avalonia.Diagnostics" Version="11.3.19">
 			<IncludeAssets Condition="'$(Configuration)' != 'Debug'">None</IncludeAssets>
 			<PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
 		</PackageReference>
-		<PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+		<PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
 		<PackageReference Include="MessageBox.Avalonia" Version="3.3.1.1" />
 		<PackageReference Include="Tmds.DBus.Protocol" Version="0.94.2" />
 		<PackageReference Include="VC-LTL" Version="5.3.1" />
-		<PackageReference Include="YY-Thunks" Version="1.2.3-Beta1" />
+		<PackageReference Include="YY-Thunks" Version="1.2.2" />
 	</ItemGroup>
 
 	<ItemGroup>
