@@ -1,9 +1,10 @@
 using FileShare.Core.Common;
 using FileShare.Core.Models;
 using FileShare.Core.Services;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using System;
 using System.Collections.Concurrent;
-using System.Diagnostics;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
@@ -24,7 +25,9 @@ public class TcpFileTransferService : IDisposable
     private const double PROGRESS_THRESHOLD = 0.5;
     private const long MaxFileSize = 100L * 1024 * 1024 * 1024; // 100GB
     private const int MaxConcurrentConnections = 50; // 最大并发连接数
+    private const int MaxConnectionsPerIp = 10; // 单个IP最大并发连接数
     private const int ReadTimeoutMs = 30000; // 读取操作超时时间
+    private const int DefaultGracefulShutdownTimeoutMs = 3000; // 优雅关闭默认等待时间
 
     private readonly int _port;
     private readonly TcpListener _listener;
@@ -34,8 +37,10 @@ public class TcpFileTransferService : IDisposable
     private readonly ConcurrentDictionary<string, TaskCompletionSource<bool>> _pendingTransferRequests; // 等待用户确认的传输请求
     private readonly ConcurrentDictionary<string, CancellationTokenSource> _transferCancellationTokens; // 传输取消令牌
     private readonly ConcurrentDictionary<string, double> _lastProgressValues;// 上次进度值，用于优化事件触发
-    private readonly ConcurrentDictionary<string, DateTime> _ipLastRequestTimes; // 每IP请求节流
+    private readonly ConcurrentDictionary<string, int> _ipConnectionCounts; // 每IP并发连接计数
     private readonly IPlatformDirectoryService _directoryService;
+    private readonly ILogger<TcpFileTransferService> _logger;
+    private int _activeTransfers; // 当前活跃传输数量（用于优雅关闭）
     private bool _disposedValue;
     private volatile bool _isStopping;
 
@@ -54,7 +59,7 @@ public class TcpFileTransferService : IDisposable
     /// </summary>
     public event Action<FileTransferInfo, string?>? OnTransferCompleted;
 
-    public TcpFileTransferService(IPlatformDirectoryService directoryService, int port = 5237)
+    public TcpFileTransferService(IPlatformDirectoryService directoryService, int port = 5237, ILogger<TcpFileTransferService>? logger = null)
     {
         _port = port;
         _listener = new TcpListener(IPAddress.Any, port);
@@ -64,8 +69,9 @@ public class TcpFileTransferService : IDisposable
         _pendingTransferRequests = new ConcurrentDictionary<string, TaskCompletionSource<bool>>();
         _transferCancellationTokens = new ConcurrentDictionary<string, CancellationTokenSource>();
         _lastProgressValues = new ConcurrentDictionary<string, double>();
-        _ipLastRequestTimes = new ConcurrentDictionary<string, DateTime>();
+        _ipConnectionCounts = new ConcurrentDictionary<string, int>();
         _directoryService = directoryService;
+        _logger = logger ?? NullLogger<TcpFileTransferService>.Instance;
     }
 
     /// <summary>
@@ -121,16 +127,65 @@ public class TcpFileTransferService : IDisposable
     {
         _listener.Start();
         _ = Task.Run(() => AcceptConnectionsAsync(_cts.Token));
+        _logger.LogInformation("文件传输服务已启动，端口 {Port}", _port);
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// 停止文件传输服务（优雅关闭）：停止接受新连接，等待活跃传输完成或超时后再强制取消
+    /// </summary>
+    public async Task StopAsync()
+    {
+        await StopAsync(TimeSpan.FromMilliseconds(DefaultGracefulShutdownTimeoutMs)).ConfigureAwait(false);
     }
 
     /// <summary>
     /// 停止文件传输服务（优雅关闭）
     /// </summary>
+    /// <param name="gracefulTimeout">等待活跃传输完成的最长时间</param>
+    public async Task StopAsync(TimeSpan gracefulTimeout)
+    {
+        _isStopping = true;
+
+        // 停止接受新连接
+        try
+        {
+            _listener.Stop();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "停止监听器时出错");
+        }
+
+        // 取消所有等待用户确认的请求
+        foreach (var tcs in _pendingTransferRequests.Values)
+        {
+            tcs?.TrySetCanceled();
+        }
+        _pendingTransferRequests.Clear();
+
+        // 等待活跃传输完成（有界等待）
+        if (Interlocked.CompareExchange(ref _activeTransfers, 0, 0) > 0)
+        {
+            _logger.LogInformation("等待 {Count} 个活跃传输完成（最多 {Timeout}ms）", _activeTransfers, gracefulTimeout.TotalMilliseconds);
+            var deadline = DateTime.UtcNow + gracefulTimeout;
+            while (Interlocked.CompareExchange(ref _activeTransfers, 0, 0) > 0 && DateTime.UtcNow < deadline)
+            {
+                await Task.Delay(100).ConfigureAwait(false);
+            }
+        }
+
+        // 强制取消尚未完成的传输
+        ForceCancelAllTransfers();
+        _logger.LogInformation("文件传输服务已停止");
+    }
+
+    /// <summary>
+    /// 立即停止文件传输服务（强制取消所有传输，不等待）
+    /// </summary>
     public void Stop()
     {
         _isStopping = true;
-        _cts.Cancel();
 
         try
         {
@@ -140,6 +195,8 @@ public class TcpFileTransferService : IDisposable
         {
         }
 
+        _cts.Cancel();
+
         // 取消所有等待中的请求
         foreach (var tcs in _pendingTransferRequests.Values)
         {
@@ -147,6 +204,14 @@ public class TcpFileTransferService : IDisposable
         }
         _pendingTransferRequests.Clear();
 
+        ForceCancelAllTransfers();
+    }
+
+    /// <summary>
+    /// 强制取消并清理所有传输资源
+    /// </summary>
+    private void ForceCancelAllTransfers()
+    {
         foreach (var cts in _transferCancellationTokens.Values)
         {
             try
@@ -161,21 +226,13 @@ public class TcpFileTransferService : IDisposable
         }
         _transferCancellationTokens.Clear();
         _incomingTransfers.Clear();
-    }
-
-    /// <summary>
-    /// 异步停止文件传输服务
-    /// </summary>
-    public Task StopAsync()
-    {
-        Stop();
-        return Task.CompletedTask;
+        _ipConnectionCounts.Clear();
     }
 
     #region 接收文件
 
     /// <summary>
-    /// 接受连接请求（带并发限制）
+    /// 接受连接请求（带全局与每IP并发限制）
     /// </summary>
     private async Task AcceptConnectionsAsync(CancellationToken cancellationToken)
     {
@@ -185,7 +242,10 @@ public class TcpFileTransferService : IDisposable
             {
                 var client = await _listener.AcceptTcpClientAsync(cancellationToken).ConfigureAwait(false);
 
-                // 并发限制：如果已达到最大连接数，直接拒绝
+                // 解析远端IP用于每IP限流
+                string? remoteIp = (client.Client.RemoteEndPoint as IPEndPoint)?.Address.ToString();
+
+                // 全局并发限制：如果已达到最大连接数，直接拒绝
                 if (!_connectionSemaphore.Wait(0))
                 {
                     try
@@ -199,6 +259,23 @@ public class TcpFileTransferService : IDisposable
                     continue;
                 }
 
+                // 每IP并发限制：防止单一主机耗尽连接资源
+                if (remoteIp != null && IncrementIpCount(remoteIp) > MaxConnectionsPerIp)
+                {
+                    DecrementIpCount(remoteIp);
+                    _connectionSemaphore.Release();
+                    try
+                    {
+                        client.Close();
+                        client.Dispose();
+                    }
+                    catch (Exception)
+                    {
+                    }
+                    _logger.LogWarning("来自 {Ip} 的并发连接超过上限 {Limit}，已拒绝", remoteIp, MaxConnectionsPerIp);
+                    continue;
+                }
+
                 _ = Task.Run(async () =>
                 {
                     try
@@ -208,6 +285,10 @@ public class TcpFileTransferService : IDisposable
                     finally
                     {
                         _connectionSemaphore.Release();
+                        if (remoteIp != null)
+                        {
+                            DecrementIpCount(remoteIp);
+                        }
                     }
                 });
             }
@@ -218,7 +299,7 @@ public class TcpFileTransferService : IDisposable
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"接受连接失败: {ex.Message}");
+            _logger.LogError(ex, "接受连接失败");
         }
     }
 
@@ -228,6 +309,7 @@ public class TcpFileTransferService : IDisposable
     private async Task HandleClientAsync(TcpClient client, CancellationToken cancellationToken)
     {
         string? senderId = null;
+        Interlocked.Increment(ref _activeTransfers);
         try
         {
             using (client)
@@ -250,7 +332,7 @@ public class TcpFileTransferService : IDisposable
                         var headerLength = BitConverter.ToInt32(headerBytes, 0);
                         if (headerLength <= 0 || headerLength > 10 * 1024 * 1024) // 请求体最大10MB
                         {
-                            Debug.WriteLine($"无效的请求头长度: {headerLength}");
+                            _logger.LogWarning("无效的请求头长度: {Length}", headerLength);
                             break;
                         }
 
@@ -285,22 +367,22 @@ public class TcpFileTransferService : IDisposable
                     catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
                     {
                         // 读取超时，关闭连接
-                        Debug.WriteLine("读取超时，关闭连接");
+                        _logger.LogDebug("读取超时，关闭连接");
                         break;
                     }
                     catch (IOException ex) when (IsConnectionReset(ex))
                     {
-                        Debug.WriteLine("客户端连接被中止: {0}", ex.Message);
+                        _logger.LogDebug("客户端连接被中止: {Message}", ex.Message);
                         break;
                     }
                     catch (OperationCanceledException)
                     {
-                        Debug.WriteLine("处理请求被取消");
+                        _logger.LogDebug("处理请求被取消");
                         break;
                     }
                     catch (Exception ex)
                     {
-                        Debug.WriteLine("处理请求失败: {0} - {1}", ex.GetType().Name, ex.Message);
+                        _logger.LogError(ex, "处理请求失败");
 
                         try
                         {
@@ -323,10 +405,11 @@ public class TcpFileTransferService : IDisposable
         }
         catch (Exception ex)
         {
-            Debug.WriteLine("处理客户端连接失败: {0} - {1}", ex.GetType().Name, ex.Message);
+            _logger.LogError(ex, "处理客户端连接失败");
         }
         finally
         {
+            Interlocked.Decrement(ref _activeTransfers);
             // 连接关闭时，根据发送方ID或IP清理接收传输数据
             if (!string.IsNullOrEmpty(senderId))
             {
@@ -552,7 +635,7 @@ public class TcpFileTransferService : IDisposable
                 }
 
                 try
-                {                   
+                {
                     await SendErrorResponseAsync(transferInfo.TransferId, stream, "文件接收失败: 传输中断", cts.Token).ConfigureAwait(false);
                 }
                 catch (Exception)
@@ -577,7 +660,7 @@ public class TcpFileTransferService : IDisposable
             }
 
             try
-            {                
+            {
                 await SendErrorResponseAsync(transferInfo.TransferId, stream, "文件接收失败: " + ex.Message, cts.Token).ConfigureAwait(false);
 
             }
@@ -620,7 +703,7 @@ public class TcpFileTransferService : IDisposable
 
         // 发送取消响应给发送方
         try
-        {            
+        {
             await SendErrorResponseAsync(transferInfo.TransferId, stream, "传输被接收方取消", _cts.Token).ConfigureAwait(false);
         }
         catch (Exception)
@@ -675,7 +758,7 @@ public class TcpFileTransferService : IDisposable
         {
             if (!File.Exists(filePath))
             {
-                Debug.WriteLine("文件不存在: {0}", filePath);
+                _logger.LogWarning("文件不存在: {Path}", filePath);
                 return false;
             }
 
@@ -763,14 +846,14 @@ public class TcpFileTransferService : IDisposable
                                     }
                                     else
                                     {
-                                        Debug.WriteLine("文件传输被接收方拒绝: {0}", response?.Message);
+                                        _logger.LogWarning("文件传输被接收方拒绝: {Message}", response?.Message);
                                     }
                                 }
                             }
                         }
                         else
                         {
-                            Debug.WriteLine("文件请求被接收方拒绝: {0}", response?.Message);
+                            _logger.LogWarning("文件请求被接收方拒绝: {Message}", response?.Message);
                         }
                     }
                 }
@@ -802,7 +885,7 @@ public class TcpFileTransferService : IDisposable
         }
         catch (IOException ex) when (IsConnectionReset(ex))
         {
-            Debug.WriteLine("连接被接收方中断: {0}", ex.Message);
+            _logger.LogWarning("连接被接收方中断: {Message}", ex.Message);
             if (transferInfo != null)
             {
                 transferInfo.Status = TransferStatus.Failed;
@@ -812,7 +895,7 @@ public class TcpFileTransferService : IDisposable
         }
         catch (Exception ex)
         {
-            Debug.WriteLine("文件传输失败: {0} - {1}", ex.GetType().Name, ex.Message);
+            _logger.LogError(ex, "文件传输失败");
             if (transferInfo != null)
             {
                 transferInfo.Status = TransferStatus.Failed;
@@ -987,6 +1070,22 @@ public class TcpFileTransferService : IDisposable
             // 重置超时时间，只要有进度更新就不触发超时
             timeoutCts?.CancelAfter(TimeSpan.FromMilliseconds(REQUEST_TIMEOUT_MS));
         }
+    }
+
+    /// <summary>
+    /// 原子递增某IP的连接计数，返回递增后的值
+    /// </summary>
+    private int IncrementIpCount(string ip)
+    {
+        return _ipConnectionCounts.AddOrUpdate(ip, 1, (_, c) => c + 1);
+    }
+
+    /// <summary>
+    /// 原子递减某IP的连接计数（不低于0）
+    /// </summary>
+    private void DecrementIpCount(string ip)
+    {
+        _ipConnectionCounts.AddOrUpdate(ip, 0, (_, c) => c > 0 ? c - 1 : 0);
     }
 
     protected virtual void Dispose(bool disposing)

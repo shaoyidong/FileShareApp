@@ -85,12 +85,16 @@ options =>
                              isMobileOs ? Core.Models.DeviceType.Mobile :
                              Core.Models.DeviceType.Desktop;
 
+            // 从 DI 容器获取日志工厂（DEBUG 下已注册 AddDebug），未注册时返回 null（使用 NullLogger）
+            var loggerFactory = serviceProvider.GetService<ILoggerFactory>();
+
             // 根据需要把 isTablet 用于不同的逻辑：例如传不同 DeviceType 或启用不同 UI/行为
             return new FileShareServiceManager(
                 platformDirectoryService,
                 databaseService,
                 Microsoft.Maui.Devices.DeviceInfo.Name,
-                deviceType);
+                deviceType,
+                loggerFactory: loggerFactory);
         });
 
         builder.Services.AddSingleton<INavigation>((serviceProvider) => Microsoft.Maui.Controls.Application.Current?.Windows?.FirstOrDefault()?.Navigation!);

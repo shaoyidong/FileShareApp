@@ -170,16 +170,45 @@
 ## 实施路线图
 
 ### 第一阶段（立即实施）
-- [ ] P0: 修复 Dispose 同步阻塞、.Wait()、嵌套锁、异常过滤器、输入校验
-- [ ] P1: ConcurrentDictionary 替换、SemaphoreSlim 并发限制、移除 DataAvailable 轮询
+- [x] P0: 修复 Dispose 同步阻塞、.Wait()、嵌套锁、异常过滤器、输入校验
+- [x] P1: ConcurrentDictionary 替换、SemaphoreSlim 并发限制、移除 DataAvailable 轮询
+- [x] P1: 每 IP 并发连接上限（补充实现）、移除死代码 `_ipLastRequestTimes`
 
 ### 第二阶段（后续迭代）
-- [ ] P1: 引入 ILogger、多网卡 IP 支持
-- [ ] P2: 文件校验、优雅关闭
+- [x] P1: 引入 ILogger（`Microsoft.Extensions.Logging.Abstractions`，可选注入，默认 `NullLogger`，Desktop/Mobile 已接线）
+- [x] P1: 多网卡 IP 支持（`NetworkInterface` 枚举 + 网关优先排序）
+- [x] P2: 文件校验（SHA256）、优雅关闭（停止接受 → 等待活跃传输 → 强制取消）
+- [x] P3: 多网卡定向广播（枚举子网，`ip | ~mask`，兜底有限广播）
 
-### 第三阶段（长期目标）
-- [ ] P2: TLS 加密
-- [ ] P3: mDNS、Channel 模型、多网卡广播
+### 第三阶段（长期目标，未实施）
+- [ ] P2: TLS 加密传输（`SslStream`，需证书交换设计）
+- [ ] P3: mDNS/SSDP 替代发现机制
+- [ ] P3: 基于 `Channel<T>` 的生产者-消费者背压模型
+
+---
+
+## 补充优化（实施过程中发现并修复，原计划未列出）
+
+### A.1 修复手动刷新失效 Bug（P0 正确性）
+**文件**: `FileShare.Core/Network/UdpDiscoveryService.cs`
+- **问题**: `SendDiscoveryPacketAsync()` 原守卫为 `if (_isRunning || ...)`，在服务运行时直接返回，导致 `FileShareServiceManager.RefreshDevicesAsync()` 手动刷新完全失效（被测试以"不抛异常"掩盖）。
+- **修复**: 改为 `if (!_isRunning || _isDisposed || _udpClient == null) return;`，仅在运行时发送。
+
+### A.2 UDP 发送串行化（健壮性）
+**文件**: `FileShare.Core/Network/UdpDiscoveryService.cs`
+- **问题**: 自动广播、回应、手动刷新三处可能并发调用 `UdpClient.SendAsync`，存在释放时序竞争。
+- **修复**: 引入 `SemaphoreSlim _sendLock`，统一通过 `SendLockedAsync()` 序列化所有发送。
+
+### A.3 每并 IP 发连接上限（原 2.2 计划的"每 IP 速率限制"落地）
+**文件**: `FileShare.Core/Network/TcpFileTransferService.cs`
+- **问题**: 仅有全局并发上限，单一主机可耗尽全部 50 个连接；`_ipLastRequestTimes` 字段为死代码。
+- **修复**: 新增 `_ipConnectionCounts`（`ConcurrentDictionary<string,int>`），单 IP 最大并发 10；移除死代码字段。
+
+### A.4 异步释放 IAsyncDisposable
+**文件**: `FileShare.Core/Services/FileShareServiceManager.cs` / `IFileShareServiceManager.cs`
+- **问题**: `Dispose()` 仍以 `Task.Run().GetAwaiter().GetResult()` 同步阻塞。
+- **修复**: 接口与实现新增 `IAsyncDisposable`，推荐 `DisposeAsync()` 异步停止；保留同步 `Dispose()` 作为回退。
+
 
 ---
 

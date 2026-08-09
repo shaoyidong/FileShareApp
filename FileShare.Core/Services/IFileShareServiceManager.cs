@@ -7,7 +7,7 @@ namespace FileShare.Core.Services;
 /// <summary>
 /// 文件共享服务管理器接口
 /// </summary>
-public interface IFileShareServiceManager : IDisposable
+public interface IFileShareServiceManager : IDisposable, IAsyncDisposable
 {
     /// <summary>
     /// 设备列表更新事件

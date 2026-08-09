@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -16,11 +16,12 @@
     <IsAotCompatible>True</IsAotCompatible>
   </PropertyGroup>
 
-  <ItemGroup>   
+  <ItemGroup>
     <PackageReference Include="Dapper.AOT" Version="1.0.48" />
     <PackageReference Include="Microsoft.Data.Sqlite.Core" Version="10.0.3" />
     <PackageReference Include="Dapper" Version="2.1.66" />
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.2" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.3" />
   </ItemGroup>
 
 </Project>

@@ -8,6 +8,7 @@ using FileShare.Core.Services;
 using FileShare.Desktop.Services;
 using FileShare.Desktop.ViewModels;
 using FileShare.Desktop.Views;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
@@ -50,13 +51,25 @@ namespace FileShare.Desktop
                 var fileShareDirectory = Path.Combine(appDataDirectory, "FileShare");
                 var databasePath = Path.Combine(fileShareDirectory, "fileshare.db");
                 var databaseService = new DatabaseService(databasePath);
-                
+
+                // 创建日志工厂（Debug 配置输出到调试器，Release 不附加提供程序即静默）
+                using var loggerFactory = Microsoft.Extensions.Logging.LoggerFactory.Create(builder =>
+                {
+#if DEBUG
+                    builder.AddDebug();
+                    builder.SetMinimumLevel(Microsoft.Extensions.Logging.LogLevel.Debug);
+#else
+                    builder.SetMinimumLevel(Microsoft.Extensions.Logging.LogLevel.Warning);
+#endif
+                });
+
                 // 创建服务管理器实例
                 var serviceManager = new FileShareServiceManager(
                     new DesktopDirectoryService(),
                     databaseService,
                     Environment.MachineName,
-                    FileShare.Core.Models.DeviceType.Desktop);
+                    FileShare.Core.Models.DeviceType.Desktop,
+                    loggerFactory: loggerFactory);
                 
                 // 创建对话框服务实例
                 var dialogService = new DialogService(desktop);
