@@ -1310,6 +1310,10 @@ public class TcpFileTransferService : IDisposable
                 {
                     await stream.WriteAsync(buffer, 0, length, linkedCts.Token).ConfigureAwait(false);
                 }
+                catch
+                {
+                    throw;
+                }
                 finally
                 {
                     // 无论写入成功或取消，都归还缓冲区
@@ -1326,8 +1330,17 @@ public class TcpFileTransferService : IDisposable
         {
             // 取消（本地取消或接收方取消），由返回值与上层判断来源
         }
+        catch (Exception ex) when (ex is not ChannelClosedException) // 捕获所有其他异常
+        {
+            // 关键修复：网络异常导致消费者失败，立即取消所有关联任务
+            _logger.LogError(ex, "消费者写入网络失败，正在取消整个传输");
+            linkedCts.Cancel(); // 触发生产者 WriteAsync 取消，触发监听任务取消
+            throw; // 继续向上抛出异常
+        }
         catch (ChannelClosedException ex) when (ex.InnerException != null)
         {
+            // 生产者异常，同样取消监听任务（防止泄漏）
+            linkedCts.Cancel();
             // 生产者异常导致 Channel 关闭，向上抛出原始异常
             throw ex.InnerException;
         }
@@ -1350,9 +1363,13 @@ public class TcpFileTransferService : IDisposable
         {
             await monitorTask.ConfigureAwait(false);
         }
-        catch
+        catch (OperationCanceledException)
         {
-            // 监听任务异常已忽略（错误路径由上层统一处理）
+            // 监听任务因取消而退出，正常
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "监听任务异常退出");
         }
 
         return (!receiverCancelled, preReadResponse);
