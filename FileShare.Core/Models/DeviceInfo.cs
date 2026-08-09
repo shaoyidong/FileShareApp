@@ -34,6 +34,11 @@ public class DeviceInfo
     /// 最后在线时间
     /// </summary>
     public DateTime LastSeen { get; set; }
+
+    /// <summary>
+    /// 是否支持 TLS 加密传输。通过发现协议广播，发送方据此决定是否升级到 SslStream。
+    /// </summary>
+    public bool SupportsTls { get; set; }
 }
 
 /// <summary>

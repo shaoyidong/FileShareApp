@@ -12,7 +12,7 @@ using System.Text.Json;
 namespace FileShare.Core.Network;
 
 /// <summary>
-/// UDP设备发现服务
+/// UDP设备发现服务（优化版：默认仅用于快速初探，减少背景流量）
 /// </summary>
 public class UdpDiscoveryService : IDisposable
 {
@@ -26,15 +26,14 @@ public class UdpDiscoveryService : IDisposable
     private const int FastDiscoveryCount = 5; // 快速发现阶段的广播次数
 
     // 设备过期时间
-    private const int DeviceExpirySeconds = 20; // 设备过期时间
+    private const int DeviceExpirySeconds = 20;
 
-    // 回应消息节流
-    private const int MinResponseIntervalMs = 500; // 最小回应间隔
+    // 回应节流
+    private const int MinResponseIntervalMs = 500;
 
-    // 最大允许设备数量（防止恶意广播耗尽内存）
+    // 最大设备数
     private const int MaxDiscoveredDevices = 200;
 
-    // 并发集合
     private readonly ConcurrentDictionary<string, DateTime> _lastResponseTimes = new();
     private readonly ConcurrentDictionary<string, DeviceInfo> _discoveredDevices = new();
 
@@ -47,32 +46,133 @@ public class UdpDiscoveryService : IDisposable
     private readonly CancellationTokenSource _cts;
     private readonly DeviceInfo _localDevice;
     private readonly ILogger<UdpDiscoveryService> _logger;
-    private readonly SemaphoreSlim _sendLock = new(1, 1); // 序列化所有 UDP 发送，避免并发 SendAsync 竞争
-    private int _broadcastCount = 0;// 广播计数器
-    private volatile int _currentBroadcastIntervalMs = InitialBroadcastIntervalMs;// 当前广播间隔
-    private volatile bool _isRunning;// 服务运行状态
-    private volatile bool _isDisposed;// 资源是否已释放
+    private readonly SemaphoreSlim _sendLock = new(1, 1);
+
+    private readonly bool _enablePeriodicBroadcast;  // 是否允许后台周期性广播
+    private volatile bool _isRunning;
+    private volatile bool _isDisposed;
+    private volatile bool _fallbackMode;             // 降级模式标志
+
+    // 后台循环任务的控制
+    private Task? _periodicTask;    
 
     /// <summary>
-    /// 发现设备时触发的事件
+    /// 发现设备时触发
     /// </summary>
     public event Action<DeviceInfo>? OnDeviceDiscovered;
 
     /// <summary>
-    /// 设备离线时触发的事件
+    /// 设备离线时触发
     /// </summary>
     public event Action<DeviceInfo>? OnDeviceRemoved;
 
-    public UdpDiscoveryService(DeviceInfo localDevice, ILogger<UdpDiscoveryService>? logger = null)
+    /// <summary>
+    /// 构造UDP发现服务
+    /// </summary>
+    /// <param name="localDevice">本机设备信息</param>
+    /// <param name="logger">日志</param>
+    /// <param name="enablePeriodicBroadcast">是否启用后台周期性广播（默认false，仅快速探测）</param>
+    public UdpDiscoveryService(DeviceInfo localDevice, ILogger<UdpDiscoveryService>? logger = null, bool enablePeriodicBroadcast = false)
     {
         _localDevice = localDevice;
         _logger = logger ?? NullLogger<UdpDiscoveryService>.Instance;
+        _enablePeriodicBroadcast = enablePeriodicBroadcast;
         _udpClient = new UdpClient();
         _udpClient.EnableBroadcast = true;
         _broadcastEndPoint = new IPEndPoint(IPAddress.Broadcast, DiscoveryPort);
         _cts = new CancellationTokenSource();
-        _isDisposed =false;
+    }    
+
+    /// <summary>
+    /// 启动服务：绑定端口，开始监听，并执行快速发现（连续发送几次广播）
+    /// </summary>
+    public async Task StartAsync()
+    {
+        if (_isRunning || _isDisposed) return;
+
+        _isRunning = true;
+        _fallbackMode = false;
+        _failedBroadcasts = 0;
+
+        if (_udpClient == null)
+        {
+            _udpClient = new UdpClient();
+            _udpClient.EnableBroadcast = true;
+        }
+
+        try
+        {
+            _udpClient.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
+            _udpClient.Client.Bind(new IPEndPoint(IPAddress.Any, DiscoveryPort));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "绑定UDP端口 {Port} 失败，发现服务不可用", DiscoveryPort);
+            _isRunning = false;
+            return;
+        }
+
+        _logger.LogInformation("UDP发现服务已启动，端口 {Port} (周期性广播: {Periodic})", DiscoveryPort, _enablePeriodicBroadcast);
+
+        // 启动监听任务（始终运行）
+        _ = Task.Run(() => ListenForBroadcastsAsync(_cts.Token));
+
+        _ = Task.Run(() => CleanupExpiredDevicesLoopAsync(_cts.Token));
+
+        // 快速发现：连续发送若干次广播，快速发现周边设备
+        _ = Task.Run(() => SendFastBroadcastsAsync(FastDiscoveryCount, InitialBroadcastIntervalMs, _cts.Token));
+
+        // 如果启用了后台周期性广播，则启动循环任务
+        if (_enablePeriodicBroadcast)
+        {
+            _periodicTask = Task.Run(() => SendPeriodicBroadcastsAsync(_cts.Token));
+        }
+        // 否则不启动周期性发送，仅靠快速探测和外部手动触发
+    }   
+
+    /// <summary>
+    /// 停止服务，发送Goodbye（可选）并释放资源
+    /// </summary>
+    public async Task StopAsync()
+    {
+        if (!_isRunning || _isDisposed) return;
+        _isRunning = false;
+        _cts.Cancel();
+
+        if (_periodicTask != null)
+        {
+            try { await _periodicTask.ConfigureAwait(false); } catch { }
+            _periodicTask = null;
+        }
+
+        await Task.Delay(50).ConfigureAwait(false);
+        ReleaseResources();
+        _logger.LogInformation("UDP发现服务已停止");
     }
+
+    /// <summary>
+    /// 快速连续发送若干次广播
+    /// </summary>
+    private async Task SendFastBroadcastsAsync(int count, int intervalMs, CancellationToken cancellationToken)
+    {
+        if (_udpClient == null) return;
+        for (int i = 0; i < count && !cancellationToken.IsCancellationRequested && !_isDisposed; i++)
+        {
+            try
+            {
+                var data = BuildDiscoveryPacket();
+                await SendToAllBroadcastsAsync(data, cancellationToken).ConfigureAwait(false);
+                if (i < count - 1)
+                    await Task.Delay(intervalMs, cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) { break; }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "快速发送广播失败 (第{Count}次)", i + 1);
+            }
+        }
+    }
+
 
     /// <summary>
     /// 异步发送发现数据包（手动刷新时调用）
@@ -93,91 +193,26 @@ public class UdpDiscoveryService : IDisposable
         }
     }
 
+
     /// <summary>
-    /// 启动设备发现服务
+    /// 启用降级模式：当mDNS不可用时，开启后台周期性广播（5~15秒一次）
     /// </summary>
-    public Task StartAsync()
+    public void EnableFallbackMode()
     {
+        if (_isDisposed || !_isRunning) return;
+        if (_fallbackMode) return;
 
-            if (_isRunning || _isDisposed) return Task.CompletedTask;
+        _fallbackMode = true;
+        _logger.LogWarning("UDP发现服务切换到降级模式，开始周期性广播");
 
-            _isRunning = true;
-        _broadcastCount = 0;
-        _currentBroadcastIntervalMs = InitialBroadcastIntervalMs;
-        _failedBroadcasts = 0;
+        // 如果已有周期性任务则无需重复启动
+        if (_periodicTask != null && !_periodicTask.IsCompleted) return;
 
-            // 在StartAsync中才绑定端口，避免端口占用问题
-        if (_udpClient == null)
-        {
-            _udpClient = new UdpClient();
-            _udpClient.EnableBroadcast = true;
-        }
-
-        try
-        {
-            _udpClient.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
-            _udpClient.Client.Bind(new IPEndPoint(IPAddress.Any, DiscoveryPort));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "绑定端口失败");
-                _isRunning = false;
-            return Task.CompletedTask;
-        }
-
-        _logger.LogInformation("设备发现服务已启动，端口 {Port}", DiscoveryPort);
-
-        // 开始监听广播消息
-        _ = Task.Run(() => ListenForBroadcastsAsync(_cts.Token));
-
-        // 开始发送广播消息
-        _ = Task.Run(() => SendBroadcastsAsync(_cts.Token));
-
-        return Task.CompletedTask;
-    }
+        _periodicTask = Task.Run(() => SendPeriodicBroadcastsAsync(_cts.Token));
+    }   
 
     /// <summary>
-    /// 停止设备发现服务
-    /// </summary>
-    public async Task StopAsync()
-    {
-        if (!_isRunning || _isDisposed) return;
-        _isRunning = false;
-        _cts.Cancel();
-
-        // 等待异步操作完成
-        await Task.Delay(100).ConfigureAwait(false);
-
-        // 安全释放资源
-        ReleaseResources();
-        _logger.LogInformation("设备发现服务已停止");
-    }
-
-    /// <summary>
-    /// 安全释放UdpClient资源
-    /// </summary>
-    private void ReleaseResources()
-    {
-        if (_udpClient != null)
-        {
-            try
-            {
-                _udpClient.Close();
-                _udpClient.Dispose();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "释放UdpClient资源失败");
-            }
-            finally
-            {
-                _udpClient = null;
-            }
-        }
-    }
-
-    /// <summary>
-    /// 监听广播消息
+    /// 监听广播并回应
     /// </summary>
     private async Task ListenForBroadcastsAsync(CancellationToken cancellationToken)
     {
@@ -206,12 +241,11 @@ public class UdpDiscoveryService : IDisposable
                                 deviceInfo.IpAddress = result.RemoteEndPoint.Address.ToString();
                                 deviceInfo.LastSeen = DateTime.Now;
 
-                                // 使用 ConcurrentDictionary 原子操作更新或添加设备
-                                var existingDevice = _discoveredDevices.GetOrAdd(deviceInfo.DeviceId, deviceInfo);
-                                if (!ReferenceEquals(existingDevice, deviceInfo))
+                                var existing = _discoveredDevices.GetOrAdd(deviceInfo.DeviceId, deviceInfo);
+                                if (!ReferenceEquals(existing, deviceInfo))
                                 {
-                                    existingDevice.LastSeen = DateTime.Now;
-                                    existingDevice.IpAddress = deviceInfo.IpAddress;
+                                    existing.LastSeen = DateTime.Now;
+                                    existing.IpAddress = deviceInfo.IpAddress;
                                 }
                                 else
                                 {
@@ -220,15 +254,11 @@ public class UdpDiscoveryService : IDisposable
 
                                 // 检查设备数量上限
                                 if (_discoveredDevices.Count > MaxDiscoveredDevices)
-                                {
                                     CleanupExpiredDevices();
-                                }
 
-                                // 智能发送回应消息（节流）
+                                // 回应对方（节流）
                                 if (!cancellationToken.IsCancellationRequested && !_isDisposed && _udpClient != null)
-                                {
                                     await SendResponseWithThrottlingAsync(result.RemoteEndPoint).ConfigureAwait(false);
-                                }
                             }
                         }
                         catch (Exception ex)
@@ -237,121 +267,85 @@ public class UdpDiscoveryService : IDisposable
                         }
                     }
                 }
-                catch (OperationCanceledException)
-                {
-                    // 正常取消，退出循环
-                    break;
-                }
+                catch (OperationCanceledException) { break; }
                 catch (Exception ex)
                 {
                     if (!cancellationToken.IsCancellationRequested && !_isDisposed)
-                    {
-                        _logger.LogWarning(ex, "接收广播消息失败");
-                    }
-                    // 短暂延迟后继续尝试
+                        _logger.LogWarning(ex, "接收广播失败");
                     await Task.Delay(100, cancellationToken).ConfigureAwait(false);
                 }
             }
         }
-        catch (OperationCanceledException)
-        {
-            // 正常取消
-        }
+        catch (OperationCanceledException) { }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "监听广播线程异常");
+            _logger.LogError(ex, "监听线程异常");
         }
     }
 
     /// <summary>
-    /// 发送广播消息
+    /// 后台周期性广播（仅在降级模式或显式启用时运行）
     /// </summary>
-    private async Task SendBroadcastsAsync(CancellationToken cancellationToken)
+    private async Task SendPeriodicBroadcastsAsync(CancellationToken cancellationToken)
     {
-        try
-        {
-            while (!cancellationToken.IsCancellationRequested && !_isDisposed && _udpClient != null)
-            {
-                try
-                {                   
-                    var data = BuildDiscoveryPacket();
+        int interval = StableBroadcastIntervalMs;
+        _failedBroadcasts = 0;
 
-                    await SendToAllBroadcastsAsync(data, cancellationToken).ConfigureAwait(false);
+        while (!cancellationToken.IsCancellationRequested && !_isDisposed && _udpClient != null)
+        {
+            try
+            {
+                var data = BuildDiscoveryPacket();
+                await SendToAllBroadcastsAsync(data, cancellationToken).ConfigureAwait(false);
 
                     // 重置失败计数
-                    _failedBroadcasts = 0;
+                _failedBroadcasts = 0;               
 
-                    CleanupExpiredDevices();
-                    // 调整广播间隔
-                    AdjustBroadcastInterval();
+                // 动态调整间隔：根据发现的设备数量
+                int deviceCount = _discoveredDevices.Count;
+                if (deviceCount == 0)
+                    interval = Math.Min(StableBroadcastIntervalMs, interval);
+                else if (deviceCount <= 1)
+                    interval = StableBroadcastIntervalMs;
+                else
+                    interval = Math.Min(StableBroadcastIntervalMs * 2, MaxBroadcastIntervalMs);
 
-                    await Task.Delay(_currentBroadcastIntervalMs, cancellationToken).ConfigureAwait(false);
-                }
-                catch (OperationCanceledException)
+                await Task.Delay(interval, cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) { break; }
+            catch (Exception ex)
+            {
+                if (!cancellationToken.IsCancellationRequested && !_isDisposed)
                 {
-                    // 正常取消，退出循环
-                    break;
-                }
-                catch (Exception ex)
-                {
-                    if (!cancellationToken.IsCancellationRequested && !_isDisposed)
-                    {
-                        _logger.LogWarning(ex, "发送广播消息失败");
-                        _failedBroadcasts++;
+                    _logger.LogWarning(ex, "周期性广播失败");
+                    _failedBroadcasts++;
 
                         // 网络拥塞检测
                         if (_failedBroadcasts >= MaxFailedBroadcasts)
-                        {
-                            _currentBroadcastIntervalMs = Math.Min(_currentBroadcastIntervalMs * 2, MaxBroadcastIntervalMs);
-                            _logger.LogWarning("网络可能拥塞，增加广播间隔到 {Interval}ms", _currentBroadcastIntervalMs);
-                            _failedBroadcasts = 0;
-                        }
+                    {
+                        interval = Math.Min(interval * 2, MaxBroadcastIntervalMs);
+                        _logger.LogWarning("广播连续失败，增加间隔至 {Interval}ms", interval);
+                        _failedBroadcasts = 0;
                     }
-                    // 短暂延迟后继续尝试
-                    await Task.Delay(100, cancellationToken).ConfigureAwait(false);
                 }
+                await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
             }
-        }
-        catch (OperationCanceledException)
-        {
-            // 正常取消
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "发送广播线程异常");
         }
     }
 
-    /// <summary>
-    /// 调整广播间隔
-    /// </summary>
-    private void AdjustBroadcastInterval()
+    private async Task CleanupExpiredDevicesLoopAsync(CancellationToken cancellationToken)
     {
-        Interlocked.Increment(ref _broadcastCount);
-
-            // 快速发现阶段
-        if (_broadcastCount <= FastDiscoveryCount)
+        while (!cancellationToken.IsCancellationRequested && !_isDisposed)
         {
-            _currentBroadcastIntervalMs = InitialBroadcastIntervalMs;
-        }
-            // 稳定阶段
-        else
-        {
-            int deviceCount = _discoveredDevices.Count;
-
-            if (deviceCount == 0)
-            {
-                    // 没有发现设备，保持较短间隔
-                _currentBroadcastIntervalMs = Math.Min(StableBroadcastIntervalMs, _currentBroadcastIntervalMs);
+            try
+            {                
+                CleanupExpiredDevices();
+                await Task.Delay(StableBroadcastIntervalMs, cancellationToken).ConfigureAwait(false);
             }
-            else if (deviceCount <= 1)
+            catch (OperationCanceledException) { break; }
+            catch (Exception ex)
             {
-                _currentBroadcastIntervalMs = StableBroadcastIntervalMs;
-            }
-            else
-            {
-                    // 发现多个设备，使用较长间隔
-                _currentBroadcastIntervalMs = Math.Min(StableBroadcastIntervalMs * 2, MaxBroadcastIntervalMs);
+                _logger.LogWarning(ex, "清理过期设备失败");
             }
         }
     }
@@ -364,17 +358,11 @@ public class UdpDiscoveryService : IDisposable
         var deviceKey = remoteEndPoint.Address.ToString();
         var now = DateTime.Now;
 
-        // 原子检查并更新节流时间
-        if (_lastResponseTimes.TryGetValue(deviceKey, out var lastResponseTime))
+        if (_lastResponseTimes.TryGetValue(deviceKey, out var last))
         {
-            var timeSinceLastResponse = now - lastResponseTime;
-            if (timeSinceLastResponse.TotalMilliseconds < MinResponseIntervalMs)
-            {
-                    // 未到最小回应间隔，跳过
+            if ((now - last).TotalMilliseconds < MinResponseIntervalMs)
                 return;
-            }
         }
-
         _lastResponseTimes[deviceKey] = now;
         await SendResponseAsync(remoteEndPoint).ConfigureAwait(false);
     }
@@ -385,7 +373,6 @@ public class UdpDiscoveryService : IDisposable
     private async Task SendResponseAsync(IPEndPoint remoteEndPoint)
     {
         if (_isDisposed || _udpClient == null) return;
-
         try
         {
             var data = BuildDiscoveryPacket();
@@ -393,7 +380,7 @@ public class UdpDiscoveryService : IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "发送回应消息失败");
+            _logger.LogWarning(ex, "发送回应失败");
         }
     }
 
@@ -403,16 +390,14 @@ public class UdpDiscoveryService : IDisposable
     private void CleanupExpiredDevices()
     {
         var now = DateTime.Now;
-        var cutoffTime = now.AddSeconds(-DeviceExpirySeconds);
+        var cutoff = now.AddSeconds(-DeviceExpirySeconds);
 
         foreach (var kvp in _discoveredDevices)
         {
-            if (kvp.Value.LastSeen < cutoffTime)
+            if (kvp.Value.LastSeen < cutoff)
             {
                 if (_discoveredDevices.TryRemove(kvp.Key, out var device))
-                {
                     OnDeviceRemoved?.Invoke(device);
-                }
             }
         }
 
@@ -420,18 +405,48 @@ public class UdpDiscoveryService : IDisposable
         foreach (var kvp in _lastResponseTimes)
         {
             if ((now - kvp.Value).TotalSeconds > DeviceExpirySeconds)
-            {
                 _lastResponseTimes.TryRemove(kvp.Key, out _);
-            }
         }
     }
 
+    public List<DeviceInfo> GetDiscoveredDevices() => _discoveredDevices.Values.ToList();
+
     /// <summary>
-    /// 获取当前发现的设备列表
+    /// 注册由外部发现机制（如 mDNS）发现的设备，纳入统一的设备表与过期清理。
+    /// <para>首次见到该设备时触发 OnDeviceDiscovered；已存在则更新 LastSeen 等字段（不重复触发事件）。</para>
     /// </summary>
-    public List<DeviceInfo> GetDiscoveredDevices()
+    public void RegisterExternalDevice(DeviceInfo deviceInfo)
     {
-        return _discoveredDevices.Values.ToList();
+        if (deviceInfo == null || string.IsNullOrEmpty(deviceInfo.DeviceId)) return;
+        if (deviceInfo.DeviceId == _localDevice.DeviceId) return;
+
+        // 检查设备数量上限，避免恶意/异常源耗尽内存
+        if (_discoveredDevices.Count > MaxDiscoveredDevices)
+            CleanupExpiredDevices();
+
+        var existing = _discoveredDevices.GetOrAdd(deviceInfo.DeviceId, deviceInfo);
+        if (!ReferenceEquals(existing, deviceInfo))
+        {
+            existing.LastSeen = DateTime.Now;
+            existing.IpAddress = deviceInfo.IpAddress;
+            existing.Port = deviceInfo.Port;
+            existing.SupportsTls = deviceInfo.SupportsTls;
+            if (!string.IsNullOrEmpty(deviceInfo.DeviceName))
+                existing.DeviceName = deviceInfo.DeviceName;
+        }
+        else
+        {
+            OnDeviceDiscovered?.Invoke(deviceInfo);
+        }
+    }
+
+    public void RemoveExternalDevice(DeviceInfo deviceInfo)
+    {
+        if (deviceInfo == null || string.IsNullOrEmpty(deviceInfo.DeviceId)) return;
+        if (deviceInfo.DeviceId == _localDevice.DeviceId) return;
+
+        if (_discoveredDevices.TryRemove(deviceInfo.DeviceId, out var device))
+            OnDeviceRemoved?.Invoke(device);
     }
 
     /// <summary>
@@ -451,25 +466,17 @@ public class UdpDiscoveryService : IDisposable
     {
         var endpoints = GetBroadcastEndpoints();
         foreach (var endpoint in endpoints)
-        {
             await SendLockedAsync(data, endpoint, cancellationToken).ConfigureAwait(false);
-        }
     }
 
-    /// <summary>
-    /// 序列化发送，避免在同一个 UdpClient 上并发 SendAsync 导致的竞争与释放时序问题
-    /// </summary>
     private async Task SendLockedAsync(byte[] data, IPEndPoint endpoint, CancellationToken cancellationToken)
     {
         if (_isDisposed || _udpClient == null) return;
-
         await _sendLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             if (!_isDisposed && _udpClient != null)
-            {
                 await _udpClient.SendAsync(data, data.Length, endpoint).ConfigureAwait(false);
-            }
         }
         finally
         {
@@ -483,7 +490,6 @@ public class UdpDiscoveryService : IDisposable
     private List<IPEndPoint> GetBroadcastEndpoints()
     {
         var endpoints = new List<IPEndPoint>();
-
         try
         {
             foreach (var nic in NetworkInterface.GetAllNetworkInterfaces())
@@ -501,9 +507,7 @@ public class UdpDiscoveryService : IDisposable
 
                     var broadcast = GetDirectedBroadcast(addr.Address, mask);
                     if (broadcast != null)
-                    {
                         endpoints.Add(new IPEndPoint(broadcast, DiscoveryPort));
-                    }
                 }
             }
         }
@@ -514,8 +518,6 @@ public class UdpDiscoveryService : IDisposable
 
         // 始终包含有限广播作为兜底（部分平台/驱动不发送定向广播）
         endpoints.Add(_broadcastEndPoint);
-
-        // 去重（定向广播可能与有限广播重叠，或多个网卡返回相同地址）
         return endpoints.Distinct().ToList();
     }
 
@@ -527,22 +529,19 @@ public class UdpDiscoveryService : IDisposable
         var addrBytes = address.GetAddressBytes();
         var maskBytes = mask.GetAddressBytes();
         if (addrBytes.Length != 4 || maskBytes.Length != 4) return null;
-
         var bcast = new byte[4];
         for (int i = 0; i < 4; i++)
-        {
             bcast[i] = (byte)(addrBytes[i] | (byte)~maskBytes[i]);
-        }
         return new IPAddress(bcast);
     }
 
-    /// <summary>
-    /// 释放资源
-    /// </summary>
-    public void Dispose()
+    private void ReleaseResources()
     {
-        Dispose(true);
-        GC.SuppressFinalize(this);
+        if (_udpClient != null)
+        {
+            try { _udpClient.Close(); _udpClient.Dispose(); } catch { }
+            _udpClient = null;
+        }
     }
 
     /// <summary>
@@ -553,20 +552,29 @@ public class UdpDiscoveryService : IDisposable
         if (!_isDisposed)
         {
             if (disposing)
-            {
+    {
                 // 取消正在运行的任务
-                _cts.Cancel();
+        _cts.Cancel();
 
                 // 释放托管资源
-                ReleaseResources();
-                _sendLock.Dispose();
+        ReleaseResources();
+        _sendLock.Dispose();
 
                 // 释放CancellationTokenSource
-                _cts.Dispose();
+        _cts.Dispose();
             }
 
             _isDisposed = true;
         }
+    }
+
+    /// <summary>
+    /// 释放资源
+    /// </summary>
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
     }
 
     /// <summary>

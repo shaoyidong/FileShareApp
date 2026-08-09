@@ -180,10 +180,82 @@
 - [x] P2: 文件校验（SHA256）、优雅关闭（停止接受 → 等待活跃传输 → 强制取消）
 - [x] P3: 多网卡定向广播（枚举子网，`ip | ~mask`，兜底有限广播）
 
-### 第三阶段（长期目标，未实施）
-- [ ] P2: TLS 加密传输（`SslStream`，需证书交换设计）
-- [ ] P3: mDNS/SSDP 替代发现机制
-- [ ] P3: 基于 `Channel<T>` 的生产者-消费者背压模型
+### 第三阶段（已全部落地）
+- [x] P2: TLS 加密传输（`SslStream` + 自签名证书 + 指纹 TOFU + 向后兼容探测）
+- [x] P3: mDNS 服务发现（`_fileshare._tcp.local`，作为 UDP 广播的可选补充）
+- [x] P3: 基于 `Channel<T>` 的生产者-消费者背压模型（重构 `SendFileDataAsync`，移除 50ms 轮询）
+- [x] P2: 传输度量（速率 KB/s、累计字节统计，通过 `FileTransferInfo.TransferRateBytesPerSec` / `AverageRateBytesPerSec` 暴露）
+- [x] 补充：Serilog 日志实现（Desktop 与 Avalonia 日志集成，Core 仍仅依赖 `Microsoft.Extensions.Logging` 抽象）
+
+---
+
+## 第四阶段实施详情（本轮）
+
+### 4.1 Serilog 日志实现（Desktop）
+
+**涉及文件**:
+- [FileShare.Desktop/Logging/SerilogSetup.cs](file:///d:/StudyNode/localsend/FileShare.Desktop/Logging/SerilogSetup.cs)
+- [FileShare.Desktop/App.axaml.cs](file:///d:/StudyNode/localsend/FileShare.Desktop/App.axaml.cs)
+- [FileShare.Desktop/FileShare.Desktop.csproj](file:///d:/StudyNode/localsend/FileShare.Desktop/FileShare.Desktop.csproj)
+
+- **设计**：Core 层只依赖 `Microsoft.Extensions.Logging.ILogger` 抽象（AOT 安全），具体实现由宿主注入。Desktop 使用 Serilog 作为统一后端。
+- **输出**：Debug 输出窗口 + 按天滚动文件（`fileshare-YYYYMMDD.log`，保留 7 天，单文件 10MB 上限）。
+- **Avalonia 集成**：`AvaloniaSerilogSink` 实现 `Avalonia.Logging.ILogSink`，将 Avalonia 内部日志（Information 及以上）转发到 Serilog，统一日志出口。
+- **注入**：`App.axaml.cs` 创建 Serilog Logger → `LoggerFactory.Create(builder => builder.AddSerilog(...))` → 传入 `FileShareServiceManager(loggerFactory)`。
+- **NuGet**：`Serilog`、`Serilog.Sinks.File`、`Serilog.Extensions.Logging`、`Serilog.Sinks.Debug`。
+
+### 4.2 TLS 加密传输（P2）
+
+**涉及文件**:
+- [FileShare.Core/Network/Tls/TlsOptions.cs](file:///d:/StudyNode/localsend/FileShare.Core/Network/Tls/TlsOptions.cs) — 配置（Enabled / 证书目录 / 指纹库路径 / 密码 / 有效期）
+- [FileShare.Core/Network/Tls/SelfSignedCertificateProvider.cs](file:///d:/StudyNode/localsend/FileShare.Core/Network/Tls/SelfSignedCertificateProvider.cs) — 自签名证书生成与持久化
+- [FileShare.Core/Network/Tls/FingerprintStore.cs](file:///d:/StudyNode/localsend/FileShare.Core/Network/Tls/FingerprintStore.cs) — 指纹 TOFU 信任库
+- [FileShare.Core/Network/Tls/PrependedStream.cs](file:///d:/StudyNode/localsend/FileShare.Core/Network/Tls/PrependedStream.cs) — 预读字节回放流
+- [FileShare.Core/Network/TcpFileTransferService.cs](file:///d:/StudyNode/localsend/FileShare.Core/Network/TcpFileTransferService.cs) — TLS 探测/升级/校验
+
+- **协议协商**：接收方在 `_tlsEnabled` 时探测首字节：若为 `0x16 0x03`（TLS ClientHello）则升级到 `SslStream`，否则用 `PrependedStream` 回放已读字节走裸 TCP（与旧版本完全兼容）。
+- **证书策略**：每设备生成 RSA 自签名证书（CN=设备ID），持久化为 PFX。
+- **Windows Schannel 兼容**：关键修复 — 生成证书后从 PFX 重新加载（`X509KeyStorageFlags.PersistKeySet | Exportable | UserKeySet`），使私钥进入 Windows 密钥存储区，否则 Schannel 报"主机中的软件中止了一个已建立的连接"。
+- **指纹 TOFU**：首次连接记录对端证书 SHA256 指纹；后续连接指纹不一致则判定 MITM 并拒绝。存储格式 `deviceId:指纹`（纯文本，AOT 安全）。
+- **降级容错**：TLS 初始化失败时降级为裸 TCP，不阻断文件传输服务启动。
+- **握手超时**：15 秒（`TlsHandshakeTimeoutMs`），避免恶意连接挂起。
+
+### 4.3 mDNS 服务发现（P3）
+
+**涉及文件**:
+- [FileShare.Core/Network/Mdns/MdnsMessage.cs](file:///d:/StudyNode/localsend/FileShare.Core/Network/Mdns/MdnsMessage.cs) — mDNS 报文编解码（PTR/SRV/TXT/A）
+- [FileShare.Core/Network/Mdns/MdnsService.cs](file:///d:/StudyNode/localsend/FileShare.Core/Network/Mdns/MdnsService.cs) — mDNS 服务发布与发现
+- [FileShare.Core/Network/UdpDiscoveryService.cs](file:///d:/StudyNode/localsend/FileShare.Core/Network/UdpDiscoveryService.cs) — `RegisterExternalDevice` 接入 mDNS 设备
+
+- **服务类型**：`_fileshare._tcp.local`。
+- **多播**：加入 `224.0.0.251:5353`，TTL=255。
+- **行为**：启动时主动公告 + 查询；周期公告 + 过期清理（与 UDP 广播互补，提高受限网络发现成功率）。
+- **容错**：多播组绑定失败时仅记录日志降级，不影响主服务。
+- **集成**：发现设备后通过 `UdpDiscoveryService.RegisterExternalDevice` 注入统一设备列表。
+
+### 4.4 Channel<T> 背压模型（P3）
+
+**涉及文件**:
+- [FileShare.Core/Network/TcpFileTransferService.cs](file:///d:/StudyNode/localsend/FileShare.Core/Network/TcpFileTransferService.cs) — `SendFileDataAsync`
+
+- **模型**：生产者（读文件 → 写 Channel）+ 消费者（读 Channel → 写网络），容量 4。
+- **收益**：天然背压（网络慢时阻塞读文件，避免内存膨胀）；移除原 50ms 轮询取消检查，CPU 与延迟双降。
+- **取消**：Channel 关闭 + CancellationToken 协同，取消时生产者/消费者均快速退出。
+
+### 4.5 传输度量（P2）
+
+**涉及文件**:
+- [FileShare.Core/Network/TcpFileTransferService.cs](file:///d:/StudyNode/localsend/FileShare.Core/Network/TcpFileTransferService.cs) — `TotalBytesSent` / `TotalBytesReceived` / 速率采样
+- [FileShare.Core/Models/FileTransferInfo.cs](file:///d:/StudyNode/localsend/FileShare.Core/Models/FileTransferInfo.cs) — `TransferRateBytesPerSec` / `AverageRateBytesPerSec`
+
+- **累计统计**：`Interlocked` 原子计数，线程安全。
+- **实时速率**：按传输 ID 采样（时间 + 字节），进度事件中计算瞬时速率与平均速率。
+
+### 4.6 验证基线
+
+- Core: 50/50 通过（含 `TlsHandshakeDiagnosticTests`、`TlsFileTransferIntegrationTests`、`TcpFileTransferIntegrationTests`、`MdnsCodecTests`）
+- Desktop: 16/16 通过
+- Mobile（MAUI）：本机未构建验证（需 workload），改动仅 `MauiProgram.cs` 传 `loggerFactory`，低风险
 
 ---
 

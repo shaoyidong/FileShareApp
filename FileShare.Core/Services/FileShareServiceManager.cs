@@ -1,6 +1,8 @@
 using FileShare.Core.Models;
 using FileShare.Core.Models.Entities;
 using FileShare.Core.Network;
+using FileShare.Core.Network.Mdns;
+using FileShare.Core.Network.Tls;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Net;
@@ -19,6 +21,7 @@ public class FileShareServiceManager : IFileShareServiceManager
     private readonly DeviceInfo _localDevice;
     private readonly IDatabaseService _databaseService;
     private readonly ILogger<FileShareServiceManager> _logger;
+    private readonly MdnsService? _mdnsService;
 
     /// <summary>
     /// 设备列表更新事件
@@ -55,11 +58,15 @@ public class FileShareServiceManager : IFileShareServiceManager
     /// <param name="discoveryPort">设备发现端口</param>
     /// <param name="transferPort">文件传输端口</param>
     /// <param name="loggerFactory">日志工厂（可选，不传则使用 NullLogger）</param>
+    /// <param name="tlsOptions">TLS 加密传输配置（可选，启用后对同样启用 TLS 的对端自动升级到 SslStream）</param>
+    /// <param name="enableMdns">是否启用 mDNS 发现（可选，作为 UDP 广播的补充，提高受限网络下的发现成功率）</param>
     public FileShareServiceManager(
         IPlatformDirectoryService directoryService,
         IDatabaseService databaseService,
         string deviceName, DeviceType deviceType, int discoveryPort = 5236, int transferPort = 5237,
-        ILoggerFactory? loggerFactory = null)
+        ILoggerFactory? loggerFactory = null,
+        TlsOptions? tlsOptions = null,
+        bool enableMdns = false)
     {
         _databaseService = databaseService;
         _logger = loggerFactory?.CreateLogger<FileShareServiceManager>() ?? NullLogger<FileShareServiceManager>.Instance;
@@ -67,19 +74,29 @@ public class FileShareServiceManager : IFileShareServiceManager
         // 生成设备ID
         var deviceId = GetOrCreateDeviceId();
 
-        // 创建本地设备信息
+        // 创建本地设备信息（SupportsTls 通过发现协议广播，发送方据此决定是否升级到 SslStream）
         _localDevice = new DeviceInfo
         {
             DeviceId = deviceId,
             DeviceName = deviceName,
             DeviceType = deviceType,
             Port = transferPort,
-            IpAddress = GetLocalIpAddress()
+            IpAddress = GetLocalIpAddress(),
+            SupportsTls = tlsOptions is { Enabled: true }
         };
 
         // 初始化服务
-        _discoveryService = new UdpDiscoveryService(_localDevice, loggerFactory?.CreateLogger<UdpDiscoveryService>());
-        _fileTransferService = new TcpFileTransferService(directoryService, transferPort, loggerFactory?.CreateLogger<TcpFileTransferService>());
+        _discoveryService = new UdpDiscoveryService(_localDevice, loggerFactory?.CreateLogger<UdpDiscoveryService>(),true);
+        _fileTransferService = new TcpFileTransferService(directoryService, transferPort,
+            loggerFactory?.CreateLogger<TcpFileTransferService>(), tlsOptions, loggerFactory);
+
+        // 可选：mDNS 发现作为 UDP 广播的补充，发现的设备纳入统一设备表
+        if (enableMdns)
+        {
+            _mdnsService = new MdnsService(_localDevice, loggerFactory?.CreateLogger<MdnsService>());
+            _mdnsService.OnDeviceDiscovered += device => _discoveryService.RegisterExternalDevice(device);
+            _mdnsService.OnDeviceRemoved += device => _discoveryService.RemoveExternalDevice(device);
+        }
 
         // 注册事件处理
         _discoveryService.OnDeviceDiscovered += device => OnDeviceDiscovered?.Invoke(device);
@@ -186,8 +203,18 @@ public class FileShareServiceManager : IFileShareServiceManager
     /// </summary>
     public async Task StartServicesAsync()
     {
+        bool mdnsAvailable = false;
         await _discoveryService.StartAsync().ConfigureAwait(false);
         await _fileTransferService.StartAsync().ConfigureAwait(false);
+        if (_mdnsService != null)
+        {
+            try { mdnsAvailable = await _mdnsService.StartAsync().ConfigureAwait(false); }
+            catch (Exception ex) { _logger.LogWarning(ex, "启动 mDNS 服务失败"); }
+        }
+        if (!mdnsAvailable)
+        {
+            _discoveryService.EnableFallbackMode();
+        }
     }
 
     /// <summary>
@@ -195,6 +222,11 @@ public class FileShareServiceManager : IFileShareServiceManager
     /// </summary>
     public async Task StopServicesAsync()
     {
+        if (_mdnsService != null)
+        {
+            try { await _mdnsService.StopAsync().ConfigureAwait(false); }
+            catch (Exception ex) { _logger.LogWarning(ex, "停止 mDNS 服务失败"); }
+        }
         await _discoveryService.StopAsync().ConfigureAwait(false);
         await _fileTransferService.StopAsync().ConfigureAwait(false);
     }
@@ -277,6 +309,7 @@ public class FileShareServiceManager : IFileShareServiceManager
             _logger.LogWarning(ex, "异步停止服务时出错");
         }
 
+        _mdnsService?.Dispose();
         _discoveryService.Dispose();
         _fileTransferService.Dispose();
         GC.SuppressFinalize(this);
@@ -291,6 +324,7 @@ public class FileShareServiceManager : IFileShareServiceManager
         Task.Run(async () => await StopServicesAsync().ConfigureAwait(false))
             .GetAwaiter()
             .GetResult();
+        _mdnsService?.Dispose();
         _discoveryService.Dispose();
         _fileTransferService.Dispose();
         GC.SuppressFinalize(this);
