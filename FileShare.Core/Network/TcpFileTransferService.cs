@@ -51,6 +51,7 @@ public class TcpFileTransferService : IDisposable
     private readonly ConcurrentDictionary<string, double> _lastProgressValues;// 上次进度值，用于优化事件触发
     private readonly ConcurrentDictionary<string, int> _ipConnectionCounts; // 每IP并发连接计数
     private readonly ConcurrentDictionary<string, (DateTime Time, long Bytes)> _lastRateSamples; // 速率采样（按传输ID）
+    private readonly string _deviceId;
     private readonly IPlatformDirectoryService _directoryService;
     private readonly ILogger<TcpFileTransferService> _logger;
     private int _activeTransfers; // 当前活跃传输数量（用于优雅关闭）
@@ -88,7 +89,7 @@ public class TcpFileTransferService : IDisposable
     /// </summary>
     public event Action<FileTransferInfo, string?>? OnTransferCompleted;
 
-    public TcpFileTransferService(IPlatformDirectoryService directoryService, int port = 5237, ILogger<TcpFileTransferService>? logger = null, TlsOptions? tlsOptions = null, ILoggerFactory? loggerFactory = null)
+    public TcpFileTransferService(string deviceId, IPlatformDirectoryService directoryService, int port = 5237, ILogger<TcpFileTransferService>? logger = null, TlsOptions? tlsOptions = null, ILoggerFactory? loggerFactory = null)
     {
         _port = port;
         _listener = new TcpListener(IPAddress.Any, port);
@@ -100,6 +101,7 @@ public class TcpFileTransferService : IDisposable
         _lastProgressValues = new ConcurrentDictionary<string, double>();
         _ipConnectionCounts = new ConcurrentDictionary<string, int>();
         _lastRateSamples = new ConcurrentDictionary<string, (DateTime, long)>();
+        _deviceId = deviceId;
         _directoryService = directoryService;
         _logger = logger ?? loggerFactory?.CreateLogger<TcpFileTransferService>() ?? NullLogger<TcpFileTransferService>.Instance;
         _tlsOptions = tlsOptions;
@@ -110,8 +112,8 @@ public class TcpFileTransferService : IDisposable
             {
                 // 指纹信任库与本地证书在构造期就绪，避免每次连接时重复生成/加载
                 _fingerprintStore = new FingerprintStore(tlsOptions.FingerprintStorePath, loggerFactory?.CreateLogger<FingerprintStore>());
-                var deviceIdHint = Guid.NewGuid().ToString(); // 证书 CN 仅为人类可读标识，校验依赖指纹而非 CN
-                var certProvider = new SelfSignedCertificateProvider(tlsOptions, deviceIdHint, loggerFactory?.CreateLogger<SelfSignedCertificateProvider>());
+               
+                var certProvider = new SelfSignedCertificateProvider(tlsOptions, deviceId, loggerFactory?.CreateLogger<SelfSignedCertificateProvider>());
                 _localCertificate = certProvider.GetOrCreateCertificate();
                 _tlsEnabled = true;
                 _logger.LogInformation("TLS 加密传输已启用");
