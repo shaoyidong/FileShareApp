@@ -101,7 +101,19 @@ public sealed class SelfSignedCertificateProvider
 
         var notBefore = DateTimeOffset.UtcNow.AddDays(-1);
         var notAfter = DateTimeOffset.UtcNow.AddDays(_options.CertificateValidityDays);
-        return request.CreateSelfSigned(notBefore, notAfter);
+
+        // 生成随机序列号（8 字节）
+        var serialNumber = new byte[8];
+        using (var rng = RandomNumberGenerator.Create())
+        {
+            rng.GetBytes(serialNumber);
+        }
+
+        // 使用 X509SignatureGenerator 直接签名
+        var generator = X509SignatureGenerator.CreateForRSA(rsa, RSASignaturePadding.Pkcs1);
+
+        // request.Create 的第一个参数是颁发者（自签名即 subject），第二个是签名生成器
+        return request.Create(subject, generator, notBefore, notAfter, serialNumber);
     }
 
     private void PersistCertificate(string pfxPath, X509Certificate2 cert)

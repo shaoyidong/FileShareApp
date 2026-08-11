@@ -87,7 +87,7 @@ public class FileShareServiceManager : IFileShareServiceManager
 
         // 初始化服务
         _discoveryService = new UdpDiscoveryService(_localDevice, loggerFactory?.CreateLogger<UdpDiscoveryService>(),true);
-        _fileTransferService = new TcpFileTransferService(directoryService, transferPort,
+        _fileTransferService = new TcpFileTransferService(deviceId, directoryService, transferPort,
             loggerFactory?.CreateLogger<TcpFileTransferService>(), tlsOptions, loggerFactory);
 
         // 可选：mDNS 发现作为 UDP 广播的补充，发现的设备纳入统一设备表
