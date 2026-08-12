@@ -22,6 +22,8 @@ namespace FileShare.Desktop
 {
     public partial class App : Application
     {
+        private ILoggerFactory? _loggerFactory;
+
         public override void Initialize()
         {
             AvaloniaXamlLoader.Load(this);
@@ -60,7 +62,7 @@ namespace FileShare.Desktop
                 Log.Logger = serilogLogger;
 
                 // 通过 Microsoft.Extensions.Logging.Abstractions 接口把 Serilog 注入 Core（保持 Core 不直接依赖 Serilog）
-                using var loggerFactory = Microsoft.Extensions.Logging.LoggerFactory.Create(builder =>
+                _loggerFactory = Microsoft.Extensions.Logging.LoggerFactory.Create(builder =>
                 {
                     builder.AddSerilog(serilogLogger, dispose: true);
                 });
@@ -80,7 +82,7 @@ namespace FileShare.Desktop
                     databaseService,
                     Environment.MachineName,
                     FileShare.Core.Models.DeviceType.Desktop,
-                    loggerFactory: loggerFactory,
+                    loggerFactory: _loggerFactory,
                     tlsOptions: tlsOptions,
                     enableMdns: true);
                 
@@ -88,7 +90,11 @@ namespace FileShare.Desktop
                 var dialogService = new DialogService(desktop);
 
                 // 应用退出时刷新 Serilog 缓冲
-                desktop.ShutdownRequested += (s, e) => Log.CloseAndFlush();
+                desktop.ShutdownRequested += (s, e) =>
+                {
+                    Log.CloseAndFlush();
+                    _loggerFactory?.Dispose();
+                };
                 desktop.MainWindow = new MainWindow
                 {
                     DataContext = new MainWindowViewModel(serviceManager, dialogService, desktop, SynchronizationContext.Current??new SynchronizationContext()),

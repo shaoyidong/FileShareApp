@@ -86,14 +86,13 @@ public class FileShareServiceManager : IFileShareServiceManager
         };
 
         // 初始化服务
-        _discoveryService = new UdpDiscoveryService(_localDevice, loggerFactory?.CreateLogger<UdpDiscoveryService>(),true);
-        _fileTransferService = new TcpFileTransferService(deviceId, directoryService, transferPort,
-            loggerFactory?.CreateLogger<TcpFileTransferService>(), tlsOptions, loggerFactory);
+        _discoveryService = new UdpDiscoveryService(_localDevice, loggerFactory,true);
+        _fileTransferService = new TcpFileTransferService(deviceId, directoryService, transferPort, tlsOptions, loggerFactory);
 
         // 可选：mDNS 发现作为 UDP 广播的补充，发现的设备纳入统一设备表
         if (enableMdns)
         {
-            _mdnsService = new MdnsService(_localDevice, loggerFactory?.CreateLogger<MdnsService>());
+            _mdnsService = new MdnsService(_localDevice, loggerFactory);
             _mdnsService.OnDeviceDiscovered += device => _discoveryService.RegisterExternalDevice(device);
             _mdnsService.OnDeviceRemoved += device => _discoveryService.RemoveExternalDevice(device);
         }

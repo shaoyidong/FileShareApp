@@ -49,10 +49,10 @@ public sealed class MdnsService : IDisposable
     /// <summary>设备过期离线时触发。</summary>
     public event Action<DeviceInfo>? OnDeviceRemoved;
 
-    public MdnsService(DeviceInfo localDevice, ILogger<MdnsService>? logger = null)
+    public MdnsService(DeviceInfo localDevice, ILoggerFactory? loggerFactory = null)
     {
         _localDevice = localDevice;
-        _logger = logger ?? NullLogger<MdnsService>.Instance;
+        _logger = loggerFactory?.CreateLogger<MdnsService>() ?? NullLogger<MdnsService>.Instance;
         var safeId = SanitizeLabel(localDevice.DeviceId);
         _instanceName = $"{safeId}.{ServiceType}";
         _hostName = $"{safeId}.local";

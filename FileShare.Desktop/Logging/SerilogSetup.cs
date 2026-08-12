@@ -60,12 +60,18 @@ internal sealed class AvaloniaSerilogSink : ILogSink
     public AvaloniaSerilogSink(ILogger logger)
     {
         _logger = logger.ForContext("Source", "Avalonia");
+        _logger = logger.ForContext("SourceContext", "Avalonia");
     }
 
     public bool IsEnabled(LogEventLevel level, string area)
     {
         // 仅捕获 Information 及以上，避免 Avalonia Verbose/Debug 过于刷屏
+#if DEBUG
         return level >= LogEventLevel.Information;
+#else
+        return level >= LogEventLevel.Warning;
+#endif
+
     }
 
     public void Log(LogEventLevel level, string area, object? source, string messageTemplate)
