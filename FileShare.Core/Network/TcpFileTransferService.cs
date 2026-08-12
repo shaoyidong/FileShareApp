@@ -89,7 +89,7 @@ public class TcpFileTransferService : IDisposable
     /// </summary>
     public event Action<FileTransferInfo, string?>? OnTransferCompleted;
 
-    public TcpFileTransferService(string deviceId, IPlatformDirectoryService directoryService, int port = 5237, ILogger<TcpFileTransferService>? logger = null, TlsOptions? tlsOptions = null, ILoggerFactory? loggerFactory = null)
+    public TcpFileTransferService(string deviceId, IPlatformDirectoryService directoryService, int port = 5237, TlsOptions? tlsOptions = null, ILoggerFactory? loggerFactory = null)
     {
         _port = port;
         _listener = new TcpListener(IPAddress.Any, port);
@@ -103,7 +103,7 @@ public class TcpFileTransferService : IDisposable
         _lastRateSamples = new ConcurrentDictionary<string, (DateTime, long)>();
         _deviceId = deviceId;
         _directoryService = directoryService;
-        _logger = logger ?? loggerFactory?.CreateLogger<TcpFileTransferService>() ?? NullLogger<TcpFileTransferService>.Instance;
+        _logger = loggerFactory?.CreateLogger<TcpFileTransferService>() ?? NullLogger<TcpFileTransferService>.Instance;
         _tlsOptions = tlsOptions;
 
         if (tlsOptions is { Enabled: true })

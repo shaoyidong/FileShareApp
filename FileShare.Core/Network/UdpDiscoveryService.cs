@@ -72,10 +72,10 @@ public class UdpDiscoveryService : IDisposable
     /// <param name="localDevice">本机设备信息</param>
     /// <param name="logger">日志</param>
     /// <param name="enablePeriodicBroadcast">是否启用后台周期性广播（默认false，仅快速探测）</param>
-    public UdpDiscoveryService(DeviceInfo localDevice, ILogger<UdpDiscoveryService>? logger = null, bool enablePeriodicBroadcast = false)
+    public UdpDiscoveryService(DeviceInfo localDevice, ILoggerFactory? loggerFactory = null, bool enablePeriodicBroadcast = false)
     {
         _localDevice = localDevice;
-        _logger = logger ?? NullLogger<UdpDiscoveryService>.Instance;
+        _logger = loggerFactory?.CreateLogger<UdpDiscoveryService>() ?? NullLogger<UdpDiscoveryService>.Instance;
         _enablePeriodicBroadcast = enablePeriodicBroadcast;
         _udpClient = new UdpClient();
         _udpClient.EnableBroadcast = true;
