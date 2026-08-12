@@ -4,6 +4,7 @@ using FileShare.Core.Network.Tls;
 using FileShare.Core.Services;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Org.BouncyCastle.Crypto.Digests;
 using System;
 using System.Buffers;
 using System.Collections.Concurrent;
@@ -12,7 +13,6 @@ using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Authentication;
-using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using System.Threading;
@@ -115,6 +115,11 @@ public class TcpFileTransferService : IDisposable
                
                 var certProvider = new SelfSignedCertificateProvider(tlsOptions, deviceId, loggerFactory?.CreateLogger<SelfSignedCertificateProvider>());
                 _localCertificate = certProvider.GetOrCreateCertificate();
+                _logger.LogInformation("证书加载状态: 是否为空={IsNull}, 是否有私钥={HasPrivateKey}, 算法={SignatureAlgorithm}",
+    _localCertificate == null,
+    _localCertificate?.HasPrivateKey ?? false,
+    _localCertificate?.SignatureAlgorithm?.FriendlyName);
+
                 _tlsEnabled = true;
                 _logger.LogInformation("TLS 加密传输已启用");
             }
@@ -459,6 +464,10 @@ public class TcpFileTransferService : IDisposable
                             _logger.LogDebug("处理请求被取消");
                             break;
                         }
+                        catch (EndOfStreamException)
+                        {
+                            ;
+                        }
                         catch (Exception ex)
                         {
                             _logger.LogError(ex, "处理请求失败");
@@ -621,7 +630,8 @@ public class TcpFileTransferService : IDisposable
             TargetHost = remoteDeviceId, // 用于 SNI 与日志，不用于证书校验（自签名证书改用 TOFU）
             ClientCertificates = clientCerts,
             EnabledSslProtocols = SslProtocols.Tls12, // 与服务端一致，避免 TLS 1.3 客户端证书时序问题
-            CertificateRevocationCheckMode = X509RevocationMode.NoCheck
+            CertificateRevocationCheckMode = X509RevocationMode.NoCheck,
+            LocalCertificateSelectionCallback = (_, _, _, _,_) => _localCertificate,
         };
 
         await ssl.AuthenticateAsClientAsync(options, handshakeCts.Token).ConfigureAwait(false);
@@ -634,6 +644,11 @@ public class TcpFileTransferService : IDisposable
     /// </summary>
     private bool ValidateRemoteCertificate(string remoteDeviceId, X509Certificate? cert)
     {
+        _logger.LogWarning("ValidateRemoteCertificate 被调用: DeviceId={DeviceId}, Cert是否为空={IsNull}, 类型={Type}",
+        remoteDeviceId,
+        cert == null,
+        cert?.GetType().Name ?? "null");
+
         // SslStream 实际提供 X509Certificate2 实例；不释放 cert2（由 SslStream 持有生命周期）
         if (cert is not X509Certificate2 cert2)
         {
@@ -657,6 +672,10 @@ public class TcpFileTransferService : IDisposable
     /// </summary>
     private bool ValidateInboundPeerFingerprint(SslStream ssl, string senderId)
     {
+        _logger.LogWarning("ValidateInboundPeerFingerprint 被调用: DeviceId={DeviceId}, Cert是否为空={IsNull}, 类型={Type}",
+        senderId,
+        ssl.RemoteCertificate == null,
+        ssl.RemoteCertificate?.GetType().Name ?? "null");
         // SslStream.RemoteCertificate 运行时为 X509Certificate2；不释放（由 SslStream 持有）
         if (ssl.RemoteCertificate is not X509Certificate2 cert2)
         {
@@ -921,13 +940,20 @@ public class TcpFileTransferService : IDisposable
     }
 
     /// <summary>
-    /// 计算文件的SHA256校验和
+    /// 计算文件的SHA256校验和（使用 BouncyCastle 实现以确保 AOT 兼容性）
     /// </summary>
     private static string ComputeFileChecksum(string filePath)
     {
-        using var sha256 = SHA256.Create();
+        var digest = new Sha256Digest();
+        var buffer = new byte[65536]; // 64KB 缓冲区
         using var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, System.IO.FileShare.Read);
-        var hashBytes = sha256.ComputeHash(fileStream);
+        int bytesRead;
+        while ((bytesRead = fileStream.Read(buffer, 0, buffer.Length)) > 0)
+        {
+            digest.BlockUpdate(buffer, 0, bytesRead);
+        }
+        var hashBytes = new byte[digest.GetDigestSize()];
+        digest.DoFinal(hashBytes, 0);
         return Convert.ToHexString(hashBytes);
     }
 

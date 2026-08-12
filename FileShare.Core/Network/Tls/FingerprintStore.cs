@@ -1,7 +1,7 @@
 using System.IO;
-using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.Extensions.Logging;
+using Org.BouncyCastle.Crypto.Digests;
 
 namespace FileShare.Core.Network.Tls;
 
@@ -25,10 +25,15 @@ public sealed class FingerprintStore
 
     /// <summary>
     /// 计算证书的 SHA256 指纹（证书 DER 编码的哈希，十六进制小写）。
+    /// 使用 BouncyCastle 实现以确保 AOT 兼容性。
     /// </summary>
     public static string ComputeFingerprint(X509Certificate2 certificate)
     {
-        var hash = SHA256.HashData(certificate.RawData);
+        var derData = certificate.RawData;
+        var digest = new Sha256Digest();
+        digest.BlockUpdate(derData, 0, derData.Length);
+        var hash = new byte[digest.GetDigestSize()];
+        digest.DoFinal(hash, 0);
         return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
