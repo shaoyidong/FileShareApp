@@ -13,6 +13,7 @@ using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Authentication;
+using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using System.Threading;
@@ -28,6 +29,7 @@ public class TcpFileTransferService : IDisposable
 {
     private const int BUFFER_SIZE = 65536; // 64KB缓冲区
     private const int REQUEST_TIMEOUT_MS = 60000; // 请求超时时间（60秒）
+    private const int WAIT_CHECKSUM_TIMEOUT_MS = 60000; // 等待超时时间（60秒）
     private const double PROGRESS_THRESHOLD = 0.5;
     private const long MaxFileSize = 100L * 1024 * 1024 * 1024; // 100GB
     private const int MaxConcurrentConnections = 50; // 最大并发连接数
@@ -444,6 +446,9 @@ public class TcpFileTransferService : IDisposable
                                     case TransferRequestType.SendFileData:
                                         await HandleFileData(stream, request, cancellationToken).ConfigureAwait(false);
                                         break;
+                                    case TransferRequestType.FileChecksum:
+                                        await HandleFileChecksumRequest(stream, request, cancellationToken).ConfigureAwait(false);
+                                        break;
                                 }
                             }
                         }
@@ -513,13 +518,17 @@ public class TcpFileTransferService : IDisposable
                 foreach (var transfer in senderTransfers)
                 {
                     _incomingTransfers.TryRemove(transfer.Key, out _);
+                    _transferCancellationTokens.TryRemove(transfer.Key, out var cts);                   
+                    _lastProgressValues.TryRemove(transfer.Key, out _);
+                    _lastRateSamples.TryRemove(transfer.Key, out _);
                     transfer.Value.Status = TransferStatus.Failed;
                     OnTransferCompleted?.Invoke(transfer.Value, "连接已关闭");
+                    cts?.Dispose();
                 }
                 _logger.LogDebug("清理清理来自发送方：{SenderId} 的数据", senderId);
             }            
         }
-    }
+    }    
 
     /// <summary>
     /// 校验传输请求
@@ -815,6 +824,7 @@ public class TcpFileTransferService : IDisposable
             // 1. 外部 cancellationToken 被取消时
             // 2. 自己调用 cts.Cancel() 时
             // 创建取消令牌源并保存到字典中
+        bool isFailedOrCancelled = true;
         var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         try
         {
@@ -827,24 +837,24 @@ public class TcpFileTransferService : IDisposable
             {
                 Directory.CreateDirectory(savePath);
             }
-
+            using var sha256 = SHA256.Create();
             var totalBytesRead = 0L;
-            using (var fileStream = new FileStream(tempFilePath, FileMode.Create))
+            using var fileStream = new FileStream(tempFilePath, FileMode.Create);
+
+            var buffer = new byte[BUFFER_SIZE];
+
+            while (totalBytesRead < request.FileSize && !cts.Token.IsCancellationRequested)
             {
-                var buffer = new byte[BUFFER_SIZE];
+                var bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length, cts.Token).ConfigureAwait(false);
+                if (bytesRead == 0) break;
 
-                while (totalBytesRead < request.FileSize && !cts.Token.IsCancellationRequested)
-                {
-                    var bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length, cts.Token).ConfigureAwait(false);
-                    if (bytesRead == 0) break;
+                await fileStream.WriteAsync(buffer, 0, bytesRead, cts.Token).ConfigureAwait(false);
+                totalBytesRead += bytesRead;
+                Interlocked.Add(ref _totalBytesReceived, bytesRead);
 
-                    await fileStream.WriteAsync(buffer, 0, bytesRead, cts.Token).ConfigureAwait(false);
-                    totalBytesRead += bytesRead;
-                    Interlocked.Add(ref _totalBytesReceived, bytesRead);
-
-                    UpdateTransferProgress(transferInfo, totalBytesRead);
-                }
-            }
+                sha256.TransformBlock(buffer, 0, bytesRead, null, 0);
+                UpdateTransferProgress(transferInfo, totalBytesRead);
+            }           
 
             if (cts.Token.IsCancellationRequested)
             {
@@ -853,50 +863,23 @@ public class TcpFileTransferService : IDisposable
             }
 
                 // 检查传输进度是否达到100%
-            if (totalBytesRead == request.FileSize)
+            if (totalBytesRead >= request.FileSize)
             {
-                // 如果有校验和，进行验证
-                if (!string.IsNullOrEmpty(request.Checksum))
-                {
-                    var actualChecksum = ComputeFileChecksum(tempFilePath);
-                    if (!string.Equals(actualChecksum, request.Checksum, StringComparison.OrdinalIgnoreCase))
-                    {
-                        transferInfo.Status = TransferStatus.Failed;
-                        OnTransferCompleted?.Invoke(transferInfo, "文件校验失败");
+                sha256.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
+                byte[] localHash = sha256.Hash!;
 
-                        if (File.Exists(tempFilePath))
-                        {
-                            File.Delete(tempFilePath);
-                        }
-
-                        await SendErrorResponseAsync(transferInfo.TransferId, stream, "文件校验失败", cts.Token).ConfigureAwait(false);
-                        return;
-                    }
-                }
-
-                transferInfo.Status = TransferStatus.Completed;
-                OnTransferCompleted?.Invoke(transferInfo, null);
-
-                    // 发送完成响应
-                var response = new TransferResponse
-                {
-                    TransferId = transferInfo.TransferId,
-                    Accepted = true,
-                    Message = "文件接收完成"
-                };
-                await SendResponseAsync(stream, response, cts.Token).ConfigureAwait(false);
+                transferInfo.ReceivedHash = localHash;   // 需在 FileTransferInfo 中增加此字段
+                transferInfo.Status = TransferStatus.WaitingChecksum;
+                isFailedOrCancelled = false;
+          
+                // 启动超时监控（见下文）
+                _ = MonitorChecksumTimeout(transferInfo, cts.Token);   
             }
             else
             {
                     // 传输中断，没到100%
                 transferInfo.Status = TransferStatus.Failed;
                 OnTransferCompleted?.Invoke(transferInfo, "传输中断");
-
-                    // 删除临时文件
-                if (File.Exists(tempFilePath))
-                {
-                    File.Delete(tempFilePath);
-                }
 
                 try
                 {
@@ -916,12 +899,7 @@ public class TcpFileTransferService : IDisposable
         catch (Exception ex)
         {
             transferInfo.Status = TransferStatus.Failed;
-            OnTransferCompleted?.Invoke(transferInfo, $"异常: {ex.Message}");
-
-            if (File.Exists(tempFilePath))
-            {
-                File.Delete(tempFilePath);
-            }
+            OnTransferCompleted?.Invoke(transferInfo, $"异常: {ex.Message}");          
 
             try
             {
@@ -935,10 +913,124 @@ public class TcpFileTransferService : IDisposable
         }
         finally
         {
+            if (isFailedOrCancelled)
+            {
+                _incomingTransfers.TryRemove(transferInfo.TransferId, out _);
+                _transferCancellationTokens.TryRemove(request.TransferId, out _);
+                cts?.Dispose();
+                if (File.Exists(tempFilePath))
+                {
+                    File.Delete(tempFilePath);
+                }
+            }            
+            _lastProgressValues.TryRemove(transferInfo.TransferId, out _);
+            _lastRateSamples.TryRemove(transferInfo.TransferId, out _);            
+        }
+    }
+
+    private async Task MonitorChecksumTimeout(FileTransferInfo transferInfo, CancellationToken cancellationToken)
+    {
+        bool isFailedOrCancelled = true;
+        try
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(WAIT_CHECKSUM_TIMEOUT_MS), cancellationToken);
+            // 超时且状态仍为 WaitingChecksum 时，自动取消
+            if (transferInfo.Status == TransferStatus.WaitingChecksum)
+            {
+                _logger.LogWarning("传输 {TransferId} 等待校验和超时，自动取消", transferInfo.TransferId);              
+                // 触发失败事件
+                transferInfo.Status = TransferStatus.Failed;
+                OnTransferCompleted?.Invoke(transferInfo, "等待校验和超时");               
+            }
+            else if (transferInfo.Status == TransferStatus.Completed)
+            {
+                isFailedOrCancelled = false;
+            }            
+        }
+        catch (OperationCanceledException)
+        {
+            // 正常取消（收到校验和后会取消此监控）
+        }
+        finally
+        {
+            if (isFailedOrCancelled)
+            {
+                // 删除临时文件
+                string savePath = transferInfo.SavePath ?? FileTypeHelper.GetDirectoryByFileType(transferInfo.FileName, _directoryService);
+                string tempFilePath = Path.Combine(savePath, transferInfo.FileName);
+                if (File.Exists(tempFilePath)) File.Delete(tempFilePath);
+            }
+            // 清理（避免内存泄漏）
             _incomingTransfers.TryRemove(transferInfo.TransferId, out _);
-            _transferCancellationTokens.TryRemove(request.TransferId, out _);
+            _transferCancellationTokens.TryRemove(transferInfo.TransferId, out var cts);
             _lastProgressValues.TryRemove(transferInfo.TransferId, out _);
             _lastRateSamples.TryRemove(transferInfo.TransferId, out _);
+            cts?.Dispose();
+        }
+    }
+
+    private async Task HandleFileChecksumRequest(Stream stream, TransferRequest request, CancellationToken cancellationToken)
+    {
+        if (!_incomingTransfers.TryGetValue(request.TransferId, out var transferInfo))
+        {
+            await SendErrorResponseAsync(request.TransferId, stream, "传输不存在", cancellationToken);
+            return;
+        }
+
+        bool isFailedOrCancelled = true;
+        try
+        {
+            if (transferInfo.Status != TransferStatus.WaitingChecksum || transferInfo.ReceivedHash == null)
+            {
+                await SendErrorResponseAsync(request.TransferId, stream, "传输未处于等待校验状态", cancellationToken);
+                return;
+            }
+            if (!_transferCancellationTokens.TryGetValue(request.TransferId,out var cts) || cts.IsCancellationRequested)
+            {
+                await SendErrorResponseAsync(request.TransferId, stream, "传输已取消", cancellationToken);
+                return;
+            }
+
+            bool valid = string.Equals(Convert.ToHexString(transferInfo.ReceivedHash), request.Checksum, StringComparison.OrdinalIgnoreCase);
+            var response = new TransferResponse
+            {
+                TransferId = request.TransferId,
+                Accepted = valid,
+                Message = valid ? "校验通过" : "校验失败"
+            };
+            await SendResponseAsync(stream, response, cancellationToken);
+
+            if (valid)
+            {
+                isFailedOrCancelled = false;
+                transferInfo.Status = TransferStatus.Completed;
+                OnTransferCompleted?.Invoke(transferInfo, null);
+            }
+            else
+            {
+                transferInfo.Status = TransferStatus.Failed;
+                OnTransferCompleted?.Invoke(transferInfo, "校验失败");
+               
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "处理文件校验请求时发生错误: {TransferId}", request.TransferId);           
+        }
+        finally
+        {
+            if (isFailedOrCancelled)
+            {
+                // 删除临时文件
+                string savePath = transferInfo.SavePath ?? FileTypeHelper.GetDirectoryByFileType(transferInfo.FileName, _directoryService);
+                string tempFilePath = Path.Combine(savePath, transferInfo.FileName);
+                if (File.Exists(tempFilePath)) File.Delete(tempFilePath);
+            }
+            // 清理（避免内存泄漏）
+            _incomingTransfers.TryRemove(request.TransferId, out _);
+            _transferCancellationTokens.TryRemove(request.TransferId, out var cts);
+            _lastProgressValues.TryRemove(request.TransferId, out _);
+            _lastRateSamples.TryRemove(request.TransferId, out _);
             cts?.Dispose();
         }
     }
@@ -965,13 +1057,7 @@ public class TcpFileTransferService : IDisposable
     {
         // 传输被取消
         transferInfo.Status = TransferStatus.Cancelled;
-        OnTransferCompleted?.Invoke(transferInfo, "传输被接收方取消");
-
-        // 删除临时文件
-        if (File.Exists(tempFilePath))
-        {
-            File.Delete(tempFilePath);
-        }
+        OnTransferCompleted?.Invoke(transferInfo, "传输被接收方取消");       
 
         // 发送取消响应给发送方
         try
@@ -1035,10 +1121,7 @@ public class TcpFileTransferService : IDisposable
             }
 
             var fileInfo = new FileInfo(filePath);
-            transferId = Guid.NewGuid().ToString();
-
-            // 计算文件校验和
-            var checksum = ComputeFileChecksum(filePath);
+            transferId = Guid.NewGuid().ToString();           
 
             transferInfo = new FileTransferInfo
             {
@@ -1080,7 +1163,6 @@ public class TcpFileTransferService : IDisposable
                             FileSize = fileInfo.Length,
                             SenderId = senderId,
                             ReceiverId = targetDevice.DeviceId,
-                            Checksum = checksum
                         };
 
                         await SendRequestAsync(stream, request, cts.Token).ConfigureAwait(false);
@@ -1286,43 +1368,41 @@ public class TcpFileTransferService : IDisposable
             }
         });
 
+        byte[]? hash = null;
         // 生产者：从文件读取数据块写入 Channel，缓冲区从 ArrayPool 租用
         var producerTask = Task.Run(async () =>
         {
             try
             {
+                using var sha256 = SHA256.Create();
                 using var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, System.IO.FileShare.Read, BUFFER_SIZE, useAsync: true);
                 while (true)
                 {
-                    var buffer = ArrayPool<byte>.Shared.Rent(BUFFER_SIZE);
-                    int bytesRead;
+                    byte[] buffer = null;
+                    bool handedOver = false;
                     try
                     {
-                        bytesRead = await fileStream.ReadAsync(buffer, linkedCts.Token).ConfigureAwait(false);
+                        buffer = ArrayPool<byte>.Shared.Rent(BUFFER_SIZE);
+                        int bytesRead = await fileStream.ReadAsync(buffer, linkedCts.Token);
+                        if (bytesRead == 0) break;   // 注意此处直接 break，需在 finally 中归还
+
+                        sha256.TransformBlock(buffer, 0, bytesRead, null, 0);
+                        await channel.Writer.WriteAsync((buffer, bytesRead), linkedCts.Token);
+                        handedOver = true;   // 移交成功，不再归还
                     }
                     catch (OperationCanceledException)
                     {
-                        ArrayPool<byte>.Shared.Return(buffer);
+                        // 取消时 break，但 buffer 由 finally 统一归还
                         break;
                     }
-
-                    if (bytesRead == 0)
+                    finally
                     {
-                        ArrayPool<byte>.Shared.Return(buffer);
-                        break;
-                    }
-
-                    try
-                    {
-                        await channel.Writer.WriteAsync((buffer, bytesRead), linkedCts.Token).ConfigureAwait(false);
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        // 消费者停止，归还未被消费的缓冲区
-                        ArrayPool<byte>.Shared.Return(buffer);
-                        break;
+                        if (!handedOver && buffer != null)
+                            ArrayPool<byte>.Shared.Return(buffer);
                     }
                 }
+                sha256.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
+                hash = sha256.Hash;
             }
             catch (Exception ex)
             {
@@ -1357,6 +1437,21 @@ public class TcpFileTransferService : IDisposable
                 // 更新进度，传递timeoutCts以便在进度更新时重置超时
                 UpdateTransferProgress(transferInfo, totalBytesRead, timeoutCts);
             }
+
+            if (totalBytesRead >= transferInfo.FileSize && hash != null)
+            {
+                var checksumRequest = new TransferRequest
+                {
+                    Type = TransferRequestType.FileChecksum,
+                    TransferId = transferInfo.TransferId,
+                    FileName = transferInfo.FileName,
+                    FileSize = transferInfo.FileSize,
+                    SenderId = transferInfo.SenderId,
+                    ReceiverId = transferInfo.ReceiverId,
+                    Checksum = Convert.ToHexString(hash)
+                };
+                await SendRequestAsync(stream, checksumRequest, cancellationToken).ConfigureAwait(false);
+            }            
         }
         catch (OperationCanceledException)
         {
@@ -1550,6 +1645,7 @@ public enum TransferRequestType
 {
     SendFileRequest,
     SendFileData,
+    FileChecksum,
 }
 
 /// <summary>

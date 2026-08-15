@@ -74,6 +74,8 @@ public class FileTransferInfo
             return elapsed > 0 ? (long)(TransferredSize / elapsed) : 0;
         }
     }
+
+    public byte[]? ReceivedHash { get; set; }
 }
 
 /// <summary>
@@ -85,7 +87,8 @@ public enum TransferStatus
     Transferring, // 传输中
     Completed,  // 完成
     Failed,     // 失败
-    Cancelled   // 取消
+    Cancelled,   // 取消
+    WaitingChecksum,  // 数据已收完，等待校验和
 }
 
 public enum TransferDirection

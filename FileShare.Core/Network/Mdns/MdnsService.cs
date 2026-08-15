@@ -149,6 +149,8 @@ public sealed class MdnsService : IDeviceDiscoveryService
             return;
         
         _announceLoopTask = Task.Run(() => AnnounceLoopAsync(_cts?.Token ?? CancellationToken.None));
+
+        _logger.LogInformation("开始mdns周期性公告");
     }
 
     private async Task ListenAsync(CancellationToken cancellationToken)
@@ -281,7 +283,8 @@ public sealed class MdnsService : IDeviceDiscoveryService
             instanceName.Equals(_instanceName, StringComparison.OrdinalIgnoreCase)) return; // 自身，忽略
 
         // 从 TXT 还原设备信息；IP 优先用 A 记录，回退到源地址
-        if (!txt.TryGetValue("id", out var deviceId)) deviceId = instanceLabel;
+        if (!txt.TryGetValue("id", out var deviceId)) 
+            deviceId = instanceLabel;
 
         if (isGoodbye)
         {
@@ -289,7 +292,8 @@ public sealed class MdnsService : IDeviceDiscoveryService
             return;
         }
 
-        if (!txt.TryGetValue("name", out var deviceName)) deviceName = instanceLabel;
+        if (!txt.TryGetValue("name", out var deviceName)) 
+            deviceName = instanceLabel;
         var ip = remoteIp.ToString();
         if (!Enum.TryParse<DeviceType>(txt.GetValueOrDefault("type"), true, out var deviceType))
             deviceType = DeviceType.Desktop;
