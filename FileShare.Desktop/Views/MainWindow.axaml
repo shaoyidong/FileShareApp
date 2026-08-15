@@ -8,7 +8,7 @@
     xmlns:local="using:FileShare.Desktop.Views"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:vm="using:FileShare.Desktop.ViewModels"
-    Title="局域网文件传输"
+    Title="{Binding LocalDevice.IpAddress}"
     d:DesignHeight="600"
     d:DesignWidth="900"
     x:DataType="vm:MainViewModel"
@@ -77,7 +77,7 @@
             to set the actual DataContext for runtime, set the DataContext property in code (look at App.axaml.cs)
         -->
         <vm:MainViewModel />
-    </Design.DataContext>
+    </Design.DataContext>    
     <Grid>
         <!--  Main Content  -->
         <ContentControl Content="{Binding CurrentView}" />

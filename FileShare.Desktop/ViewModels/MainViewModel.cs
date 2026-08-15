@@ -21,7 +21,7 @@ namespace FileShare.Desktop.ViewModels
 {
     public partial class MainViewModel : ViewModelBase
     {
-        public string Greeting { get; } = "Welcome to Avalonia!";
+        public string Greeting { get; } = "Welcome to Avalonia!";        
 
         private readonly IFileShareServiceManager _serviceManager;
         private readonly IDialogService _dialogService;
@@ -33,6 +33,8 @@ namespace FileShare.Desktop.ViewModels
         [ObservableProperty]
         private DeviceInfo? _selectedDevice;
         private string _localDeviceId;
+
+        public DeviceInfo? LocalDevice { get; set; }
 
         [ObservableProperty]
         private object _currentView;
@@ -87,6 +89,7 @@ namespace FileShare.Desktop.ViewModels
             ReceivedTransferTasks = new ObservableCollection<FileTransferViewModel>();
 
             // 保存本地设备ID
+            LocalDevice = _serviceManager.GetLocalDeviceInfo();
             _localDeviceId = _serviceManager.GetLocalDeviceInfo().DeviceId;
 
             // 注册事件处理
