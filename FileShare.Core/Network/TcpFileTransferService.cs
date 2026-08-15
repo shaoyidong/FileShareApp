@@ -144,8 +144,7 @@ public class TcpFileTransferService : IDisposable
         if (!string.IsNullOrEmpty(savePath) && _incomingTransfers.TryGetValue(transferId, out var transferInfo))
         {
             transferInfo.SavePath = savePath;
-        }
-
+        }        
         if (_pendingTransferRequests.TryRemove(transferId, out var tcs))
         {
             tcs?.TrySetResult(accept);
@@ -451,23 +450,19 @@ public class TcpFileTransferService : IDisposable
                         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
                         {
                             // 读取超时，关闭连接
-                            _logger.LogDebug("读取超时，关闭连接");
+                            _logger.LogWarning("读取超时，关闭连接");
                             break;
                         }
                         catch (IOException ex) when (IsConnectionReset(ex))
                         {
-                            _logger.LogDebug("客户端连接被中止: {Message}", ex.Message);
+                            _logger.LogWarning("客户端连接被中止: {Message}", ex.Message);
                             break;
                         }
                         catch (OperationCanceledException)
                         {
-                            _logger.LogDebug("处理请求被取消");
+                            _logger.LogInformation("处理请求被取消");
                             break;
-                        }
-                        catch (EndOfStreamException)
-                        {
-                            ;
-                        }
+                        }                       
                         catch (Exception ex)
                         {
                             _logger.LogError(ex, "处理请求失败");
@@ -481,6 +476,7 @@ public class TcpFileTransferService : IDisposable
                                     Message = "处理请求失败: " + ex.Message
                                 };
                                 await SendResponseAsync(stream, response, cancellationToken).ConfigureAwait(false);
+                                _logger.LogInformation("发送错误响应: {Response}", response);
                             }
                             catch (Exception)
                             {
@@ -497,6 +493,8 @@ public class TcpFileTransferService : IDisposable
                         await stream.DisposeAsync().ConfigureAwait(false);
                     else
                         await rawStream.DisposeAsync().ConfigureAwait(false);
+
+                    _logger.LogDebug("释放连接Stream");
                 }
             }
         }
@@ -518,7 +516,8 @@ public class TcpFileTransferService : IDisposable
                     transfer.Value.Status = TransferStatus.Failed;
                     OnTransferCompleted?.Invoke(transfer.Value, "连接已关闭");
                 }
-            }
+                _logger.LogDebug("清理清理来自发送方：{SenderId} 的数据", senderId);
+            }            
         }
     }
 
@@ -608,7 +607,7 @@ public class TcpFileTransferService : IDisposable
         };
 
         await ssl.AuthenticateAsServerAsync(options, handshakeCts.Token).ConfigureAwait(false);
-        _logger.LogDebug("入站连接已升级到 TLS");
+        _logger.LogInformation("入站连接已升级到 TLS");
         return (ssl, ssl);
     }
 
@@ -635,7 +634,7 @@ public class TcpFileTransferService : IDisposable
         };
 
         await ssl.AuthenticateAsClientAsync(options, handshakeCts.Token).ConfigureAwait(false);
-        _logger.LogDebug("出站连接已升级到 TLS（目标设备 {DeviceId}）", remoteDeviceId);
+        _logger.LogInformation("出站连接已升级到 TLS（目标设备 {DeviceId}）", remoteDeviceId);
         return ssl;
     }
 
@@ -644,7 +643,7 @@ public class TcpFileTransferService : IDisposable
     /// </summary>
     private bool ValidateRemoteCertificate(string remoteDeviceId, X509Certificate? cert)
     {
-        _logger.LogWarning("ValidateRemoteCertificate 被调用: DeviceId={DeviceId}, Cert是否为空={IsNull}, 类型={Type}",
+        _logger.LogDebug("ValidateRemoteCertificate 被调用: DeviceId={DeviceId}, Cert是否为空={IsNull}, 类型={Type}",
         remoteDeviceId,
         cert == null,
         cert?.GetType().Name ?? "null");
@@ -672,7 +671,7 @@ public class TcpFileTransferService : IDisposable
     /// </summary>
     private bool ValidateInboundPeerFingerprint(SslStream ssl, string senderId)
     {
-        _logger.LogWarning("ValidateInboundPeerFingerprint 被调用: DeviceId={DeviceId}, Cert是否为空={IsNull}, 类型={Type}",
+        _logger.LogDebug("ValidateInboundPeerFingerprint 被调用: DeviceId={DeviceId}, Cert是否为空={IsNull}, 类型={Type}",
         senderId,
         ssl.RemoteCertificate == null,
         ssl.RemoteCertificate?.GetType().Name ?? "null");
@@ -756,6 +755,7 @@ public class TcpFileTransferService : IDisposable
                 {
                     transferInfo.Status = TransferStatus.Cancelled;
                     OnTransferCompleted?.Invoke(transferInfo, "拒绝");
+                    _logger.LogDebug("拒绝文件");
                 }
                 // 接受请求时保持Pending状态，实际传输开始时会在HandleFileData中设置为Transferring
             }
@@ -763,6 +763,7 @@ public class TcpFileTransferService : IDisposable
             if (!accepted)
             {
                 _incomingTransfers.TryRemove(transferInfo.TransferId, out _);
+                _logger.LogDebug($"从_incomingTransfers移除传输任务");
             }
 
             // 发送响应
@@ -774,16 +775,19 @@ public class TcpFileTransferService : IDisposable
             };
 
             await SendResponseAsync(stream, response, cancellationToken).ConfigureAwait(false);
+            _logger.LogDebug($"send response: {response}");
         }
         catch (Exception ex)
         {
             transferInfo.Status = TransferStatus.Failed;
             OnTransferCompleted?.Invoke(transferInfo, $"异常: {ex.Message}");
+            _logger.LogError(ex, "HandleSendFileRequest");
         }
         finally
         {
             // 清理等待任务
             _pendingTransferRequests.TryRemove(transferInfo.TransferId, out _);
+            _logger.LogDebug("清理等待任务");
         }
     }
 
@@ -1443,7 +1447,7 @@ public class TcpFileTransferService : IDisposable
         {
             var bytesRead = await stream.ReadAsync(buffer, totalBytesRead, length - totalBytesRead, cancellationToken).ConfigureAwait(false);
             if (bytesRead == 0)
-                throw new EndOfStreamException();
+                return buffer[..totalBytesRead]; // EOF reached before reading the requested length
 
             totalBytesRead += bytesRead;
         }
