@@ -20,7 +20,7 @@ namespace FileShare.Desktop.Views
             //// ����DataContext
             //if (Application.Current.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime appLifetime)
             //{
-            //    DataContext = new MainWindowViewModel(appLifetime);
+            //    DataContext = new MainViewModel(appLifetime);
             //}
             
             // 注册消息处理器
@@ -29,7 +29,7 @@ namespace FileShare.Desktop.Views
 
         protected override void OnClosed(EventArgs e)
         {
-            if (DataContext is MainWindowViewModel viewModel)
+            if (DataContext is MainViewModel viewModel)
             {
                 viewModel.Dispose();
             }

@@ -3,7 +3,7 @@ using Serilog;
 using SeriLogLevel = Serilog.Events.LogEventLevel;
 using System;
 
-namespace FileShare.Desktop.Logging;
+namespace FileShare.Desktop.Helpers;
 
 /// <summary>
 /// Serilog 日志配置：统一 Core 的 Microsoft.Extensions.Logging 与 Avalonia 内部日志到 Serilog。

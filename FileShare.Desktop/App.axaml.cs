@@ -8,38 +8,63 @@ using FileShare.Core.Services;
 using FileShare.Desktop.Services;
 using FileShare.Desktop.ViewModels;
 using FileShare.Desktop.Views;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Serilog;
-using Serilog.Extensions.Logging;
 using System;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace FileShare.Desktop
 {
     public partial class App : Application
     {
-        private ILoggerFactory? _loggerFactory;
+        public static IServiceProvider? ServiceProvider { get; internal set; }
 
         public override void Initialize()
         {
             AvaloniaXamlLoader.Load(this);
 
+            var logger = ServiceProvider?.GetService<ILogger<App>>()
+                    ?? throw new InvalidOperationException("ServiceProvider not set");
+
             AppDomain.CurrentDomain.UnhandledException += (s, e) =>
-            {                
-                // 记录异常
-                Debug.WriteLine(e.ExceptionObject.ToString());
+            {
+                if (e.ExceptionObject is Exception ex)
+                    logger.LogCritical(ex, "Unhandled AppDomain exception");
+                else
+                    logger.LogCritical("Unhandled AppDomain exception (non-Exception object): {Obj}", e.ExceptionObject);               
             };
 
             Dispatcher.UIThread.UnhandledException += (s, e) =>
             {
-                // 处理UI线程异常
                 e.Handled = true;
-                Debug.WriteLine(e.Exception.ToString());
+                logger.LogError(e.Exception, "Unhandled UI thread exception");
             };
+
+            // 3. (可选) 过滤特定UI异常
+            //Dispatcher.UIThread.UnhandledExceptionFilter += (s, e) =>
+            //{
+            //    if (e.Exception is OperationCanceledException)
+            //    {
+            //        e.RequestCatch = false;
+            //    }
+            //};
+
+            // 4. 捕获未观察到的Task异常
+            TaskScheduler.UnobservedTaskException += (s, e) =>
+            {
+                logger.LogError(e.Exception, "Unobserved task exception");
+                e.SetObserved();
+            };
+
+            // 5. (可选) 如果使用ReactiveUI
+            // RxApp.DefaultExceptionHandler = Observer.Create<Exception>(ex => {
+            //     logger.LogError(ex, "ReactiveUI exception");
+            // });
         }
 
         public override void OnFrameworkInitializationCompleted()
@@ -49,56 +74,30 @@ namespace FileShare.Desktop
                 // Avoid duplicate validations from both Avalonia and the CommunityToolkit. 
                 // More info: https://docs.avaloniaui.net/docs/guides/development-guides/data-validation#manage-validationplugins
                 DisableAvaloniaDataAnnotationValidation();
-                
-                // 创建数据库服务实例
-                var appDataDirectory = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-                var fileShareDirectory = Path.Combine(appDataDirectory, "FileShare");
-                var databasePath = Path.Combine(fileShareDirectory, "fileshare.db");
-                var databaseService = new DatabaseService(databasePath);
 
-                // 配置 Serilog：Debug 输出 + 按天滚动文件；并桥接 Core(Microsoft.Extensions.Logging) 与 Avalonia 内部日志
-                var serilogLogger = FileShare.Desktop.Logging.SerilogSetup.CreateLogger(Path.Combine(fileShareDirectory, "logs"));
-                FileShare.Desktop.Logging.SerilogSetup.RouteAvaloniaToSerilog(serilogLogger);
-                Log.Logger = serilogLogger;
+                var provider = ServiceProvider ?? throw new InvalidOperationException("ServiceProvider not initialized");
+                DataTemplates.Add(new ViewLocator(provider));
 
-                // 通过 Microsoft.Extensions.Logging.Abstractions 接口把 Serilog 注入 Core（保持 Core 不直接依赖 Serilog）
-                _loggerFactory = Microsoft.Extensions.Logging.LoggerFactory.Create(builder =>
-                {
-                    builder.AddSerilog(serilogLogger, dispose: true);
-                });
-
-                // TLS 加密传输配置：启用自签名证书 + 指纹 TOFU 信任策略。
-                // 证书与指纹库持久化到应用数据目录，对同样启用 TLS 的对端自动升级到 SslStream，未启用者保持裸 TCP。
-                var tlsOptions = new FileShare.Core.Network.Tls.TlsOptions
-                {
-                    Enabled = true,
-                    CertificateDirectory = Path.Combine(fileShareDirectory, "tls"),
-                    FingerprintStorePath = Path.Combine(fileShareDirectory, "tls", "fingerprints.txt")
-                };
-
-                // 创建服务管理器实例（启用 TLS 加密 + mDNS 发现补充）
-                var serviceManager = new FileShareServiceManager(
-                    new DesktopDirectoryService(),
-                    databaseService,
-                    Environment.MachineName,
-                    FileShare.Core.Models.DeviceType.Desktop,
-                    loggerFactory: _loggerFactory,
-                    tlsOptions: tlsOptions,
-                    enableMdns: true);
-                
-                // 创建对话框服务实例
+                // 解析 MainViewModel 的依赖（除了 DialogService）
+                // 因为 DialogService 需要 desktop，我们手动创建并传入
+                var serviceManager = provider.GetRequiredService<FileShareServiceManager>();
                 var dialogService = new DialogService(desktop);
+                var syncContext = SynchronizationContext.Current ?? new SynchronizationContext();
 
-                // 应用退出时刷新 Serilog 缓冲
-                desktop.ShutdownRequested += (s, e) =>
-                {
-                    Log.CloseAndFlush();
-                    _loggerFactory?.Dispose();
-                };
-                desktop.MainWindow = new MainWindow
-                {
-                    DataContext = new MainWindowViewModel(serviceManager, dialogService, desktop, SynchronizationContext.Current??new SynchronizationContext()),
-                };
+                // 创建 MainViewModel
+                var viewModel = new MainViewModel(
+                    serviceManager,
+                    dialogService,
+                    desktop,
+                    syncContext,
+                    provider.GetRequiredService<ILoggerFactory>()
+                );
+               
+                var mainWindow = provider.GetRequiredService<MainWindow>();
+                mainWindow.DataContext = viewModel;
+                desktop.MainWindow = mainWindow;
+
+                base.OnFrameworkInitializationCompleted();
             }
 
             base.OnFrameworkInitializationCompleted();
