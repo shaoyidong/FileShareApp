@@ -17,7 +17,7 @@ public interface IFileShareServiceManager : IDisposable, IAsyncDisposable
     /// <summary>
     /// 设备离线事件
     /// </summary>
-    event Action<DeviceInfo>? OnDeviceRemoved;
+    event Action<string>? OnDeviceRemoved;
     
     /// <summary>
     /// 文件传输请求事件

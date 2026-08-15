@@ -156,11 +156,10 @@ public class FileShareServiceManagerTests
         // Arrange: 准备测试数据
         var deviceName = "Test Device";
         var deviceType = DeviceType.Desktop;
-        var customDiscoveryPort = 1234;
         var customTransferPort = 5678;
         
         // Act: 使用自定义端口创建实例
-        var manager = new FileShareServiceManager(_mockDirectoryService.Object, _mockDatabaseService.Object, deviceName, deviceType, customDiscoveryPort, customTransferPort);
+        var manager = new FileShareServiceManager(_mockDirectoryService.Object, _mockDatabaseService.Object, deviceName, deviceType, customTransferPort);
         var localDevice = manager.GetLocalDeviceInfo();
         
         // Assert: 验证自定义端口是否被正确使用
