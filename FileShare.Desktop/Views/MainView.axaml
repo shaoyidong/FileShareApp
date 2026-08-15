@@ -1,0 +1,243 @@
+<UserControl
+    x:Class="FileShare.Desktop.MainView"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:converters="using:FileShare.Desktop.Converters"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:fonts="using:FileShare.Desktop.Assets.Fonts"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:vm="using:FileShare.Desktop.ViewModels"
+    d:DesignHeight="450"
+    d:DesignWidth="800"
+    x:CompileBindings="True"
+    x:DataType="vm:MainViewModel"
+    mc:Ignorable="d">
+    <Grid Margin="8">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="60" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <!--  状态栏  -->
+        <Border
+            Grid.Row="0"
+            Margin="0,0,0,8"
+            Padding="10"
+            Background="#F5F5F5"
+            BorderBrush="Transparent"
+            BorderThickness="0"
+            CornerRadius="12">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Center"
+                    FontSize="14"
+                    Foreground="#0078D4"
+                    Text="{Binding StatusMessage}" />
+                <StackPanel
+                    Grid.Column="1"
+                    Orientation="Horizontal"
+                    Spacing="8">
+                    <Button
+                        Classes="fluentIcon-button"
+                        Command="{Binding ShowHistoryCommand}"
+                        Content="{x:Static fonts:FluentUI.history_24_regular}"
+                        FontSize="24"
+                        ToolTip.Tip="查看历史" />
+                </StackPanel>
+            </Grid>
+        </Border>
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="0.3*" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <!--  设备列表  -->
+            <Border
+                Grid.Column="0"
+                Margin="0,0,12,0"
+                Padding="16"
+                Background="#F5F5F5"
+                CornerRadius="12">
+                <Grid RowDefinitions="Auto,*,Auto">
+                    <TextBlock
+                        Margin="0,0,0,12"
+                        FontSize="16"
+                        FontWeight="Bold"
+                        Text="可用设备" />
+                    <ListBox
+                        Grid.Row="1"
+                        ItemsSource="{Binding Devices}"
+                        SelectedItem="{Binding SelectedDevice}">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Border
+                                    Margin="-11,-8,-11,-8"
+                                    Padding="12"
+                                    Background="White"
+                                    BorderBrush="#E0E0E0"
+                                    BorderThickness="0,0,0,1">
+                                    <StackPanel>
+                                        <TextBlock
+                                            FontSize="14"
+                                            FontWeight="Bold"
+                                            Foreground="#333333"
+                                            Text="{Binding DeviceName}" />
+                                        <TextBlock
+                                            Margin="0,4,0,0"
+                                            FontSize="12"
+                                            Foreground="#666666"
+                                            Text="{Binding DeviceType}" />
+                                        <TextBlock
+                                            Margin="0,4,0,0"
+                                            FontSize="12"
+                                            Foreground="#0078D4"
+                                            Text="{Binding IpAddress}" />
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                        <ListBox.Styles>
+                            <Style Selector="ListBoxItem:selected">
+                                <Setter Property="Background" Value="#4080FF" />
+                                <Setter Property="Foreground" Value="White" />
+                            </Style>
+                        </ListBox.Styles>
+                    </ListBox>
+                    <Button
+                        Grid.Row="2"
+                        Margin="0,8,0,0"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Center"
+                        Classes="primary-button"
+                        Command="{Binding SendFileCommand}"
+                        Content="发送文件"
+                        IsEnabled="{Binding SelectedDevice}" />
+                </Grid>
+            </Border>
+
+            <!--  传输任务  -->
+            <Border
+                Grid.Column="1"
+                Padding="16"
+                Background="#F5F5F5"
+                CornerRadius="12">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <TextBlock
+                        Margin="0,0,0,12"
+                        FontSize="16"
+                        FontWeight="Bold"
+                        Text="传输任务" />
+                    <ItemsControl Grid.Row="1" ItemsSource="{Binding TransferTasks}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Spacing="3" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border
+                                    Margin="0,0,0,0"
+                                    Padding="12"
+                                    Background="White"
+                                    BorderBrush="#E0E0E0"
+                                    BorderThickness="1">
+                                    <StackPanel>
+                                        <Grid ColumnDefinitions="Auto,*,Auto">
+                                            <TextBlock
+                                                VerticalAlignment="Center"
+                                                FontSize="14"
+                                                Foreground="{Binding Direction, Converter={x:Static converters:TransferDirectionToColorConverter.Instance}}"
+                                                Text="{Binding DirectionText, StringFormat='({0})'}" />
+                                            <TextBlock
+                                                Grid.Column="1"
+                                                Margin="8,0,0,0"
+                                                VerticalAlignment="Center"
+                                                FontSize="14"
+                                                FontWeight="Bold"
+                                                Foreground="#333333"
+                                                Text="{Binding FileName}" />
+                                            <Button
+                                                Grid.Column="2"
+                                                Margin="0,-15,-10,0"
+                                                VerticalAlignment="Center"
+                                                Classes="red-button"
+                                                Command="{Binding $parent[UserControl].DataContext.RemoveTransferCommand}"
+                                                CommandParameter="{Binding}"
+                                                Content="✕"
+                                                FontSize="20"
+                                                ToolTip.Tip="移除此任务" />
+                                        </Grid>
+                                        <Grid Margin="0,8,0,0" ColumnDefinitions="*,Auto">
+                                            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                                <TextBlock
+                                                    FontSize="12"
+                                                    Foreground="#666666"
+                                                    Text="{Binding FormattedTransferredSize}" />
+                                                <TextBlock
+                                                    Margin="2,0"
+                                                    FontSize="12"
+                                                    Foreground="#666666"
+                                                    Text="/" />
+                                                <TextBlock
+                                                    FontSize="12"
+                                                    Foreground="#666666"
+                                                    Text="{Binding FormattedFileSize}" />
+                                            </StackPanel>
+                                            <TextBlock
+                                                Grid.Column="0"
+                                                FontSize="12"
+                                                Foreground="{Binding Status, Converter={x:Static converters:StatusToColorConverter.Instance}}"
+                                                Text="{Binding StatusText}" />
+                                        </Grid>
+                                        <Grid Margin="0,8,0,0" ColumnDefinitions="*,Auto">
+                                            <ProgressBar
+                                                Grid.Column="0"
+                                                Height="8"
+                                                Background="#E0E0E0"
+                                                Foreground="#0078D4"
+                                                Maximum="100"
+                                                Value="{Binding ProgressPercentage}" />
+                                            <TextBlock
+                                                Grid.Column="1"
+                                                Margin="8,0,0,0"
+                                                FontSize="12"
+                                                Foreground="#0078D4"
+                                                Text="{Binding ProgressPercentage, StringFormat={}{0:F1}%}" />
+                                        </Grid>
+                                        <!--  只有待处理且接收的任务才显示接受/拒绝按钮  -->
+                                        <Grid
+                                            Margin="0,8,0,0"
+                                            ColumnDefinitions="Auto,Auto"
+                                            IsVisible="{Binding ShowAcceptReject}">
+                                            <Button
+                                                Grid.Column="0"
+                                                Margin="0,0,8,0"
+                                                Classes="accept-button"
+                                                Command="{Binding $parent[UserControl].DataContext.AcceptTransferCommand}"
+                                                CommandParameter="{Binding}"
+                                                Content="接受" />
+                                            <Button
+                                                Grid.Column="1"
+                                                Classes="reject-button"
+                                                Command="{Binding $parent[UserControl].DataContext.RejectTransferCommand}"
+                                                CommandParameter="{Binding}"
+                                                Content="拒绝" />
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>

@@ -1,17 +1,15 @@
-<Application xmlns="https://github.com/avaloniaui"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             x:Class="FileShare.Desktop.App"
-             xmlns:local="using:FileShare.Desktop"
-             RequestedThemeVariant="Default">
-             <!-- "Default" ThemeVariant follows system theme variant. "Dark" or "Light" are other available options. -->
+<Application
+    x:Class="FileShare.Desktop.App"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:FileShare.Desktop"
+    x:CompileBindings="True"
+    RequestedThemeVariant="Default">
+    <!--  "Default" ThemeVariant follows system theme variant. "Dark" or "Light" are other available options.  -->    
 
-    <Application.DataTemplates>
-        <local:ViewLocator/>
-    </Application.DataTemplates>
-  
     <Application.Resources>
         <ResourceDictionary>
-            <!-- Status Colors -->
+            <!--  Status Colors  -->
             <Color x:Key="StatusCompleted">#2ecc71</Color>
             <Color x:Key="StatusFailed">#e74c3c</Color>
             <Color x:Key="StatusTransferring">#3498db</Color>
@@ -19,7 +17,7 @@
             <Color x:Key="StatusCancelled">#95a5a6</Color>
             <Color x:Key="StatusUnknown">#7f8c8d</Color>
 
-            <!-- Direction Colors -->
+            <!--  Direction Colors  -->
             <Color x:Key="DirectionSend">#449c12</Color>
             <Color x:Key="DirectionReceive">#3498db</Color>
             <Color x:Key="DirectionUnknown">#7f8c8d</Color>
@@ -27,7 +25,7 @@
             <FontFamily x:Key="FluentIcons">avares://FileShare.Desktop/Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons</FontFamily>
         </ResourceDictionary>
     </Application.Resources>
-    
+
     <Application.Styles>
         <FluentTheme />
     </Application.Styles>

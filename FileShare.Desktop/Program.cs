@@ -1,6 +1,15 @@
 ﻿using Avalonia;
 using Avalonia.Media;
+using FileShare.Core.Network.Discovery;
+using FileShare.Core.Network.Tls;
+using FileShare.Core.Services;
 using FileShare.Desktop.Helpers;
+using FileShare.Desktop.ViewModels;
+using FileShare.Desktop.Views;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using Serilog;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -11,16 +20,19 @@ using System.Runtime.InteropServices;
 namespace FileShare.Desktop
 {
     internal sealed class Program
-    {
+    { 
         // Initialization code. Don't use any Avalonia, third-party APIs or any
         // SynchronizationContext-reliant code before AppMain is called: things aren't initialized
         // yet and stuff might break.
         [STAThread]
         public static void Main(string[] args)
-        {
+        {    
             // 第一步：先加载所有本地库
             ExtractAndLoadNativeLibs();
 
+            var serviceProvider = BuildServiceProvider();
+            App.ServiceProvider = serviceProvider;           
+            var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
             // 第二步：再构建Avalonia应用
             try
             {
@@ -29,15 +41,12 @@ namespace FileShare.Desktop
             }
             catch (Exception ex)
             {
-                // 记录详细的错误信息
-                var logPath = Path.Combine(Path.GetTempPath(), "AvaloniaStartupError.txt");
-                File.WriteAllText(logPath, $"""
-            Error: {ex.Message}
-            StackTrace: {ex.StackTrace}
-            InnerException: {ex.InnerException?.Message}
-            InnerStackTrace: {ex.InnerException?.StackTrace}
-            """);
+                logger.LogCritical(ex, "Application terminated unexpectedly during startup");               
                 throw;
+            }
+            finally
+            {
+                Log.CloseAndFlush();
             }
         }
 
@@ -213,6 +222,76 @@ namespace FileShare.Desktop
 
             // 组合成标准的RID，例如：win-x64, linux-arm, osx-arm64
             return $"{os}-{arch}";
+        }
+
+        public static IServiceProvider BuildServiceProvider()
+        {
+            // 1. 准备路径
+            var appDataDir = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            var fileShareDir = Path.Combine(appDataDir, "FileShare");
+            Directory.CreateDirectory(fileShareDir);
+            var databasePath = Path.Combine(fileShareDir, "fileshare.db");
+            var certDir = Path.Combine(fileShareDir, "tls");
+            var fingerprintPath = Path.Combine(certDir, "fingerprints.txt");
+            var logDir = Path.Combine(fileShareDir, "logs");
+
+            // 2. 初始化 Serilog
+            var serilogLogger = SerilogSetup.CreateLogger(logDir);
+            SerilogSetup.RouteAvaloniaToSerilog(serilogLogger);
+            Log.Logger = serilogLogger;
+
+            // 3. 配置 DI 容器
+            var services = new ServiceCollection();
+
+            // 日志
+            services.AddLogging(builder =>
+            {
+                builder.ClearProviders();
+                builder.AddSerilog(serilogLogger, dispose: true);
+            });
+
+            // 配置选项
+            var options = new TlsOptions
+            {
+                Enabled = true,
+                CertificateDirectory = certDir,
+                FingerprintStorePath = fingerprintPath
+            };
+            services.AddSingleton(options);
+            services.Configure<DiscoveryOptions>(_ => { });
+
+            // 数据库
+            services.AddSingleton<IDatabaseService>(sp =>
+                new DatabaseService(databasePath));
+
+            // 平台服务
+            services.AddSingleton<IPlatformDirectoryService, DesktopDirectoryService>();
+
+            // 核心服务管理器
+            services.AddSingleton<FileShareServiceManager>(sp =>
+            {
+                var dirSvc = sp.GetRequiredService<IPlatformDirectoryService>();
+                var dbSvc = sp.GetRequiredService<IDatabaseService>();
+                var tlsOpt = sp.GetRequiredService<TlsOptions>();
+                var discOpt = sp.GetRequiredService<IOptions<DiscoveryOptions>>().Value;
+                var fac = sp.GetRequiredService<ILoggerFactory>();
+                return new FileShareServiceManager(
+                    dirSvc,
+                    dbSvc,
+                    Environment.MachineName,
+                    Core.Models.DeviceType.Desktop,
+                    tlsOptions: tlsOpt,
+                    discoveryOptions: discOpt,
+                    loggerFactory: fac);
+            });
+
+            // 注册视图（以便 ViewLocator 能从 DI 解析）
+            services.AddTransient<MainWindow>();
+            services.AddTransient<MainView>();
+            services.AddTransient<HistoryView>(); 
+
+            // 构建并返回容器
+            return services.BuildServiceProvider();
         }
     }
 }

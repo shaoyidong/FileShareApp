@@ -6,6 +6,7 @@ using FileShare.Core.Models;
 using FileShare.Core.Services;
 using FileShare.Desktop.Services;
 using FileShare.Desktop.ViewModels.Messages;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -18,7 +19,7 @@ using System.Windows.Input;
 
 namespace FileShare.Desktop.ViewModels
 {
-    public partial class MainWindowViewModel : ViewModelBase
+    public partial class MainViewModel : ViewModelBase
     {
         public string Greeting { get; } = "Welcome to Avalonia!";
 
@@ -26,7 +27,7 @@ namespace FileShare.Desktop.ViewModels
         private readonly IDialogService _dialogService;
         private readonly SynchronizationContext _uiContext;
         private readonly IClassicDesktopStyleApplicationLifetime? _appLifetime;
-
+        private readonly ILogger<MainViewModel> _logger;
         private string _statusMessage = "准备就绪";
         private bool _isScanning;
         [ObservableProperty]
@@ -68,15 +69,18 @@ namespace FileShare.Desktop.ViewModels
         /// <param name="dialogService">对话框服务</param>
         /// <param name="appLifetime">应用程序生命周期</param>
         /// <param name="uiContext">UI上下文</param>
-        public MainWindowViewModel(IFileShareServiceManager serviceManager, 
+        public MainViewModel(IFileShareServiceManager serviceManager, 
                                   IDialogService dialogService,                                 
                                   IClassicDesktopStyleApplicationLifetime appLifetime,
-                                  SynchronizationContext uiContext)
+                                  SynchronizationContext uiContext,
+                                  ILoggerFactory loggerFactory)
         {
             _serviceManager = serviceManager;
             _dialogService = dialogService;
             _uiContext = uiContext ?? SynchronizationContext.Current ?? new SynchronizationContext();
             _appLifetime = appLifetime;
+            _logger = loggerFactory.CreateLogger<MainViewModel>();
+
             Devices = new ObservableCollection<DeviceInfo>();
             TransferTasks = new ObservableCollection<FileTransferViewModel>();
             SentTransferTasks = new ObservableCollection<FileTransferViewModel>();
@@ -115,33 +119,18 @@ namespace FileShare.Desktop.ViewModels
             });
         }        
 
-        private void Timer_Elapsed(object? sender, ElapsedEventArgs e)
-        {
-            List<DeviceInfo> removeDevices = new List<DeviceInfo>();
-            for (int i = 0; i < Devices.Count; i++)
-            {
-                if ((DateTime.Now - Devices[i].LastSeen) > TimeSpan.FromSeconds(10))
-                {
-                    removeDevices.Add(Devices[i]);
-                }
-            }
-            foreach (var item in removeDevices)
-            {
-                Devices.Remove(item);
-            }
-            removeDevices.Clear();
-        }
-
         private async Task InitializeAsync()
         {
             try
             {
                 await _serviceManager.StartServicesAsync();
                 StatusMessage = "准备就绪";
+                _logger.LogInformation("服务启动成功");
             }
             catch (Exception ex)
             {
                 StatusMessage = $"启动服务失败: {ex.Message}";
+                _logger.LogError(ex, "启动服务失败");
             }
         }
 
@@ -158,6 +147,7 @@ namespace FileShare.Desktop.ViewModels
             catch (Exception ex)
             {
                 StatusMessage = $"扫描设备失败: {ex.Message}";
+                _logger.LogError(ex, "扫描设备失败");
             }
             finally
             {
@@ -187,21 +177,24 @@ namespace FileShare.Desktop.ViewModels
 
                 try
                 {
-                    StatusMessage = $"正在发送文件: {Path.GetFileName(filePath)}";
+                    StatusMessage = $"准备发送文件: {Path.GetFileName(filePath)}";
                     var success = await _serviceManager.SendFileAsync(filePath, SelectedDevice);
 
                     if (success)
                     {
                         StatusMessage = "文件发送成功";
+                        _logger.LogInformation($"文件发送成功: {filePath} 到设备 {SelectedDevice.DeviceName}");
                     }
                     else
                     {
                         StatusMessage = "文件发送失败";
+                        _logger.LogError($"文件发送失败: {filePath} 到设备 {SelectedDevice.DeviceName}");
                     }
                 }
                 catch (Exception ex)
                 {
                     StatusMessage = $"发送文件失败: {ex.Message}";
+                    _logger.LogError(ex, $"发送文件失败: {filePath} 到设备 {SelectedDevice.DeviceName}");
                 }
             }
         }
@@ -232,6 +225,7 @@ namespace FileShare.Desktop.ViewModels
             StatusMessage = savePath != null 
                 ? $"开始接收文件: {viewModel.FileName} (保存到: {savePath})" 
                 : $"开始接收文件: {viewModel.FileName}";
+            _logger.LogInformation($"开始接收文件: {viewModel.FileName} (保存到: {savePath})");
         }
 
         private void RejectTransfer(FileTransferViewModel? viewModel)
@@ -242,6 +236,7 @@ namespace FileShare.Desktop.ViewModels
             }
             _serviceManager.HandleTransferRequest(viewModel.TransferId, false);
             StatusMessage = $"已拒绝文件: {viewModel.FileName}";
+            _logger.LogInformation($"已拒绝文件: {viewModel.FileName}");
         }   
 
         private void OnDeviceDiscovered(DeviceInfo device)
@@ -260,28 +255,29 @@ namespace FileShare.Desktop.ViewModels
             }, null);
 
             StatusMessage = $"发现设备: {device.DeviceName}";
+            _logger.LogInformation($"发现设备: {device.DeviceName} (ID: {device.DeviceId})");
         }
         
-        private void OnDeviceRemoved(DeviceInfo device)
+        private void OnDeviceRemoved(string deviceId)
         {
             // 更新设备列表，过滤掉本地设备
             var localDevice = _serviceManager.GetLocalDeviceInfo();
 
-            if (device.DeviceId == localDevice.DeviceId)
+            if (deviceId == localDevice.DeviceId)
             {
                 return;
             }
 
             _uiContext.Send(_ =>
             {
-                var existingDevice = Devices.FirstOrDefault(d => d.DeviceId == device.DeviceId);
+                var existingDevice = Devices.FirstOrDefault(d => d.DeviceId == deviceId);
                 if (existingDevice != null)
                 {
                     Devices.Remove(existingDevice);
-                }
-            }, null);
-
-            StatusMessage = $"设备已离线: {device.DeviceName}";
+                    StatusMessage = $"设备已离线: {existingDevice.DeviceName}";
+                    _logger.LogInformation($"设备已离线: {existingDevice.DeviceName} (ID: {existingDevice.DeviceId})");
+                }              
+            }, null);           
         }
 
         private async void RemoveTransfer(FileTransferViewModel? model)
@@ -301,6 +297,7 @@ namespace FileShare.Desktop.ViewModels
                     //}                     
                     _serviceManager.CancelTransfer(model.TransferId);
                     StatusMessage = $"已拒绝文件: {model.FileName}";
+                    _logger.LogInformation($"已拒绝文件: {model.FileName}");
                     break;
                 case TransferStatus.Transferring:
                     // 使用对话框服务显示确认对话框
@@ -310,6 +307,7 @@ namespace FileShare.Desktop.ViewModels
                         return;
                     }
                     _serviceManager.CancelTransfer(model.TransferId);
+                    _logger.LogInformation($"已取消文件传输: {model.FileName}");
                     break;
                 case TransferStatus.Completed:
                 case TransferStatus.Failed:
@@ -343,13 +341,15 @@ namespace FileShare.Desktop.ViewModels
             {
                 // 发送任务
                 SentTransferTasks.Insert(0,transferViewModel);
-                StatusMessage = $"正在发送文件: {info.FileName}";
+                StatusMessage = $"准备发送文件: {info.FileName}";
+                _logger.LogInformation($"准备发送文件: {info.FileName} (ID: {info.TransferId})");
             }
             else
             {
                 // 接收任务
                 ReceivedTransferTasks.Insert(0,transferViewModel);
                 StatusMessage = $"收到文件传输请求: {info.FileName}";
+                _logger.LogInformation($"收到文件传输请求: {info.FileName} (ID: {info.TransferId})");
             }
         }
 
@@ -400,12 +400,15 @@ namespace FileShare.Desktop.ViewModels
                 {
                     case TransferStatus.Completed:
                         StatusMessage = $"文件传输完成: {updatedInfo.FileName}";
+                        _logger.LogInformation($"文件传输完成: {updatedInfo.FileName} (ID: {updatedInfo.TransferId})");
                         break;
                     case TransferStatus.Failed:
                         StatusMessage = $"文件传输失败: {errorMessage??string.Empty}";
+                        _logger.LogError($"文件传输失败: {updatedInfo.FileName} (ID: {updatedInfo.TransferId}), 错误信息: {errorMessage}");
                         break;
                     case TransferStatus.Cancelled:
                         StatusMessage = $"文件传输取消: {errorMessage ?? string.Empty}";
+                        _logger.LogInformation($"文件传输取消: {updatedInfo.FileName} (ID: {updatedInfo.TransferId}), 错误信息: {errorMessage}");
                         break;
                     default:
                         StatusMessage = errorMessage ?? string.Empty;
