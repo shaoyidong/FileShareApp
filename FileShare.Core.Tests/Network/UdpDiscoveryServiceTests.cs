@@ -28,7 +28,7 @@ public class UdpDiscoveryServiceTests
         };    
         
         // Act: 创建 UdpDiscoveryService 实例
-        using var service = new UdpDiscoveryService(deviceInfo);
+        using var service = new UdpMulticastDiscoveryService(deviceInfo);
         
         // Assert: 验证实例是否创建成功
         Assert.NotNull(service);
@@ -50,7 +50,7 @@ public class UdpDiscoveryServiceTests
         };
 
         // Act: 创建实例并获取发现的设备列表
-        using var service = new UdpDiscoveryService(deviceInfo);
+        using var service = new UdpMulticastDiscoveryService(deviceInfo);
         var discoveredDevices = service.GetDiscoveredDevices();
         
         // Assert: 验证初始状态下设备列表为空
@@ -74,7 +74,7 @@ public class UdpDiscoveryServiceTests
         };
 
         // Act & Assert: 验证方法执行过程中没有抛出异常
-        using var service = new UdpDiscoveryService(deviceInfo);
+        using var service = new UdpMulticastDiscoveryService(deviceInfo);
         Assert.NotNull(service);
         
         // 启动服务后再发送
@@ -99,7 +99,7 @@ public class UdpDiscoveryServiceTests
         };
 
         // Act: 创建实例并注册事件
-        using var service = new UdpDiscoveryService(deviceInfo);
+        using var service = new UdpMulticastDiscoveryService(deviceInfo);
         bool eventCalled = false;
         
         service.OnDeviceDiscovered += device =>
@@ -129,7 +129,7 @@ public class UdpDiscoveryServiceTests
         };
 
         // Act & Assert: 验证 StartAsync 和 StopAsync 方法执行过程中没有抛出异常
-        using var service = new UdpDiscoveryService(deviceInfo);
+        using var service = new UdpMulticastDiscoveryService(deviceInfo);
         
         // 启动服务
         await service.StartAsync();
@@ -160,7 +160,7 @@ public class UdpDiscoveryServiceTests
         };
 
         // Act: 创建实例并释放资源
-        var service = new UdpDiscoveryService(deviceInfo);
+        var service = new UdpMulticastDiscoveryService(deviceInfo);
         service.Dispose();
         
         // Assert: 验证服务已释放资源

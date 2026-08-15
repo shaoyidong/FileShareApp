@@ -22,7 +22,7 @@ namespace FileShare.Core.Network.Mdns;
 /// <item>收到对端公告/响应时解析其实例信息，通过 OnDeviceDiscovered 上报（与 UDP 发现产出等价的 DeviceInfo）。</list>
 /// <para>纯 UDP 多播 + 字节编解码，无外部依赖，AOT 安全。</para>
 /// </summary>
-public sealed class MdnsService : IDisposable
+public sealed class MdnsService : IDeviceDiscoveryService
 {
     private const string MulticastAddress = "224.0.0.251";
     private const int MulticastPort = 5353;
@@ -35,19 +35,16 @@ public sealed class MdnsService : IDisposable
     private readonly string _hostName;       // <deviceId>.local
     private readonly IPAddress _localIp;
     private readonly ILogger<MdnsService> _logger;
-    private readonly ConcurrentDictionary<string, DateTime> _seenPeers = new();
     private readonly SemaphoreSlim _sendLock = new(1, 1);
+    private readonly IPEndPoint _multicastEndPoint;
 
+    private CancellationTokenSource? _cts;
     private UdpClient? _udpClient;
-    private CancellationTokenSource _cts = new();
+    private Task? _announceLoopTask;
     private volatile bool _isRunning;
     private volatile bool _isDisposed;
-
-    /// <summary>发现设备时触发（产出与 UDP 发现等价的 DeviceInfo）。</summary>
     public event Action<DeviceInfo>? OnDeviceDiscovered;
-
-    /// <summary>设备过期离线时触发。</summary>
-    public event Action<DeviceInfo>? OnDeviceRemoved;
+    public event Action<string>? OnDeviceRemoved;
 
     public MdnsService(DeviceInfo localDevice, ILoggerFactory? loggerFactory = null)
     {
@@ -57,12 +54,14 @@ public sealed class MdnsService : IDisposable
         _instanceName = $"{safeId}.{ServiceType}";
         _hostName = $"{safeId}.local";
         _localIp = ParseLocalIp(localDevice.IpAddress);
+        _multicastEndPoint = new IPEndPoint(IPAddress.Parse(MulticastAddress), MulticastPort);
     }
 
-    /// <summary>启动 mDNS 服务：加入多播组，发送初始公告 + 查询，开启监听与周期公告。</summary>
+    /// <summary>启动 mDNS 服务：加入多播组，发送初始公告 + 查询，开启监听</summary>
     public async Task<bool> StartAsync()
     {
-        if (_isRunning || _isDisposed) return false;
+        if (_isRunning || _isDisposed) 
+            return false;
 
         try
         {
@@ -81,7 +80,7 @@ public sealed class MdnsService : IDisposable
             return false;
         }
 
-        _isRunning = true;
+        
         _cts = new CancellationTokenSource();
         _logger.LogInformation("mDNS 服务发现已启动，服务类型 {ServiceType}", ServiceType);
 
@@ -93,26 +92,63 @@ public sealed class MdnsService : IDisposable
         });
 
         // 监听循环
-        _ = Task.Run(() => ListenAsync(_cts.Token));
-        // 周期公告 + 过期清理
-        _ = Task.Run(() => AnnounceLoopAsync(_cts.Token));
+        _ = Task.Run(() => ListenAsync(_cts.Token));        
 
+        _isRunning = true;
         return true;
     }
 
     /// <summary>停止 mDNS 服务。</summary>
     public async Task StopAsync()
     {
-        if (!_isRunning || _isDisposed) return;
+        if (!_isRunning || _isDisposed) 
+            return;
+
         _isRunning = false;
-        _cts.Cancel();
+        _cts?.Cancel();
 
         // 发送一条 TTL=0 的公告（goodbye），让对端尽快移除本设备
         try { await SendGoodbyeAsync().ConfigureAwait(false); } catch { /* 忽略 */ }
 
+        if (_announceLoopTask != null)
+        {
+            try { await _announceLoopTask.ConfigureAwait(false); } catch { }
+            _announceLoopTask = null;
+        }
+
         await Task.Delay(50).ConfigureAwait(false);
+
         ReleaseResources();
         _logger.LogInformation("mDNS 服务发现已停止");
+    }
+
+    /// <summary>主动查询 _fileshare._tcp.local 的 PTR，触发对端回应。</summary>
+    public async Task SendServiceQueryAsync()
+    {
+        if (_udpClient == null) return;
+
+        var msg = new MdnsMessage { Id = 0, Flags = 0x0000 };
+        msg.Questions.Add(new MdnsQuestion
+        {
+            Name = ServiceType,
+            Type = MdnsCodec.TypePTR,
+            Class = MdnsCodec.ClassIN
+        });
+
+        var data = MdnsCodec.Encode(msg);
+        await SendMulticastAsync(data).ConfigureAwait(false);
+    }
+
+    public async Task StartAnnounceLoopAsync()
+    {
+        if (!_isRunning || _isDisposed) 
+            return;
+
+        // 如果已有周期性任务则无需重复启动
+        if (_announceLoopTask != null && !_announceLoopTask.IsCompleted) 
+            return;
+        
+        _announceLoopTask = Task.Run(() => AnnounceLoopAsync(_cts?.Token ?? CancellationToken.None));
     }
 
     private async Task ListenAsync(CancellationToken cancellationToken)
@@ -134,10 +170,12 @@ public sealed class MdnsService : IDisposable
             }
 
             // 忽略自身发出的多播包（源 IP 为本机）
-            if (result.RemoteEndPoint.Address.Equals(_localIp)) continue;
+            if (result.RemoteEndPoint.Address.Equals(_localIp)) 
+                continue;
 
             var msg = MdnsCodec.Decode(result.Buffer, result.Buffer.Length);
-            if (msg == null) continue;
+            if (msg == null) 
+                continue;
 
             try
             {
@@ -146,6 +184,23 @@ public sealed class MdnsService : IDisposable
             catch (Exception ex)
             {
                 _logger.LogDebug(ex, "处理 mDNS 报文失败");
+            }
+        }
+    }
+
+    private async Task AnnounceLoopAsync(CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested && !_isDisposed)
+        {
+            try
+            {
+                await Task.Delay(AnnounceIntervalMs, cancellationToken).ConfigureAwait(false);
+                await SendAnnouncementAsync().ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) { break; }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "mDNS 周期公告失败");
             }
         }
     }
@@ -184,9 +239,13 @@ public sealed class MdnsService : IDisposable
         int port = 0;
         var txt = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         IPAddress? aRecordIp = null;
+        bool isGoodbye = false;
 
         foreach (var rr in msg.Answers)
         {
+            if (rr.Ttl == 0)
+                isGoodbye = true;
+
             // PTR：_fileshare._tcp.local → <instance>._fileshare._tcp.local
             if (rr.Type == MdnsCodec.TypePTR &&
                 string.Equals(rr.Name, ServiceType, StringComparison.OrdinalIgnoreCase))
@@ -223,11 +282,18 @@ public sealed class MdnsService : IDisposable
 
         // 从 TXT 还原设备信息；IP 优先用 A 记录，回退到源地址
         if (!txt.TryGetValue("id", out var deviceId)) deviceId = instanceLabel;
+
+        if (isGoodbye)
+        {
+            OnDeviceRemoved?.Invoke(deviceId);
+            return;
+        }
+
         if (!txt.TryGetValue("name", out var deviceName)) deviceName = instanceLabel;
+        var ip = remoteIp.ToString();
         if (!Enum.TryParse<DeviceType>(txt.GetValueOrDefault("type"), true, out var deviceType))
             deviceType = DeviceType.Desktop;
-        var supportsTls = txt.TryGetValue("tls", out var tlsVal) && tlsVal == "1";
-        var ip = (aRecordIp?.ToString() ?? remoteIp.ToString());
+        var supportsTls = txt.TryGetValue("tls", out var tlsVal) && tlsVal == "1";        
 
         var device = new DeviceInfo
         {
@@ -239,49 +305,9 @@ public sealed class MdnsService : IDisposable
             SupportsTls = supportsTls,
             LastSeen = DateTime.Now
         };
-
-        // 过期清理基于 LastSeen；首次或更新都上报
-        _seenPeers[device.DeviceId] = DateTime.Now;
+       
         OnDeviceDiscovered?.Invoke(device);
-    }
-
-    private async Task AnnounceLoopAsync(CancellationToken cancellationToken)
-    {
-        while (!cancellationToken.IsCancellationRequested && !_isDisposed)
-        {
-            try
-            {
-                await Task.Delay(AnnounceIntervalMs, cancellationToken).ConfigureAwait(false);
-                await SendAnnouncementAsync().ConfigureAwait(false);
-                CleanupExpiredPeers();
-            }
-            catch (OperationCanceledException) { break; }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "mDNS 周期公告失败");
-            }
-        }
-    }
-
-    private void CleanupExpiredPeers()
-    {
-        var cutoff = DateTime.Now.AddSeconds(-DeviceExpirySeconds);
-        foreach (var kv in _seenPeers)
-        {
-            if (kv.Value < cutoff)
-            {
-                _seenPeers.TryRemove(kv.Key, out _);
-                // 无完整的 DeviceInfo 缓存（仅存时间戳），OnDeviceRemoved 携带 deviceId 标识的占位
-                OnDeviceRemoved?.Invoke(new DeviceInfo
-                {
-                    DeviceId = kv.Key,
-                    DeviceName = kv.Key,
-                    IpAddress = "",
-                    Port = 0
-                });
-            }
-        }
-    }
+    }    
 
     /// <summary>发送自身服务公告（PTR/SRV/TXT/A）。</summary>
     private Task SendAnnouncementAsync() => SendAnnouncementCoreAsync(goodbye: false);
@@ -353,35 +379,18 @@ public sealed class MdnsService : IDisposable
 
         var data = MdnsCodec.Encode(msg);
         await SendMulticastAsync(data).ConfigureAwait(false);
-    }
-
-    /// <summary>主动查询 _fileshare._tcp.local 的 PTR，触发对端回应。</summary>
-    private async Task SendServiceQueryAsync()
-    {
-        if (_udpClient == null) return;
-
-        var msg = new MdnsMessage { Id = 0, Flags = 0x0000 };
-        msg.Questions.Add(new MdnsQuestion
-        {
-            Name = ServiceType,
-            Type = MdnsCodec.TypePTR,
-            Class = MdnsCodec.ClassIN
-        });
-
-        var data = MdnsCodec.Encode(msg);
-        await SendMulticastAsync(data).ConfigureAwait(false);
-    }
+    }    
 
     private async Task SendMulticastAsync(byte[] data)
     {
-        if (_isDisposed || _udpClient == null) return;
+        if (_isDisposed || _udpClient == null) 
+            return;
         await _sendLock.WaitAsync().ConfigureAwait(false);
         try
         {
             if (!_isDisposed && _udpClient != null)
             {
-                await _udpClient.SendAsync(data, data.Length, new IPEndPoint(IPAddress.Parse(MulticastAddress), MulticastPort))
-                    .ConfigureAwait(false);
+                await _udpClient.SendAsync(data, data.Length, _multicastEndPoint).ConfigureAwait(false);
             }
         }
         finally
@@ -428,9 +437,9 @@ public sealed class MdnsService : IDisposable
     {
         if (_isDisposed) return;
         _isDisposed = true;
-        try { _cts.Cancel(); } catch { }
+        try { _cts?.Cancel(); } catch { }
         ReleaseResources();
-        _cts.Dispose();
+        _cts?.Dispose();
         _sendLock.Dispose();
         GC.SuppressFinalize(this);
     }
