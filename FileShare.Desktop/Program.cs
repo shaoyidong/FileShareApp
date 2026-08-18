@@ -81,10 +81,9 @@ namespace FileShare.Desktop
             }
            return  AppBuilder.Configure<App>()
                .UsePlatformDetect()
-               .WithInterFont()
-               .LogToTrace()
+               .WithInterFont()             
        // 配置字体选项，解决Linux下中文显示问题
-                .With(fontOptions);
+               .With(fontOptions);
         }
 
         private static void ExtractAndLoadNativeLibs()
