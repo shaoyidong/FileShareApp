@@ -845,24 +845,27 @@ public class TcpFileTransferService : IDisposable
 
             while (totalBytesRead < request.FileSize && !cts.Token.IsCancellationRequested)
             {
-                var bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length, cts.Token).ConfigureAwait(false);
-                if (bytesRead == 0) break;
+                int bytesToRead = (int)Math.Min(buffer.Length, request.FileSize - totalBytesRead);
+                var bytesRead = await stream.ReadAsync(buffer, 0, bytesToRead, cts.Token).ConfigureAwait(false);
+                if (bytesRead == 0) 
+                    break;
 
                 await fileStream.WriteAsync(buffer, 0, bytesRead, cts.Token).ConfigureAwait(false);
                 totalBytesRead += bytesRead;
+                
                 Interlocked.Add(ref _totalBytesReceived, bytesRead);
 
                 sha256.TransformBlock(buffer, 0, bytesRead, null, 0);
                 UpdateTransferProgress(transferInfo, totalBytesRead);
-            }           
-
+            }
+            
             if (cts.Token.IsCancellationRequested)
             {
                 await OnReceiverCancelled(stream, transferInfo, tempFilePath).ConfigureAwait(false);
                 return;
             }
 
-                // 检查传输进度是否达到100%
+            // 检查传输进度是否达到100%
             if (totalBytesRead >= request.FileSize)
             {
                 sha256.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
@@ -1009,6 +1012,7 @@ public class TcpFileTransferService : IDisposable
             else
             {
                 transferInfo.Status = TransferStatus.Failed;
+                _logger.LogError($"'{request.FileName}'文件校验失败");
                 OnTransferCompleted?.Invoke(transferInfo, "校验失败");
                
             }
@@ -1451,7 +1455,8 @@ public class TcpFileTransferService : IDisposable
                     Checksum = Convert.ToHexString(hash)
                 };
                 await SendRequestAsync(stream, checksumRequest, cancellationToken).ConfigureAwait(false);
-            }            
+                _logger.LogDebug("发送文件校验请求: {Checksum}", checksumRequest.Checksum);
+            }
         }
         catch (OperationCanceledException)
         {
@@ -1466,6 +1471,7 @@ public class TcpFileTransferService : IDisposable
         }
         catch (ChannelClosedException ex) when (ex.InnerException != null)
         {
+            _logger.LogError(ex, "Channel 已关闭，可能是生产者异常导致");
             // 生产者异常，同样取消监听任务（防止泄漏）
             linkedCts.Cancel();
             // 生产者异常导致 Channel 关闭，向上抛出原始异常
