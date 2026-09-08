@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    LocalSend.Core - C# 移植版
+
+    本项目将 LocalSend 的 Rust "core" crate (packages/core/src)
+    翻译为 C# 实现。源代码结构尽量与 Rust 版本一一对应，便于对照阅读：
+
+      Rust: src/model/         -> C#: Model/
+      Rust: src/util/          -> C#: Util/
+      Rust: src/crypto/        -> C#: Crypto/
+      Rust: src/http/dto.rs    -> C#: Http/Dto/
+      Rust: src/http/dto_v2.rs -> C#: Http/DtoV2/
+      Rust: src/http/state.rs  -> C#: Http/State/
+      Rust: src/http/client/   -> C#: Http/Client/
+      Rust: src/http/server/   -> C#: Http/Server/
+      Rust: src/webrtc/        -> C#: WebRtc/
+
+    依赖选择：
+      - BouncyCastle.Cryptography : Ed25519（.NET 10 预览版尚未原生提供；正式版可移除）。
+      - System.Security.Cryptography (内置) : RSA-PSS、X.509 证书、SHA-256、PEM。
+      - System.Text.Json          : 内置 JSON 序列化（对应 Rust serde_json）。
+      - System.Net.Http           : 内置 HttpClient（对应 Rust reqwest）。
+      - HttpListener              : 内置 HTTP 服务器（对应 Rust hyper）。
+      - System.Net.WebSockets     : 内置 WebSocket（对应 Rust tokio-tungstenite）。
+      - System.Threading.Channels : 内置异步通道（对应 Rust tokio::sync::mpsc）。
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>LocalSend.Core</RootNamespace>
+    <AssemblyName>LocalSend.Core</AssemblyName>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591;CS1574;CS1734</NoWarn>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Remove=".gitignore" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BouncyCastle.Cryptography" Version="2.7.0" />
+  </ItemGroup>
+
+</Project>
