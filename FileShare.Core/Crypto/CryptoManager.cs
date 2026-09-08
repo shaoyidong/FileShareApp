@@ -22,21 +22,21 @@ namespace FileShare.Core.Crypto
         public static CryptoManager Instance => _instance.Value;
 
         /// <summary>Ed25519 签名密钥</summary>
-        public SigningTokenKey SigningKey { get; private set; }
+        public SigningTokenKey? SigningKey { get; private set; }
 
         /// <summary>TLS 自签名证书</summary>
-        public TlsCertificate TlsCertificate { get; private set; }
+        public TlsCertificate? TlsCertificate { get; private set; }
 
         /// <summary>TOFU 证书指纹信任库</summary>
         public FingerprintStore FingerprintStore { get; private set; }
 
         private X509Certificate2? _x509Certificate2;
 
-        public X509Certificate2 GetX509Certificate2()
+        public X509Certificate2? GetX509Certificate2()
         {
             if (_x509Certificate2 == null)
             {
-                _x509Certificate2 = TlsCertificate.LoadX509Certificate(PfxPassword);
+                _x509Certificate2 = TlsCertificate?.LoadX509Certificate(PfxPassword);
             }
             return _x509Certificate2;
         }

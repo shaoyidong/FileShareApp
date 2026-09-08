@@ -292,7 +292,7 @@ public class UdpMulticastDiscoveryService : IDeviceDiscoveryService
             var data = BuildGoodbyePacket();
             await SendMulticastAsync(data, CancellationToken.None).ConfigureAwait(false);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
         }
     }

@@ -1378,7 +1378,7 @@ public class TcpFileTransferService : IDisposable
                 using var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, System.IO.FileShare.Read, BUFFER_SIZE, useAsync: true);
                 while (true)
                 {
-                    byte[] buffer = null;
+                    byte[]? buffer = null;
                     bool handedOver = false;
                     try
                     {

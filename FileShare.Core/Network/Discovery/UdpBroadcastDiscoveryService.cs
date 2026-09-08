@@ -319,7 +319,7 @@ public class UdpBroadcastDiscoveryService : IDeviceDiscoveryService
             var data = BuildGoodbyePacket();
             await SendToAllBroadcastsAsync(data, CancellationToken.None).ConfigureAwait(false);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
         }
     }
