@@ -16,7 +16,7 @@ public class DeviceIdEntity
     /// <summary>
     /// 设备ID
     /// </summary>
-    public string DeviceId { get; set; }
+    public required string DeviceId { get; set; }
     
     /// <summary>
     /// 创建时间
