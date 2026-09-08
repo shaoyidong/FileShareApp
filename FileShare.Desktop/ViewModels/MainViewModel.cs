@@ -217,7 +217,7 @@ namespace FileShare.Desktop.ViewModels
             string? savePath = null;
             if (folder.Count > 0)
             {
-                savePath = folder[0].Path.LocalPath;
+                savePath = GetSafePath(folder[0].Path);
             }
             else
             {
@@ -229,6 +229,26 @@ namespace FileShare.Desktop.ViewModels
                 ? $"开始接收文件: {viewModel.FileName} (保存到: {savePath})" 
                 : $"开始接收文件: {viewModel.FileName}";
             _logger.LogInformation($"开始接收文件: {viewModel.FileName} (保存到: {savePath})");
+        }
+
+        private string GetSafePath(Uri uri)
+        {
+            string savePath;
+            if (uri.IsAbsoluteUri && uri.Scheme == Uri.UriSchemeFile)
+            {
+                savePath = uri.LocalPath; // 只有 file:// 协议才安全
+            }
+            else
+            {
+                // 普通本地路径或相对 URI，直接取原始字符串
+                savePath = uri.OriginalString;
+            }
+            // 补全末尾分隔符
+            if (!string.IsNullOrEmpty(savePath) && !savePath.EndsWith(Path.DirectorySeparatorChar.ToString()))
+            {
+                savePath += Path.DirectorySeparatorChar;
+            }
+            return savePath;
         }
 
         private void RejectTransfer(FileTransferViewModel? viewModel)

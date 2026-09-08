@@ -1,4 +1,5 @@
 using FileShare.Core.Common;
+using FileShare.Core.Crypto;
 using FileShare.Core.Models;
 using FileShare.Core.Network.Tls;
 using FileShare.Core.Services;
@@ -61,10 +62,7 @@ public class TcpFileTransferService : IDisposable
     private long _totalBytesReceived; // 累计接收字节数
     private bool _disposedValue;
     private volatile bool _isStopping;
-
-    // TLS 可选加密传输：启用后对同样启用 TLS 的对端自动升级到 SslStream，证书指纹采用 TOFU（首次信任）策略。
-    // 未启用（默认）保持裸 TCP，与旧版本完全兼容；既有协议帧读写逻辑不变。
-    private readonly TlsOptions? _tlsOptions;
+    
     private readonly FingerprintStore? _fingerprintStore;
     private readonly X509Certificate2? _localCertificate;
     private readonly bool _tlsEnabled;
@@ -91,7 +89,7 @@ public class TcpFileTransferService : IDisposable
     /// </summary>
     public event Action<FileTransferInfo, string?>? OnTransferCompleted;
 
-    public TcpFileTransferService(string deviceId, IPlatformDirectoryService directoryService, int port = 5237, TlsOptions? tlsOptions = null, ILoggerFactory? loggerFactory = null)
+    public TcpFileTransferService(string deviceId, IPlatformDirectoryService directoryService, int port = 5237, bool tlsEnabled = false, ILoggerFactory? loggerFactory = null)
     {
         _port = port;
         _listener = new TcpListener(IPAddress.Any, port);
@@ -106,21 +104,17 @@ public class TcpFileTransferService : IDisposable
         _deviceId = deviceId;
         _directoryService = directoryService;
         _logger = loggerFactory?.CreateLogger<TcpFileTransferService>() ?? NullLogger<TcpFileTransferService>.Instance;
-        _tlsOptions = tlsOptions;
 
-        if (tlsOptions is { Enabled: true })
+        if (tlsEnabled)
         {
             try
             {
                 // 指纹信任库与本地证书在构造期就绪，避免每次连接时重复生成/加载
-                _fingerprintStore = new FingerprintStore(tlsOptions.FingerprintStorePath, loggerFactory?.CreateLogger<FingerprintStore>());
-               
-                var certProvider = new SelfSignedCertificateProvider(tlsOptions, deviceId, loggerFactory?.CreateLogger<SelfSignedCertificateProvider>());
-                _localCertificate = certProvider.GetOrCreateCertificate();
-                _logger.LogInformation("证书加载状态: 是否为空={IsNull}, 是否有私钥={HasPrivateKey}, 算法={SignatureAlgorithm}",
-    _localCertificate == null,
-    _localCertificate?.HasPrivateKey ?? false,
-    _localCertificate?.SignatureAlgorithm?.FriendlyName);
+                _fingerprintStore = CryptoManager.Instance.FingerprintStore;
+
+                // 触发 CryptoManager 初始化：加载或自生成 RSA 自签名证书，失败则降级裸 TCP。
+                // 证书与密钥统一由 CryptoManager 管理，握手时通过 GetX509Certificate2 获取（带缓存）。
+                _localCertificate = CryptoManager.Instance.GetX509Certificate2();
 
                 _tlsEnabled = true;
                 _logger.LogInformation("TLS 加密传输已启用");
@@ -666,7 +660,8 @@ public class TcpFileTransferService : IDisposable
 
         try
         {
-            return _fingerprintStore!.ValidateAndStore(remoteDeviceId, cert2);
+            CertVerifier.VerifyCertFromDer(cert2.RawData, null);
+            return _fingerprintStore!.ValidateAndStore(remoteDeviceId, cert2);           
         }
         catch (Exception ex)
         {
@@ -693,6 +688,7 @@ public class TcpFileTransferService : IDisposable
 
         try
         {
+            CertVerifier.VerifyCertFromDer(cert2.RawData,null);
             return _fingerprintStore!.ValidateAndStore(senderId, cert2);
         }
         catch (Exception ex)

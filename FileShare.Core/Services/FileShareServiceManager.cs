@@ -58,14 +58,14 @@ public class FileShareServiceManager : IFileShareServiceManager
     /// <param name="discoveryPort">设备发现端口</param>
     /// <param name="transferPort">文件传输端口</param>
     /// <param name="loggerFactory">日志工厂（可选，不传则使用 NullLogger）</param>
-    /// <param name="tlsOptions">TLS 加密传输配置（可选，启用后对同样启用 TLS 的对端自动升级到 SslStream）</param>
+    /// <param name="tlsEnabled">是否启用 TLS 加密传输（可选，启用后对同样启用 TLS 的对端自动升级到 SslStream）</param>
     /// <param name="enableMdns">是否启用 mDNS 发现（可选，作为 UDP 广播的补充，提高受限网络下的发现成功率）</param>
     public FileShareServiceManager(
         IPlatformDirectoryService directoryService,
         IDatabaseService databaseService,
         string deviceName, DeviceType deviceType, int transferPort = 5237,
         DiscoveryOptions? discoveryOptions = null,
-        TlsOptions? tlsOptions = null,
+        bool tlsEnabled = false,
         ILoggerFactory? loggerFactory = null
         )
     {
@@ -83,12 +83,12 @@ public class FileShareServiceManager : IFileShareServiceManager
             DeviceType = deviceType,
             Port = transferPort,
             IpAddress = GetLocalIpAddress(),
-            SupportsTls = tlsOptions is { Enabled: true }
+            SupportsTls = tlsEnabled
         };
 
         // 初始化服务
         _discoveryService = new CompositeDiscoveryService(_localDevice, discoveryOptions, loggerFactory);
-        _fileTransferService = new TcpFileTransferService(deviceId, directoryService, transferPort, tlsOptions, loggerFactory);        
+        _fileTransferService = new TcpFileTransferService(deviceId, directoryService, transferPort, tlsEnabled, loggerFactory);        
 
         // 注册事件处理
         _discoveryService.OnDeviceDiscovered += device => OnDeviceDiscovered?.Invoke(device);
