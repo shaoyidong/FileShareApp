@@ -88,14 +88,11 @@ public class UdpMulticastDiscoveryService : IDeviceDiscoveryService
         _cts = new CancellationTokenSource();
         _logger.LogInformation("UDP组播发现已启动，组播地址 {Group}:{Port}", _multicastAddress, _multicastPort);
 
-        // 初始公告
-        _ = Task.Run(async () =>
-        {
-            await SendAnnouncementAsync(_cts.Token).ConfigureAwait(false);
-        });
-
         // 启动监听任务
         _ = Task.Run(() => ListenAsync(_cts.Token));
+
+        // 初始公告
+        await SendAnnouncementAsync(_cts.Token).ConfigureAwait(false);
 
         _isRunning = true;
         return true;

@@ -109,8 +109,6 @@ namespace FileShare.Desktop
                 File.WriteAllText(logPath, $"Starting extraction at {DateTime.Now}\n");                
 
                 var assembly = Assembly.GetExecutingAssembly();
-                var currentRid = GetCurrentRuntimeIdentifier();
-                File.AppendAllText(logPath, $"Current RID: {currentRid}\n");
 
                 // 获取所有嵌入式资源
                 var allResourceNames = assembly.GetManifestResourceNames();
@@ -126,7 +124,7 @@ namespace FileShare.Desktop
                     .Where(name => name.EndsWith(".dll") || name.EndsWith(".so") || name.EndsWith(".dylib"))
                     .ToList();
 
-                File.AppendAllText(logPath, $"Found {nativeResources.Count} native resources for {currentRid}\n");
+                File.AppendAllText(logPath, $"Found {nativeResources.Count} native resources\n");
 
                 // 定义在Linux上需要排除提取的库（使用纯文件名）
                 var excludedOnLinux = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -192,25 +190,19 @@ namespace FileShare.Desktop
         /// </summary>
         private static string GetCurrentRuntimeIdentifier()
         {
-            string os = RuntimeInformation.OSArchitecture switch
-            {
-                Architecture.X64 => "win",
-                Architecture.X86 => "win",
-                Architecture.Arm => "win", // Windows Arm32 非常罕见，通常与Arm64合并处理
-                Architecture.Arm64 => "win",
-                _ => "unknown"
-            };
-
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-            {
+            // 1. 检测操作系统
+            string os;
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                os = "win";
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
                 os = "linux";
-            }
             else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-            {
                 os = "osx";
-            }
+            else
+                os = "unknown";
 
-            string arch = RuntimeInformation.OSArchitecture switch
+            // 2. 检测当前进程架构（而非操作系统架构）
+            string arch = RuntimeInformation.ProcessArchitecture switch
             {
                 Architecture.X86 => "x86",
                 Architecture.X64 => "x64",
@@ -219,19 +211,17 @@ namespace FileShare.Desktop
                 _ => "unknown"
             };
 
-            // 组合成标准的RID，例如：win-x64, linux-arm, osx-arm64
-            return $"{os}-{arch}";
+            return $"{os}-{arch}";            
         }
 
         public static IServiceProvider BuildServiceProvider()
         {
             // 1. 准备路径
             var appDataDir = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            var fileShareDir = Path.Combine(appDataDir, "FileShare");
+            var appName = Assembly.GetEntryAssembly()?.GetName().Name ?? "FileShare";
+            var fileShareDir = Path.Combine(appDataDir, appName);
             Directory.CreateDirectory(fileShareDir);
-            var databasePath = Path.Combine(fileShareDir, "fileshare.db");
-            var certDir = Path.Combine(fileShareDir, "tls");
-            var fingerprintPath = Path.Combine(certDir, "fingerprints.txt");
+            var databasePath = Path.Combine(fileShareDir, "fileshare.db");            
             var logDir = Path.Combine(fileShareDir, "logs");
 
             // 2. 初始化 Serilog
@@ -248,15 +238,7 @@ namespace FileShare.Desktop
                 builder.ClearProviders();
                 builder.AddSerilog(serilogLogger, dispose: true);
             });
-
-            // 配置选项
-            var options = new TlsOptions
-            {
-                Enabled = true,
-                CertificateDirectory = certDir,
-                FingerprintStorePath = fingerprintPath
-            };
-            services.AddSingleton(options);
+           
             services.Configure<DiscoveryOptions>(_ => { });
 
             // 数据库
@@ -270,8 +252,7 @@ namespace FileShare.Desktop
             services.AddSingleton<FileShareServiceManager>(sp =>
             {
                 var dirSvc = sp.GetRequiredService<IPlatformDirectoryService>();
-                var dbSvc = sp.GetRequiredService<IDatabaseService>();
-                var tlsOpt = sp.GetRequiredService<TlsOptions>();
+                var dbSvc = sp.GetRequiredService<IDatabaseService>();                
                 var discOpt = sp.GetRequiredService<IOptions<DiscoveryOptions>>().Value;
                 var fac = sp.GetRequiredService<ILoggerFactory>();
                 return new FileShareServiceManager(
@@ -279,7 +260,7 @@ namespace FileShare.Desktop
                     dbSvc,
                     Environment.MachineName,
                     Core.Models.DeviceType.Desktop,
-                    tlsOptions: tlsOpt,
+                    tlsEnabled: true,
                     discoveryOptions: discOpt,
                     loggerFactory: fac);
             });

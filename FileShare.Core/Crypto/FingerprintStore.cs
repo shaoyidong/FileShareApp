@@ -1,9 +1,9 @@
+using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Security.Cryptography.X509Certificates;
-using Microsoft.Extensions.Logging;
-using Org.BouncyCastle.Crypto.Digests;
 
-namespace FileShare.Core.Network.Tls;
+namespace FileShare.Core.Crypto;
 
 /// <summary>
 /// 证书指纹 TOFU（Trust On First Use）信任库。
@@ -14,27 +14,19 @@ namespace FileShare.Core.Network.Tls;
 public sealed class FingerprintStore
 {
     private readonly string _storePath;
-    private readonly ILogger<FingerprintStore>? _logger;
     private readonly object _lock = new();
 
-    public FingerprintStore(string storePath, ILogger<FingerprintStore>? logger = null)
+    public FingerprintStore(string storePath)
     {
         _storePath = storePath;
-        _logger = logger;
     }
 
     /// <summary>
     /// 计算证书的 SHA256 指纹（证书 DER 编码的哈希，十六进制小写）。
-    /// 使用 BouncyCastle 实现以确保 AOT 兼容性。
     /// </summary>
-    public static string ComputeFingerprint(X509Certificate2 certificate)
+    private static string ComputeFingerprint(X509Certificate2 certificate)
     {
-        var derData = certificate.RawData;
-        var digest = new Sha256Digest();
-        digest.BlockUpdate(derData, 0, derData.Length);
-        var hash = new byte[digest.GetDigestSize()];
-        digest.DoFinal(hash, 0);
-        return Convert.ToHexString(hash).ToLowerInvariant();
+        return CertVerifier.FingerprintFromCertDer(certificate.RawData).ToLowerInvariant();
     }
 
     /// <summary>
@@ -44,6 +36,8 @@ public sealed class FingerprintStore
     /// <para>指纹不一致但旧证书已过期 → 自动续期，更新记录并返回 true。</para>
     /// <para>指纹不一致且旧证书未过期 → 返回 false（疑似 MITM）。</para>
     /// </summary>
+    /// <exception cref="IOException">加载或保存存储文件时发生 I/O 错误。</exception>
+    /// <exception cref="FormatException">存储文件格式损坏，无法解析。</exception>
     public bool ValidateAndStore(string deviceId, X509Certificate2 certificate)
     {
         string fingerprint = ComputeFingerprint(certificate);
@@ -61,7 +55,6 @@ public sealed class FingerprintStore
                     {
                         entries[deviceId] = new Entry(fingerprint, notAfterUtc);
                         SaveEntries(entries);
-                        _logger?.LogDebug("设备 {DeviceId} 证书指纹不变，更新过期时间至 {NotAfter}", deviceId, notAfterUtc);
                     }
                     return true;
                 }
@@ -72,69 +65,53 @@ public sealed class FingerprintStore
                     // 合法续期：旧证书已过期，更新为新指纹和新过期时间
                     entries[deviceId] = new Entry(fingerprint, notAfterUtc);
                     SaveEntries(entries);
-                    _logger?.LogInformation("设备 {DeviceId} 的证书已自动续期（旧证书于 {OldNotAfter} 过期）", deviceId, known.NotAfterUtc);
                     return true;
                 }
 
                 // 指纹不匹配且旧证书未过期或未知 -> 拒绝
-                _logger?.LogWarning("设备 {DeviceId} 的证书指纹不匹配且旧证书未过期：已知={Known}，实际={Actual}，疑似中间人攻击", deviceId, known.Fingerprint, fingerprint);
                 return false;
             }
 
             // 首次信任：记录指纹和过期时间
             entries[deviceId] = new Entry(fingerprint, notAfterUtc);
             SaveEntries(entries);
-            _logger?.LogInformation("首次记录设备 {DeviceId} 的证书指纹，有效期至 {NotAfter}", deviceId, notAfterUtc);
             return true;
         }
     }
 
-    // 内部条目结构
     private record Entry(string Fingerprint, DateTime NotAfterUtc);
 
     private Dictionary<string, Entry> LoadEntries()
     {
         var dict = new Dictionary<string, Entry>(StringComparer.OrdinalIgnoreCase);
-        try
-        {
-            if (!File.Exists(_storePath)) return dict;
-            foreach (var line in File.ReadAllLines(_storePath))
-            {
-                if (string.IsNullOrWhiteSpace(line)) continue;
-                var parts = line.Split(':');
-                if (parts.Length < 2) continue;
-                var id = parts[0].Trim();
-                var fp = parts[1].Trim();
-                if (string.IsNullOrEmpty(id) || string.IsNullOrEmpty(fp)) continue;
+        if (!File.Exists(_storePath)) return dict;
 
-                DateTime notAfter = DateTime.MinValue;
-                if (parts.Length >= 3 && long.TryParse(parts[2], out var ticks))
-                {
-                    try { notAfter = new DateTime(ticks, DateTimeKind.Utc); }
-                    catch { /* 忽略无效刻度 */ }
-                }
-                dict[id] = new Entry(fp, notAfter);
-            }
-        }
-        catch (Exception ex)
+        var lines = File.ReadAllLines(_storePath); // 可能抛出 IOException
+        foreach (var line in lines)
         {
-            _logger?.LogWarning(ex, "加载指纹信任库失败");
+            if (string.IsNullOrWhiteSpace(line)) continue;
+            var parts = line.Split(':');
+            if (parts.Length < 2) continue; // 格式不完整则跳过（容错）
+            var id = parts[0].Trim();
+            var fp = parts[1].Trim();
+            if (string.IsNullOrEmpty(id) || string.IsNullOrEmpty(fp)) continue;
+
+            DateTime notAfter = DateTime.MinValue;
+            if (parts.Length >= 3 && long.TryParse(parts[2], out var ticks))
+            {
+                try { notAfter = new DateTime(ticks, DateTimeKind.Utc); }
+                catch (ArgumentOutOfRangeException) { /* 忽略无效刻度，保留 MinValue */ }
+            }
+            dict[id] = new Entry(fp, notAfter);
         }
         return dict;
     }
 
     private void SaveEntries(Dictionary<string, Entry> entries)
     {
-        try
-        {
-            var dir = Path.GetDirectoryName(_storePath);
-            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
-            var lines = entries.Select(kv => $"{kv.Key}:{kv.Value.Fingerprint}:{kv.Value.NotAfterUtc.Ticks}");
-            File.WriteAllLines(_storePath, lines);
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogWarning(ex, "保存指纹信任库失败");
-        }
+        var dir = Path.GetDirectoryName(_storePath);
+        if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir); // 可能抛出 IOException
+        var lines = entries.Select(kv => $"{kv.Key}:{kv.Value.Fingerprint}:{kv.Value.NotAfterUtc.Ticks}");
+        File.WriteAllLines(_storePath, lines); // 可能抛出 IOException
     }
 }
