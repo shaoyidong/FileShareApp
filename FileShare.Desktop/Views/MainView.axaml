@@ -63,11 +63,45 @@
                 Background="#F5F5F5"
                 CornerRadius="12">
                 <Grid RowDefinitions="Auto,*,Auto">
-                    <TextBlock
-                        Margin="0,0,0,12"
-                        FontSize="16"
-                        FontWeight="Bold"
-                        Text="可用设备" />
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock
+                            Margin="0,0,0,12"
+                            HorizontalAlignment="Left"
+                            FontSize="16"
+                            FontWeight="Bold"
+                            Text="可用设备" />
+                        <Button
+                            Grid.Column="1"
+                            Margin="0,0,0,12"
+                            Classes="fluentIcon-button"
+                            Classes.rotate="{Binding IsScanning}"
+                            Command="{Binding RefreshDevicesCommand}"
+                            Content="{x:Static fonts:FluentUI.arrow_sync_24_regular}"
+                            FontSize="24"
+                            ToolTip.Tip="刷新设备">
+                            <Button.RenderTransform>
+                                <RotateTransform Angle="0" />
+                            </Button.RenderTransform>
+                            <Button.Styles>
+                                <Style Selector="Button.rotate">
+                                    <Style.Animations>
+                                        <Animation
+                                            FillMode="Forward"
+                                            IterationCount="INFINITE"
+                                            Duration="0:0:1">
+                                            <KeyFrame Cue="0%">
+                                                <Setter Property="RotateTransform.Angle" Value="0" />
+                                            </KeyFrame>
+                                            <KeyFrame Cue="100%">
+                                                <Setter Property="RotateTransform.Angle" Value="360" />
+                                            </KeyFrame>
+                                        </Animation>
+                                    </Style.Animations>
+                                </Style>
+                            </Button.Styles>
+                        </Button>
+                    </Grid>
+
                     <ListBox
                         Grid.Row="1"
                         ItemsSource="{Binding Devices}"
@@ -115,7 +149,7 @@
                         Classes="primary-button"
                         Command="{Binding SendFileCommand}"
                         Content="发送文件"
-                        IsEnabled="{Binding SelectedDevice}" />
+                        IsEnabled="{Binding IsDeviceSelected}" />
                 </Grid>
             </Border>
 
