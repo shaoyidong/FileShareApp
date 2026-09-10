@@ -29,9 +29,25 @@ namespace FileShare.Desktop.ViewModels
         private readonly IClassicDesktopStyleApplicationLifetime? _appLifetime;
         private readonly ILogger<MainViewModel> _logger;
         private string _statusMessage = "准备就绪";
-        private bool _isScanning;
+
         [ObservableProperty]
+        private bool _isScanning;      
+
         private DeviceInfo? _selectedDevice;
+
+        public DeviceInfo? SelectedDevice
+        {
+            get { return _selectedDevice; }
+            set {
+                if (SetProperty(ref _selectedDevice, value)) 
+                { 
+                    OnPropertyChanged(nameof(IsDeviceSelected));
+                } 
+            }
+        }
+
+        public bool IsDeviceSelected => SelectedDevice != null;
+
         private string _localDeviceId;
 
         public DeviceInfo? LocalDevice { get; set; }
@@ -43,14 +59,8 @@ namespace FileShare.Desktop.ViewModels
         {
             get => _statusMessage;
             set => this.SetProperty(ref _statusMessage, value);
-        }
-
-        
-        public bool IsScanning
-        {
-            get => _isScanning;
-            set => this.SetProperty(ref _isScanning, value);
         }        
+        
 
         public ObservableCollection<DeviceInfo> Devices { get; }
         public ObservableCollection<FileTransferViewModel> TransferTasks { get; }
