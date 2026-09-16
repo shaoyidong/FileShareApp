@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Data.Core;
 using Avalonia.Data.Core.Plugins;
@@ -27,6 +28,12 @@ namespace FileShare.Desktop
         public override void Initialize()
         {
             AvaloniaXamlLoader.Load(this);
+
+            // 如果是设计时（预览器），直接返回，不执行依赖注入的代码
+            if (Design.IsDesignMode)
+            {
+                return;
+            }
 
             var logger = ServiceProvider?.GetService<ILogger<App>>()
                     ?? throw new InvalidOperationException("ServiceProvider not set");

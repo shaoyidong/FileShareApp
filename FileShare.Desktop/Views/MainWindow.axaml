@@ -12,7 +12,7 @@
     d:DesignHeight="600"
     d:DesignWidth="900"
     x:DataType="vm:MainViewModel"
-    Icon="/Assets/avalonia-logo.ico"
+    Icon="/Assets/logo.ico"
     mc:Ignorable="d">
     <Window.Styles>
         <Style Selector="Button.red-button">
