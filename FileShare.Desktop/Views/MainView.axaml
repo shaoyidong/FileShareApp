@@ -67,15 +67,16 @@
                         <TextBlock
                             Margin="0,0,0,12"
                             HorizontalAlignment="Left"
+                            VerticalAlignment="Center"
                             FontSize="16"
                             FontWeight="Bold"
-                            Text="可用设备" />                   
+                            Text="可用设备" />
                         <Button
                             Grid.Column="1"
                             Margin="0,0,0,12"
                             VerticalContentAlignment="Center"
                             Classes="fluentIcon-button"
-                            Command="{Binding RefreshDevicesCommand}"                           
+                            Command="{Binding RefreshDevicesCommand}"
                             ToolTip.Tip="刷新设备">
                             <TextBlock
                                 Width="24"
@@ -175,8 +176,10 @@
                     </Grid.RowDefinitions>
                     <TextBlock
                         Margin="0,0,0,12"
+                        VerticalAlignment="Center"
                         FontSize="16"
                         FontWeight="Bold"
+                        LineHeight="32"
                         Text="传输任务" />
                     <ItemsControl Grid.Row="1" ItemsSource="{Binding TransferTasks}">
                         <ItemsControl.ItemsPanel>
