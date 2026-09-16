@@ -7,7 +7,9 @@
             "type": "shell",
              "args": [
                 "build",
-                "${workspaceFolder}/FileShare.Desktop/FileShare.Desktop.csproj"
+                "${workspaceFolder}/FileShare.Desktop/FileShare.Desktop.csproj",
+                "-f", "net10.0",
+                "-c", "Debug"
             ],
             "group": "build",
             "problemMatcher": "$msCompile"
