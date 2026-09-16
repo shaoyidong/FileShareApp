@@ -1,4 +1,5 @@
 using FileShare.Core.Services;
+using FileShare.Mobile.Helpers;
 using FileShare.Mobile.Services;
 using FileShare.Mobile.ViewModels;
 using Microsoft.Extensions.Logging;
@@ -7,6 +8,7 @@ using Syncfusion.Maui.Toolkit.Hosting;
 using System.IO;
 using Microsoft.Maui.Storage;
 using FileShare.Mobile.Views;
+using Serilog;
 
 namespace FileShare.Mobile;
 
@@ -19,7 +21,7 @@ public static class MauiProgram
             .UseMauiApp<App>()
             .UseMauiCommunityToolkit(
 #if WINDOWS
-options =>
+	options =>
   {
     options.SetShouldEnableSnackbarOnWindows(true);
   }
@@ -29,10 +31,10 @@ options =>
             .ConfigureMauiHandlers(handlers =>
             {
 #if WINDOWS
-    				Microsoft.Maui.Controls.Handlers.Items.CollectionViewHandler.Mapper.AppendToMapping("KeyboardAccessibleCollectionView", (handler, view) =>
-    				{
-    					handler.PlatformView.SingleSelectionFollowsFocus = false;
-    				});
+	    				Microsoft.Maui.Controls.Handlers.Items.CollectionViewHandler.Mapper.AppendToMapping("KeyboardAccessibleCollectionView", (handler, view) =>
+	    				{
+	    					handler.PlatformView.SingleSelectionFollowsFocus = false;
+	    				});
 #endif
             })
             .ConfigureFonts(fonts =>
@@ -43,10 +45,12 @@ options =>
                 fonts.AddFont("FluentSystemIcons-Regular.ttf", FluentUI.FontFamily);
             });
 
-#if DEBUG
-        builder.Logging.AddDebug();
-        builder.Services.AddLogging(configure => configure.AddDebug());
-#endif
+        // 初始化 Serilog（Debug 输出 + 按天滚动文件），对齐 Desktop 项目
+        var logDir = Path.Combine(FileSystem.AppDataDirectory, "logs");
+        var serilogLogger = SerilogSetup.CreateLogger(logDir);
+        Log.Logger = serilogLogger;
+        builder.Logging.ClearProviders();
+        builder.Logging.AddSerilog(serilogLogger, dispose: true);
 
         // Continue initializing your .NET MAUI App here
 #if ANDROID
@@ -103,6 +107,9 @@ options =>
         builder.Services.AddSingleton<MainPageViewModel>();
         builder.Services.AddSingleton<HistoryViewModel>();
         builder.Services.AddSingletonWithShellRoute<AppListPage, AppListViewModel>("AppListPage");
+
+        // 注册 ViewLocator（对齐 Desktop 项目的 ViewLocator 模式）
+        builder.Services.AddSingleton<ViewLocator>();
 
         return builder.Build();
 	}
