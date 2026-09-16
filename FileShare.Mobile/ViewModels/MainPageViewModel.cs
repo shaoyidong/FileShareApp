@@ -5,6 +5,7 @@ using FileShare.Core.Models;
 using FileShare.Core.Services;
 using FileShare.Mobile.Messages;
 using FileShare.Mobile.Services;
+using Microsoft.Extensions.Logging;
 using Microsoft.Maui.Storage;
 using System.Collections.ObjectModel;
 using System.IO;
@@ -23,6 +24,7 @@ public partial class MainPageViewModel : ViewModelBase
     private readonly IFileTransferForegroundService _foregroundService;
     private readonly IPickerService _filePickerService;
     private readonly IAppManagementService _appManagementService;
+    private readonly ILogger<MainPageViewModel> _logger;
 
     private string _statusMessage = "准备就绪";
     public string StatusMessage
@@ -51,8 +53,16 @@ public partial class MainPageViewModel : ViewModelBase
     public Core.Models.DeviceInfo? SelectedDevice
     {
         get => _selectedDevice;
-        set => SetProperty(ref _selectedDevice, value);
-    }   
+        set
+        {
+            if (SetProperty(ref _selectedDevice, value))
+            {
+                OnPropertyChanged(nameof(IsDeviceSelected));
+            }
+        }
+    }
+
+    public bool IsDeviceSelected => SelectedDevice != null;
 
     public ICommand RefreshDevicesCommand { get; }
     public ICommand SendFileCommand { get; }
@@ -68,7 +78,8 @@ public partial class MainPageViewModel : ViewModelBase
         , IFileTransferForegroundService fileTransferService
         , IAlertService alertService
         , IPickerService filePickerService
-        , IAppManagementService appManagementService)
+        , IAppManagementService appManagementService
+        , ILoggerFactory loggerFactory)
     {
         _uiContext = SynchronizationContext.Current?? new SynchronizationContext();
         _serviceManager = fileShareServiceManager;
@@ -76,6 +87,7 @@ public partial class MainPageViewModel : ViewModelBase
         _alertService = alertService;
         _filePickerService = filePickerService;
         _appManagementService = appManagementService;
+        _logger = loggerFactory.CreateLogger<MainPageViewModel>();
         Devices = new ObservableCollection<FileShare.Core.Models.DeviceInfo>();
         TransferTasks = new ObservableCollection<FileTransferViewModel>();
         SentTransferTasks = new ObservableCollection<FileTransferViewModel>();
@@ -216,10 +228,12 @@ public partial class MainPageViewModel : ViewModelBase
         {
             await _serviceManager.StartServicesAsync();
             StatusMessage = "准备就绪";
+            _logger.LogInformation("服务启动成功");
         }
         catch (Exception ex)
         {
             StatusMessage = $"启动服务失败: {ex.Message}";
+            _logger.LogError(ex, "启动服务失败");
         }
     }
     
@@ -254,12 +268,13 @@ public partial class MainPageViewModel : ViewModelBase
         catch (Exception ex)
         {
             StatusMessage = $"扫描设备失败: {ex.Message}";
+            _logger.LogError(ex, "扫描设备失败");
         }
         finally
         {
             IsScanning = false;
         }
-    }    
+    }
     
     private async Task SendFileAsync()
     {
@@ -287,12 +302,14 @@ public partial class MainPageViewModel : ViewModelBase
                 }, null);
 
                 await _serviceManager.SendFileAsync(result.FullPath, SelectedDevice).ConfigureAwait(false);
-            }          
+                _logger.LogInformation("文件发送成功: {FilePath} 到设备 {DeviceName}", result.FullPath, SelectedDevice.DeviceName);
+            }
         }
         catch (Exception ex)
         {
             StatusMessage = $"发送文件失败: {ex.Message}";
             await _alertService.DisplayToastAsync(ex.Message).ConfigureAwait(false);
+            _logger.LogError(ex, "发送文件失败到设备 {DeviceName}", SelectedDevice?.DeviceName);
         }
         finally
         {
@@ -316,18 +333,20 @@ public partial class MainPageViewModel : ViewModelBase
             if (viewModel?.TransferId == null)
             {
                 return;
-            }           
-         
+            }
+
             _serviceManager.HandleTransferRequest(viewModel.TransferId, true);
             StatusMessage = $"开始接收文件: {viewModel.FileName}";
+            _logger.LogInformation("开始接收文件: {FileName}", viewModel.FileName);
         }
         catch (Exception ex)
         {
             StatusMessage = $"接受传输失败: {ex.Message}";
             await _alertService.DisplayToastAsync(ex.Message).ConfigureAwait(false);
+            _logger.LogError(ex, "接受传输失败: {FileName}", viewModel?.FileName);
         }
     }
-    
+
     [RelayCommand]
     private async Task RejectTransfer(FileTransferViewModel viewModel)
     {
@@ -339,6 +358,7 @@ public partial class MainPageViewModel : ViewModelBase
         _serviceManager.HandleTransferRequest(viewModel.TransferId, false);
         await _alertService.DisplayToastAsync("拒绝").ConfigureAwait(false);
         StatusMessage = $"已拒绝文件: {viewModel.FileName}";
+        _logger.LogInformation("已拒绝文件: {FileName}", viewModel.FileName);
     }
     
     [RelayCommand]
@@ -354,21 +374,23 @@ public partial class MainPageViewModel : ViewModelBase
             case TransferStatus.Pending:
                 _serviceManager.CancelTransfer(viewModel.TransferId);
                 StatusMessage = $"已拒绝文件: {viewModel.FileName}";
+                _logger.LogInformation("已拒绝文件: {FileName}", viewModel.FileName);
                 break;
             case TransferStatus.Transferring:
                 // 显示确认对话框
                 var result = await _alertService.DisplayAlertAsync(
-                    "确认移除", 
-                    "正在传输中，确定要移除吗？", 
+                    "确认移除",
+                    "正在传输中，确定要移除吗？",
                     "确定", "取消");
-                
+
                 if (!result)
                 {
                     return;
                 }
-                
+
                 _serviceManager.CancelTransfer(viewModel.TransferId);
                 StatusMessage = $"已取消传输: {viewModel.FileName}";
+                _logger.LogInformation("已取消文件传输: {FileName}", viewModel.FileName);
                 break;
             case TransferStatus.Completed:
             case TransferStatus.Failed:
@@ -398,7 +420,7 @@ public partial class MainPageViewModel : ViewModelBase
         {
             return;
         }
-        
+
         _uiContext.Post((o) =>
         {
             // 检查设备是否已存在
@@ -407,27 +429,29 @@ public partial class MainPageViewModel : ViewModelBase
             {
                 Devices.Add(device);
                 StatusMessage = $"发现设备: {device.DeviceName}";
+                _logger.LogInformation("发现设备: {DeviceName} (ID: {DeviceId})", device.DeviceName, device.DeviceId);
             }
         },null);
     }
-    
-    private void OnDeviceRemoved(FileShare.Core.Models.DeviceInfo device)
+
+    private void OnDeviceRemoved(string deviceId)
     {
         // 更新设备列表，过滤掉本地设备
         var localDevice = _serviceManager.GetLocalDeviceInfo();
-        if (device.DeviceId == localDevice.DeviceId)
+        if (deviceId == localDevice.DeviceId)
         {
             return;
         }
-        
+
         _uiContext.Post((o) =>
         {
             // 检查设备是否存在
-            var existingDevice = Devices.FirstOrDefault(d => d.DeviceId == device.DeviceId);
+            var existingDevice = Devices.FirstOrDefault(d => d.DeviceId == deviceId);
             if (existingDevice != null)
             {
                 Devices.Remove(existingDevice);
-                StatusMessage = $"设备已离线: {device.DeviceName}";
+                StatusMessage = $"设备已离线: {existingDevice.DeviceName}";
+                _logger.LogInformation("设备已离线: {DeviceName} (ID: {DeviceId})", existingDevice.DeviceName, existingDevice.DeviceId);
             }
         },null);
     }
@@ -449,12 +473,14 @@ public partial class MainPageViewModel : ViewModelBase
                 // 发送任务
                 SentTransferTasks.Insert(0, transferViewModel);
                 StatusMessage = $"正在发送文件: {info.FileName}";
+                _logger.LogInformation("准备发送文件: {FileName} (ID: {TransferId})", info.FileName, info.TransferId);
             }
             else
             {
                 // 接收任务
                 ReceivedTransferTasks.Insert(0, transferViewModel);
                 StatusMessage = $"收到文件传输请求: {info.FileName}";
+                _logger.LogInformation("收到文件传输请求: {FileName} (ID: {TransferId})", info.FileName, info.TransferId);
                 
                 var senderDevice = Devices.FirstOrDefault(d => d.DeviceId == info.SenderId);
                 if (senderDevice == null) 
@@ -500,7 +526,7 @@ public partial class MainPageViewModel : ViewModelBase
     
     private void OnTransferCompleted(FileTransferInfo updatedInfo, string? errorMessage)
     {
-        _uiContext.Send((o) =>
+        _uiContext.Post((o) =>
         {
             // 查找对应的FileTransferViewModel并更新
             var viewModel = TransferTasks.FirstOrDefault(t => t.TransferId == updatedInfo.TransferId);
@@ -515,12 +541,15 @@ public partial class MainPageViewModel : ViewModelBase
                 {
                     case TransferStatus.Completed:
                         StatusMessage = $"文件传输完成: {updatedInfo.FileName}";
+                        _logger.LogInformation("文件传输完成: {FileName} (ID: {TransferId})", updatedInfo.FileName, updatedInfo.TransferId);
                         break;
                     case TransferStatus.Failed:
                         StatusMessage = $"文件传输失败: {errorMessage??string.Empty}";
+                        _logger.LogError("文件传输失败: {FileName} (ID: {TransferId}), 错误信息: {ErrorMessage}", updatedInfo.FileName, updatedInfo.TransferId, errorMessage);
                         break;
                     case TransferStatus.Cancelled:
                         StatusMessage = $"文件传输取消: {errorMessage ?? string.Empty}";
+                        _logger.LogInformation("文件传输取消: {FileName} (ID: {TransferId}), 错误信息: {ErrorMessage}", updatedInfo.FileName, updatedInfo.TransferId, errorMessage);
                         break;
                     default:
                         StatusMessage = errorMessage ?? string.Empty;
@@ -567,13 +596,14 @@ public partial class MainPageViewModel : ViewModelBase
         catch (Exception ex)
         {
             await _alertService.DisplayToastAsync("错误, 发送应用失败: " + ex.Message);
+            _logger.LogError(ex, "发送应用失败: {ApkPath}", apkPath);
         }
         finally
         {
             StopForegroundServiceIfNoTasksRunning();
         }
     }
-    
+
     private async Task NavigateToAppList()
     {
         if (SelectedDevice == null)
@@ -581,15 +611,16 @@ public partial class MainPageViewModel : ViewModelBase
             await _alertService.DisplayToastAsync("请先选择目标设备").ConfigureAwait(false);
             return;
         }
-        
+
         try
         {
             // 导航到AppListPage
             await Shell.Current.GoToAsync("/AppListPage");
-        }        
+        }
         catch (Exception ex)
         {
             await _alertService.DisplayToastAsync("错误, 导航到应用列表页面失败: " + ex.Message);
+            _logger.LogError(ex, "导航到应用列表页面失败");
         }
     }
 }

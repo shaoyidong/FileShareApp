@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 using FileShare.Core.Models.Entities;
 using FileShare.Core.Services;
 using FileShare.Mobile.Services;
+using Microsoft.Extensions.Logging;
 using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Storage;
 using System;
@@ -21,6 +22,7 @@ public class HistoryViewModel : ViewModelBase
     private readonly IAlertService _alertService;
     private readonly INavigation _navigation;
     private readonly IPermissionService _permissionService;
+    private readonly ILogger<HistoryViewModel> _logger;
     private ObservableCollection<ReceiveHistoryEntity> _receiveHistory;
     public ObservableCollection<ReceiveHistoryEntity> ReceiveHistory
     {
@@ -48,12 +50,13 @@ public class HistoryViewModel : ViewModelBase
     public ICommand DeleteSingleHistoryCommand { get; }
     public ICommand ShowOperationContextMenuCommand { get; }
 
-    public HistoryViewModel(IFileShareServiceManager serviceManager, IAlertService alertService, INavigation navigation,IPermissionService permissionService)
+    public HistoryViewModel(IFileShareServiceManager serviceManager, IAlertService alertService, INavigation navigation,IPermissionService permissionService, ILoggerFactory loggerFactory)
     {
         _serviceManager = serviceManager;
         _alertService = alertService;
         _navigation = navigation;
         _permissionService = permissionService;
+        _logger = loggerFactory.CreateLogger<HistoryViewModel>();
         _receiveHistory = new ObservableCollection<ReceiveHistoryEntity>();
 
         BackCommand = new RelayCommand(Back);
@@ -76,10 +79,12 @@ public class HistoryViewModel : ViewModelBase
             {
                 ReceiveHistory.Add(item);
             }
+            _logger.LogInformation("加载历史记录成功，共 {Count} 条", ReceiveHistory.Count);
         }
         catch (Exception ex)
         {
             await _alertService.DisplayToastAsync($"加载历史记录失败: {ex.Message}");
+            _logger.LogError(ex, "加载历史记录失败");
         }
         finally
         {
@@ -102,10 +107,12 @@ public class HistoryViewModel : ViewModelBase
                 await _serviceManager.ClearReceiveHistoryAsync();
                 ReceiveHistory.Clear();
                 await _alertService.DisplayToastAsync("历史记录已清空");
+                _logger.LogInformation("历史记录已清空");
             }
             catch (Exception ex)
             {
                 await _alertService.DisplayToastAsync($"清空历史记录失败: {ex.Message}");
+                _logger.LogError(ex, "清空历史记录失败");
             }
         }
     }
@@ -169,10 +176,12 @@ public class HistoryViewModel : ViewModelBase
             await _serviceManager.DeleteSingleReceiveHistoryAsync(history.Id);
             ReceiveHistory.Remove(history);
             await _alertService.DisplayToastAsync("历史记录已删除");
+            _logger.LogInformation("删除历史记录成功: {FileName}", history.FileName);
         }
         catch (Exception ex)
         {
             await _alertService.DisplayToastAsync($"删除历史记录失败: {ex.Message}");
+            _logger.LogError(ex, "删除历史记录失败: {FileName}", history.FileName);
         }
     }
 
