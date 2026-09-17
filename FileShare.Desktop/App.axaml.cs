@@ -104,7 +104,10 @@ namespace FileShare.Desktop
                 mainWindow.DataContext = viewModel;
                 desktop.MainWindow = mainWindow;
 
-                base.OnFrameworkInitializationCompleted();
+                desktop.ShutdownRequested += (s, e) =>
+                {
+                    serviceManager.StopServicesAsync();
+                };
             }
 
             base.OnFrameworkInitializationCompleted();

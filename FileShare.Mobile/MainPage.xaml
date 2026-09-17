@@ -3,7 +3,9 @@
     x:Class="FileShare.Mobile.MainPage"
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:controls="clr-namespace:FileShare.Mobile.Controls"
     xmlns:coreModel="clr-namespace:FileShare.Core.Models;assembly=FileShare.Core"
+    xmlns:f="clr-namespace:Fonts"
     xmlns:helpers="clr-namespace:FileShare.Mobile.Helpers"
     xmlns:vm="clr-namespace:FileShare.Mobile.ViewModels"
     x:Name="MainPageView"
@@ -128,20 +130,126 @@
             </Border.Shadow>
             <Grid RowDefinitions="auto,*,auto">
                 <Grid Margin="0,0,0,12" ColumnDefinitions="*,Auto">
-                    <Label Style="{StaticResource TitleLabel}" Text="可用设备" />
+                    <Label
+                        Style="{StaticResource TitleLabel}"
+                        Text="可用设备"
+                        VerticalOptions="Center" />
                     <!--  刷新设备按钮：扫描时图标持续旋转，对齐 Desktop MainView.axaml  -->
                     <ImageButton
                         Grid.Column="1"
-                        Padding="6"
+                        Padding="0"
+                        AnchorX="0.57"
+                        AnchorY="0.49"
                         BackgroundColor="Transparent"
+                        BorderWidth="0"
                         Command="{Binding RefreshDevicesCommand}"
-                        HeightRequest="32"
-                        Source="{StaticResource IconArrowSync}"
-                        WidthRequest="32">
-                        <ImageButton.Behaviors>
-                            <helpers:RotateAnimationBehavior IsActive="{Binding IsScanning}" />
-                        </ImageButton.Behaviors>
+                        IsVisible="False"
+                        Source="{StaticResource IconArrowSync}">
+                        <ImageButton.Resources>
+                            <Style TargetType="ImageButton">
+                                <Setter Property="VisualStateManager.VisualStateGroups">
+                                    <VisualStateGroupList>
+                                        <VisualStateGroup x:Name="CommonStates">
+                                            <VisualState x:Name="Normal">
+                                                <VisualState.Setters>
+                                                    <Setter Property="BackgroundColor" Value="Transparent" />
+                                                </VisualState.Setters>
+                                            </VisualState>
+                                            <VisualState x:Name="PointerOver">
+                                                <VisualState.Setters>
+                                                    <Setter Property="BackgroundColor" Value="Transparent" />
+                                                </VisualState.Setters>
+                                            </VisualState>
+                                            <VisualState x:Name="Pressed">
+                                                <VisualState.Setters>
+                                                    <Setter Property="BackgroundColor" Value="Transparent" />
+                                                </VisualState.Setters>
+                                            </VisualState>
+                                        </VisualStateGroup>
+                                    </VisualStateGroupList>
+                                </Setter>
+                            </Style>
+                        </ImageButton.Resources>
+                        <ImageButton.Triggers>
+                            <DataTrigger
+                                Binding="{Binding IsScanning}"
+                                TargetType="ImageButton"
+                                Value="True">
+                                <DataTrigger.EnterActions>
+                                    <controls:RotateToggleAction IsRunning="True" />
+                                </DataTrigger.EnterActions>
+                                <DataTrigger.ExitActions>
+                                    <controls:RotateToggleAction IsRunning="False" />
+                                </DataTrigger.ExitActions>
+                            </DataTrigger>
+                        </ImageButton.Triggers>
                     </ImageButton>
+                    <Button
+                        Grid.Column="1"
+                        Padding="0"
+                        BackgroundColor="White"
+                        BorderWidth="0"
+                        Command="{Binding RefreshDevicesCommand}"
+                        FontFamily="{x:Static f:FluentUI.FontFamily}"
+                        FontSize="{StaticResource IconSize}"
+                        HeightRequest="30"
+                        HorizontalOptions="Center"
+                        IsVisible="False"
+                        Text="{x:Static f:FluentUI.arrow_sync_24_regular}"
+                        TextColor="{AppThemeBinding Light={StaticResource Black},
+                                                    Dark={StaticResource SecondaryDarkText}}"
+                        VerticalOptions="Center"
+                        WidthRequest="30">
+                        <Button.Triggers>
+                            <DataTrigger
+                                Binding="{Binding IsScanning}"
+                                TargetType="Button"
+                                Value="True">
+                                <DataTrigger.EnterActions>
+                                    <controls:RotateToggleAction IsRunning="True" />
+                                </DataTrigger.EnterActions>
+                                <DataTrigger.ExitActions>
+                                    <controls:RotateToggleAction IsRunning="False" />
+                                </DataTrigger.ExitActions>
+                            </DataTrigger>
+                        </Button.Triggers>
+                    </Button>
+                    <Grid
+                        Grid.Column="1"
+                        Padding="0"
+                        AnchorX="0.5"
+                        AnchorY="0.5"
+                        Background="Transparent"
+                        HeightRequest="{StaticResource IconBorderSize}"
+                        WidthRequest="{StaticResource IconBorderSize}">
+                        <Grid.GestureRecognizers>
+                            <TapGestureRecognizer Command="{Binding RefreshDevicesCommand}" />
+                        </Grid.GestureRecognizers>
+                        <Label
+                            Margin="0"
+                            Padding="0"
+                            FontFamily="{x:Static f:FluentUI.FontFamily}"
+                            FontSize="{StaticResource IconSize}"
+                            HorizontalOptions="Center"
+                            Text="{x:Static f:FluentUI.arrow_sync_24_regular}"
+                            TextColor="{AppThemeBinding Light={StaticResource Black},
+                                                        Dark={StaticResource SecondaryDarkText}}"
+                            TranslationY="-2"
+                            VerticalOptions="Center" />
+                        <Grid.Triggers>
+                            <DataTrigger
+                                Binding="{Binding IsScanning}"
+                                TargetType="Grid"
+                                Value="True">
+                                <DataTrigger.EnterActions>
+                                    <controls:RotateToggleAction IsRunning="True" />
+                                </DataTrigger.EnterActions>
+                                <DataTrigger.ExitActions>
+                                    <controls:RotateToggleAction IsRunning="False" />
+                                </DataTrigger.ExitActions>
+                            </DataTrigger>
+                        </Grid.Triggers>
+                    </Grid>
                 </Grid>
 
                 <CollectionView

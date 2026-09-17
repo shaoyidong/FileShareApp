@@ -2,7 +2,6 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
-using FileShare.Desktop.ViewModels;
 using FileShare.Desktop.ViewModels.Messages;
 using CommunityToolkit.Mvvm.Messaging;
 using System;
@@ -29,10 +28,10 @@ namespace FileShare.Desktop.Views
 
         protected override void OnClosed(EventArgs e)
         {
-            if (DataContext is MainViewModel viewModel)
-            {
-                viewModel.Dispose();
-            }
+            //if (DataContext is MainViewModel viewModel)
+            //{
+            //    viewModel.Dispose();
+            //}
             
             // 取消注册消息处理器
             WeakReferenceMessenger.Default.Unregister<ConfirmationMessage>(this);

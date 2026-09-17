@@ -34,6 +34,13 @@
     </OnIdiom>
 
     <OnIdiom
+        x:Key="IconBorderSize"
+        x:TypeArguments="x:Double"
+        Default="25">
+        <OnIdiom.Desktop>40</OnIdiom.Desktop>
+    </OnIdiom>
+
+    <OnIdiom
         x:Key="IconSizeSmall"
         x:TypeArguments="x:Double"
         Default="12">
