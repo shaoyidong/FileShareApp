@@ -234,7 +234,8 @@
                             Text="{x:Static f:FluentUI.arrow_sync_24_regular}"
                             TextColor="{AppThemeBinding Light={StaticResource Black},
                                                         Dark={StaticResource SecondaryDarkText}}"
-                            TranslationY="-2"
+                            TranslationX="-0.32"
+                            TranslationY="-0.4"
                             VerticalOptions="Center" />
                         <Grid.Triggers>
                             <DataTrigger
