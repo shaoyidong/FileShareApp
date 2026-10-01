@@ -362,6 +362,7 @@ public class TcpFileTransferService : IDisposable
     private async Task HandleClientAsync(TcpClient client, CancellationToken cancellationToken)
     {
         string? senderId = null;
+        string? transferId = null;
         Interlocked.Increment(ref _activeTransfers);
         try
         {
@@ -419,6 +420,7 @@ public class TcpFileTransferService : IDisposable
                                 }
 
                                 senderId = request.SenderId;
+                                transferId = request.TransferId;
 
                                 // TLS 后置 TOFU 校验：握手时未知对端身份，读出首条请求拿到 SenderId 后再校验其证书指纹。
                                 // 仅在首条请求执行一次；指纹不一致视为中间人攻击，中止连接（此时仅泄露文件元数据，未交换文件内容）。
@@ -500,27 +502,27 @@ public class TcpFileTransferService : IDisposable
         catch (Exception ex)
         {
             _logger.LogError(ex, "处理客户端连接失败");
+            
+            if (!string.IsNullOrEmpty(transferId))
+            {
+                if (_incomingTransfers.TryRemove(transferId, out var transfer))
+                {
+                    transfer.Status = TransferStatus.Failed;
+                    OnTransferCompleted?.Invoke(transfer, "连接已关闭");
+                }                
+            }
         }
         finally
         {
             Interlocked.Decrement(ref _activeTransfers);
-            // 连接关闭时，根据发送方ID或IP清理接收传输数据
-            if (!string.IsNullOrEmpty(senderId))
-            {
-                // 清理所有来自该发送方的接收传输数据
-                var senderTransfers = _incomingTransfers.Where(t => t.Value.SenderId == senderId);
-                foreach (var transfer in senderTransfers)
-                {
-                    _incomingTransfers.TryRemove(transfer.Key, out _);
-                    _transferCancellationTokens.TryRemove(transfer.Key, out var cts);                   
-                    _lastProgressValues.TryRemove(transfer.Key, out _);
-                    _lastRateSamples.TryRemove(transfer.Key, out _);
-                    transfer.Value.Status = TransferStatus.Failed;
-                    OnTransferCompleted?.Invoke(transfer.Value, "连接已关闭");
-                    cts?.Dispose();
-                }
-                _logger.LogDebug("清理清理来自发送方：{SenderId} 的数据", senderId);
-            }            
+            if (!string.IsNullOrEmpty(transferId))
+            {                
+                 _incomingTransfers.TryRemove(transferId, out var transfer);               
+                 _transferCancellationTokens.TryRemove(transferId, out var cts);
+                 _lastProgressValues.TryRemove(transferId, out _);
+                 _lastRateSamples.TryRemove(transferId, out _);                
+                 cts?.Dispose();                
+            }
         }
     }    
 
