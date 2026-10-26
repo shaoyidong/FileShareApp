@@ -54,6 +54,30 @@ namespace FileShare.Desktop.ViewModels
         // 格式化的已传输大小显示
         public string FormattedTransferredSize => FormatFileSize(_transferredSize);
 
+        private long _speedBytesPerSecond;
+
+        /// <summary>
+        /// 瞬时速率（字节/秒）。
+        /// </summary>
+        public long SpeedBytesPerSecond
+        {
+            get => _speedBytesPerSecond;
+            set
+            {
+                if (SetProperty(ref _speedBytesPerSecond, value))
+                {
+                    OnPropertyChanged(nameof(SpeedText));
+                    OnPropertyChanged(nameof(ShowSpeed));
+                }
+            }
+        }
+
+        /// <summary>速率文本，如 "12.3MB/s"。</summary>
+        public string SpeedText => $"{FormatFileSize(_speedBytesPerSecond)}/s";
+
+        /// <summary>是否显示速率（仅在传输中且有采样时显示）。</summary>
+        public bool ShowSpeed => _speedBytesPerSecond > 0 && Status == TransferStatus.Transferring;
+
         /// <summary>
         /// 传输状态
         /// </summary>
@@ -68,6 +92,7 @@ namespace FileShare.Desktop.ViewModels
                 {
                     OnPropertyChanged(nameof(StatusText));
                     OnPropertyChanged(nameof(ShowAcceptReject));
+                    OnPropertyChanged(nameof(ShowSpeed));
                 }
             }
         }
@@ -156,7 +181,8 @@ namespace FileShare.Desktop.ViewModels
                 ReceiverId = model.ReceiverId,
                 ProgressPercentage = model.ProgressPercentage,
                 SavePath = model.SavePath,
-                Direction = model.Direction
+                Direction = model.Direction,
+                SpeedBytesPerSecond = model.TransferRateBytesPerSec
             };
         }
     }

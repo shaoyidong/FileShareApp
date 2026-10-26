@@ -1,4 +1,4 @@
-﻿using FileShare.Core.Models;
+using FileShare.Core.Models;
 using FileShare.Core.Network.Discovery;
 using FileShare.Core.Network.Mdns;
 using Microsoft.Extensions.Logging;
@@ -44,23 +44,76 @@ namespace FileShare.Core.Network
             _discoveryOptions = discoveryOptions;
 
             _mdns = new MdnsService(localDevice, loggerFactory);
-            _mdns.OnDeviceDiscovered += MergeDevice;
-            _mdns.OnDeviceRemoved += RemoveDevice;
-
             _udpMulticast = new UdpMulticastDiscoveryService(localDevice,discoveryOptions.UdpMulticastAddress, discoveryOptions.UdpMulticastPort, loggerFactory);
-            _udpMulticast.OnDeviceDiscovered += MergeDevice;
-            _udpMulticast.OnDeviceRemoved += RemoveDevice;
-
             _udpBroadcast = new UdpBroadcastDiscoveryService(localDevice, discoveryOptions.UdpBroadcastPort, loggerFactory);
-            _udpBroadcast.OnDeviceDiscovered += MergeDevice;
-            _udpBroadcast.OnDeviceRemoved += RemoveDevice;
+
+            // 统一通过 Subscribe/Unsubscribe 管理，避免 StopAsync 之后再 StartAsync 时事件链丢失
+            Subscribe();
         }
 
-        private void MergeDevice(DeviceInfo device)
+        private bool _subscribed;
+
+        /// <summary>
+        /// 订阅子发现服务的事件。可重复调用。
+        /// </summary>
+        private void Subscribe()
+        {
+            if (_subscribed)
+            {
+                return;
+            }
+
+            _mdns.OnDeviceDiscovered += OnChildDeviceDiscovered;
+            _mdns.OnDeviceRemoved += OnChildDeviceRemoved;
+            _udpMulticast.OnDeviceDiscovered += OnChildDeviceDiscovered;
+            _udpMulticast.OnDeviceRemoved += OnChildDeviceRemoved;
+            _udpBroadcast.OnDeviceDiscovered += OnChildDeviceDiscovered;
+            _udpBroadcast.OnDeviceRemoved += OnChildDeviceRemoved;
+            _subscribed = true;
+        }
+
+        /// <summary>
+        /// 取消订阅子发现服务的事件。
+        /// </summary>
+        private void Unsubscribe()
+        {
+            if (!_subscribed)
+            {
+                return;
+            }
+
+            _mdns.OnDeviceDiscovered -= OnChildDeviceDiscovered;
+            _mdns.OnDeviceRemoved -= OnChildDeviceRemoved;
+            _udpMulticast.OnDeviceDiscovered -= OnChildDeviceDiscovered;
+            _udpMulticast.OnDeviceRemoved -= OnChildDeviceRemoved;
+            _udpBroadcast.OnDeviceDiscovered -= OnChildDeviceDiscovered;
+            _udpBroadcast.OnDeviceRemoved -= OnChildDeviceRemoved;
+            _subscribed = false;
+        }
+
+        private void OnChildDeviceDiscovered(DeviceInfo device) => MergeDevice(device);
+
+        private void OnChildDeviceRemoved(string deviceId) => RemoveDevice(deviceId);
+
+        /// <summary>
+        /// 把外部探测到的设备（手动输入 IP、网段扫描结果）合并进设备列表，与自动发现共用同一套去重/过期逻辑。
+        /// </summary>
+        /// <returns>是否为新增设备。</returns>
+        public bool InjectDevice(DeviceInfo device)
+        {
+            if (device is null || string.IsNullOrEmpty(device.DeviceId))
+            {
+                return false;
+            }
+
+            return MergeDevice(device);
+        }
+
+        private bool MergeDevice(DeviceInfo device)
         {
             if (_localDevice.DeviceId == device.DeviceId)
             {
-                return;
+                return false;
             }
 
             // 如果已经存在，则直接更新已有设备信息
@@ -71,7 +124,11 @@ namespace FileShare.Core.Network
                 existing.DeviceName = device.DeviceName;
                 existing.DeviceType = device.DeviceType;
                 existing.SupportsTls = device.SupportsTls;
-                return;
+                if (device.Port > 0)
+                {
+                    existing.Port = device.Port;
+                }
+                return false;
             }
           
             if (_devices.Count >= MaxDiscoveredDevices)
@@ -81,7 +138,7 @@ namespace FileShare.Core.Network
                 if (_devices.Count >= MaxDiscoveredDevices)
                 {
                     _logger.LogWarning("已达到最大发现设备数，无法添加新设备: {DeviceId}", device.DeviceId);
-                    return;
+                    return false;
                 }
             }
 
@@ -89,7 +146,10 @@ namespace FileShare.Core.Network
             if (_devices.TryAdd(device.DeviceId, device))
             {
                 OnDeviceDiscovered?.Invoke(device);
+                return true;
             }
+
+            return false;
         }
 
         private void RemoveDevice(string deviceId)
@@ -118,6 +178,9 @@ namespace FileShare.Core.Network
                 _logger.LogWarning("Discovery service has been disposed.");
                 return false;
             }                
+
+            // 支持 Stop → Start 的循环（例如用户在设置里重启服务），重新挂上子服务事件
+            Subscribe();
 
             var mdnsStartTask = Task.Run(async () =>
             {
@@ -164,12 +227,7 @@ namespace FileShare.Core.Network
         private void Stop()
         {
             _isRunning = false;
-            _mdns.OnDeviceDiscovered -= MergeDevice;
-            _udpMulticast.OnDeviceDiscovered -= MergeDevice;
-            _udpBroadcast.OnDeviceDiscovered -= MergeDevice;
-            _mdns.OnDeviceRemoved -= RemoveDevice;
-            _udpMulticast.OnDeviceRemoved -= RemoveDevice;
-            _udpBroadcast.OnDeviceRemoved -= RemoveDevice;
+            Unsubscribe();
             _cts?.Cancel();
         }
 

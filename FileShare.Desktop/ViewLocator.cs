@@ -29,6 +29,7 @@ namespace FileShare.Desktop
             {
                 MainViewModel => _serviceProvider.GetRequiredService<MainView>(),
                 HistoryViewModel => _serviceProvider.GetRequiredService<HistoryView>(),
+                SettingsViewModel => _serviceProvider.GetRequiredService<SettingsView>(),
                 _ => new TextBlock { Text = $"No view for {param?.GetType().Name}" }
             };
             // 关键：将 ViewModel 设置到视图的 DataContext

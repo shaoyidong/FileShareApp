@@ -38,6 +38,21 @@ namespace FileShare.Desktop
             var logger = ServiceProvider?.GetService<ILogger<App>>()
                     ?? throw new InvalidOperationException("ServiceProvider not set");
 
+            // 应用用户上次选择的皮肤（Win7 / WinXP）。必须在窗口创建前完成，避免首帧闪烁。
+            try
+            {
+                var settingsService = ServiceProvider?.GetService<IAppSettingsService>();
+                var themeService = ServiceProvider?.GetService<IThemeService>();
+                if (themeService is not null)
+                {
+                    themeService.Apply(settingsService?.Current.Skin ?? AppSkin.Win7);
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "应用界面皮肤失败，沿用默认皮肤");
+            }
+
             AppDomain.CurrentDomain.UnhandledException += (s, e) =>
             {
                 if (e.ExceptionObject is Exception ex)
@@ -97,7 +112,9 @@ namespace FileShare.Desktop
                     dialogService,
                     desktop,
                     syncContext,
-                    provider.GetRequiredService<ILoggerFactory>()
+                    provider.GetRequiredService<ILoggerFactory>(),
+                    provider.GetRequiredService<IAppSettingsService>(),
+                    provider.GetRequiredService<IThemeService>()
                 );
                
                 var mainWindow = provider.GetRequiredService<MainWindow>();

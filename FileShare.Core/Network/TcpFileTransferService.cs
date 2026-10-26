@@ -129,6 +129,22 @@ public class TcpFileTransferService : IDisposable
     }
 
     /// <summary>
+    /// 便捷构造函数（不区分设备身份、不启用 TLS），便于单元测试与快速集成。
+    /// </summary>
+    public TcpFileTransferService(IPlatformDirectoryService directoryService, int port = 5237)
+        : this(string.Empty, directoryService, port, false, null)
+    {
+    }
+
+    /// <summary>
+    /// 便捷构造函数（不区分设备身份），可指定日志工厂与是否启用 TLS。
+    /// </summary>
+    public TcpFileTransferService(IPlatformDirectoryService directoryService, int port, ILoggerFactory? loggerFactory, bool tlsEnabled = false)
+        : this(string.Empty, directoryService, port, tlsEnabled, loggerFactory)
+    {
+    }
+
+    /// <summary>
     /// 处理用户对传输请求的选择
     /// </summary>
     /// <param name="transferId">传输ID</param>
