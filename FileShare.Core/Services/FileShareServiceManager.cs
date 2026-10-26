@@ -19,6 +19,8 @@ public class FileShareServiceManager : IFileShareServiceManager
 {
     private readonly CompositeDiscoveryService _discoveryService;
     private readonly TcpFileTransferService _fileTransferService;
+    private readonly DeviceProbeService _probeService;
+    private readonly SubnetScanner _subnetScanner;
     private readonly DeviceInfo _localDevice;
     private readonly IDatabaseService _databaseService;
     private readonly ILogger<FileShareServiceManager> _logger;
@@ -90,6 +92,10 @@ public class FileShareServiceManager : IFileShareServiceManager
         _discoveryService = new CompositeDiscoveryService(_localDevice, discoveryOptions, loggerFactory);
         _fileTransferService = new TcpFileTransferService(deviceId, directoryService, transferPort, tlsEnabled, loggerFactory);        
 
+        // 手动直连 / 网段扫描（跨子网与广播被拦截场景的兜底方案）
+        _probeService = new DeviceProbeService(_localDevice, transferPort, loggerFactory);
+        _subnetScanner = new SubnetScanner(_probeService, loggerFactory);
+
         // 注册事件处理
         _discoveryService.OnDeviceDiscovered += device => OnDeviceDiscovered?.Invoke(device);
         _discoveryService.OnDeviceRemoved += deviceId => OnDeviceRemoved?.Invoke(deviceId);
@@ -97,7 +103,9 @@ public class FileShareServiceManager : IFileShareServiceManager
         _fileTransferService.OnTransferProgressUpdated += info => OnTransferProgressUpdated?.Invoke(info);
         _fileTransferService.OnTransferCompleted += (info, message) =>
         {
-            if (info.Status == TransferStatus.Completed && info.ReceiverId == _localDevice.DeviceId)
+            // 只记录「本机收到的文件」。这里用方向判断而不是 ReceiverId 比较：
+            // 手动输入 IP 连接的设备在握手前拿不到真实设备 ID，用 ID 比较会漏记。
+            if (info.Status == TransferStatus.Completed && info.Direction == TransferDirection.Receive)
             {
                 //存储接收记录
                 //查询发送设备名
@@ -271,6 +279,112 @@ public class FileShareServiceManager : IFileShareServiceManager
     public Task<IEnumerable<ReceiveHistoryEntity>> GetAllReceiveHistoryAsync()
     {
         return _databaseService.GetAllReceiveHistoryAsync();
+    }
+
+    /// <summary>
+    /// 直接按地址连接设备：支持 <c>192.168.1.20</c>、<c>192.168.1.20:5237</c>、<c>[fe80::1]:5237</c>、主机名。
+    /// <para>这是跨子网、广播被防火墙拦截、或对端不响应广播时的兜底连接方式：
+    /// 先发一次发现报文（可拿到设备名/类型/端口），无应答时退化为 TCP 探活。</para>
+    /// </summary>
+    /// <param name="address">用户输入的地址。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>探测到的设备；不可达时为 <c>null</c>。</returns>
+    public async Task<DeviceInfo?> ConnectByAddressAsync(string address, CancellationToken cancellationToken = default)
+    {
+        var device = await _probeService.ProbeAsync(address, cancellationToken).ConfigureAwait(false);
+        if (device is null)
+        {
+            return null;
+        }
+
+        if (device.Port <= 0)
+        {
+            device.Port = _localDevice.Port;
+        }
+
+        // 合并进发现列表，与自动发现的设备享受同样的去重 / 过期 / UI 展示逻辑
+        _discoveryService.InjectDevice(device);
+        _logger.LogInformation("已通过地址直连设备: {Name} ({Ip}:{Port})", device.DeviceName, device.IpAddress, device.Port);
+        return device;
+    }
+
+    /// <summary>
+    /// 扫描一个网段内所有地址，把发现的设备合并进设备列表。
+    /// </summary>
+    /// <param name="cidr">网段，如 <c>192.168.1.0/24</c>。</param>
+    /// <param name="progress">进度回调。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    public async Task<IReadOnlyList<DeviceInfo>> ScanSubnetAsync(
+        string cidr,
+        IProgress<SubnetScanProgress>? progress = null,
+        CancellationToken cancellationToken = default)
+    {
+        var devices = await _subnetScanner.ScanAsync(cidr, progress, cancellationToken).ConfigureAwait(false);
+
+        foreach (var device in devices)
+        {
+            if (device.Port <= 0)
+            {
+                device.Port = _localDevice.Port;
+            }
+
+            _discoveryService.InjectDevice(device);
+        }
+
+        return devices;
+    }
+
+    /// <summary>
+    /// 按顺序发送多个文件（LocalSend 的「一次发送多个文件」）。
+    /// <para>逐个文件复用同一条传输协议，避免一次改动协议帧结构；
+    /// 每个文件都会触发 <see cref="OnTransferRequestSendAndReceive"/> 与进度/完成事件，
+    /// 因此 UI 里看到的是多条传输记录。</para>
+    /// </summary>
+    /// <param name="filePaths">文件路径列表。</param>
+    /// <param name="targetDevice">目标设备。</param>
+    /// <param name="progress">批次进度。</param>
+    /// <param name="cancellationToken">取消令牌（在文件之间检查）。</param>
+    /// <returns>是否全部发送成功。</returns>
+    public async Task<bool> SendFilesAsync(
+        IReadOnlyList<string> filePaths,
+        DeviceInfo targetDevice,
+        IProgress<FileSendProgress>? progress = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (filePaths is null || filePaths.Count == 0)
+        {
+            return false;
+        }
+
+        var allSucceeded = true;
+
+        for (var index = 0; index < filePaths.Count; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var filePath = filePaths[index];
+            bool success;
+            try
+            {
+                success = await _fileTransferService.SendFileAsync(filePath, targetDevice, _localDevice.DeviceId)
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                progress?.Report(new FileSendProgress(index + 1, filePaths.Count, filePath, false));
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "发送文件失败: {Path}", filePath);
+                success = false;
+            }
+
+            allSucceeded &= success;
+            progress?.Report(new FileSendProgress(index + 1, filePaths.Count, filePath, success));
+        }
+
+        return allSucceeded;
     }
 
     /// <summary>

@@ -16,7 +16,9 @@ namespace FileShare.Desktop.Tests.ViewModels
         private readonly Mock<IFileShareServiceManager> _mockServiceManager;
         private readonly Mock<IClassicDesktopStyleApplicationLifetime> _mockAppLifetime;
         private readonly Mock<IDialogService> _mockDialogService;
-        private readonly MainWindowViewModel _viewModel;
+        private readonly Mock<IAppSettingsService> _mockSettingsService;
+        private readonly Mock<IThemeService> _mockThemeService;
+        private readonly MainViewModel _viewModel;
         private readonly SynchronizationContext _testSynchronizationContext;
 
         public MainWindowViewModelTests()
@@ -30,6 +32,9 @@ namespace FileShare.Desktop.Tests.ViewModels
             _mockServiceManager = new Mock<IFileShareServiceManager>();
             _mockAppLifetime = new Mock<IClassicDesktopStyleApplicationLifetime>();
             _mockDialogService = new Mock<IDialogService>();
+            _mockSettingsService = new Mock<IAppSettingsService>();
+            _mockThemeService = new Mock<IThemeService>();
+            _mockSettingsService.SetupGet(s => s.Current).Returns(new AppSettings());
 
             // 设置模拟对象的行为
             _mockServiceManager.Setup(m => m.GetLocalDeviceInfo())
@@ -43,11 +48,14 @@ namespace FileShare.Desktop.Tests.ViewModels
                 });
 
             // 创建ViewModel实例
-            _viewModel = new MainWindowViewModel(
+            _viewModel = new MainViewModel(
                 _mockServiceManager.Object,
                 _mockDialogService.Object,
                 _mockAppLifetime.Object,
-                _testSynchronizationContext);
+                _testSynchronizationContext,
+                Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance,
+                _mockSettingsService.Object,
+                _mockThemeService.Object);
         }
 
         [Fact]

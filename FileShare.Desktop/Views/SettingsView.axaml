@@ -1,0 +1,191 @@
+<UserControl
+    x:Class="FileShare.Desktop.Views.SettingsView"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:fonts="using:FileShare.Desktop.Assets.Fonts"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:vm="using:FileShare.Desktop.ViewModels"
+    d:DesignHeight="600"
+    d:DesignWidth="960"
+    x:CompileBindings="True"
+    x:DataType="vm:SettingsViewModel"
+    mc:Ignorable="d">
+
+    <Grid RowDefinitions="Auto,*,Auto">
+
+        <!--  顶部工具栏  -->
+        <Border Grid.Row="0" Classes="toolbar" Padding="8,6">
+            <StackPanel
+                VerticalAlignment="Center"
+                Orientation="Horizontal"
+                Spacing="6">
+                <Button
+                    Classes="icon"
+                    Command="{Binding BackCommand}"
+                    ToolTip.Tip="返回">
+                    <TextBlock
+                        Classes="iconGlyph"
+                        Text="{x:Static fonts:FluentUI.arrow_left_24_regular}" />
+                </Button>
+                <TextBlock
+                    VerticalAlignment="Center"
+                    Classes="h1"
+                    Text="设置" />
+            </StackPanel>
+        </Border>
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="8" Spacing="8">
+
+                <!--  设备  -->
+                <Border Padding="12" Classes="panel">
+                    <StackPanel Spacing="8">
+                        <TextBlock Classes="h1" Text="设备" />
+
+                        <Grid ColumnDefinitions="110,*" RowDefinitions="Auto">
+                            <TextBlock Classes="label" Text="设备名称" />
+                            <TextBox
+                                Grid.Column="1"
+                                MaxWidth="320"
+                                HorizontalAlignment="Left"
+                                Watermark="其他设备看到的名字"
+                                Text="{Binding DeviceName}" />
+                        </Grid>
+
+                        <Grid ColumnDefinitions="110,*">
+                            <TextBlock Classes="label" Text="设备类型" />
+                            <ComboBox
+                                Grid.Column="1"
+                                MinWidth="220"
+                                HorizontalAlignment="Left"
+                                ItemsSource="{Binding DeviceTypeOptions}"
+                                SelectedItem="{Binding SelectedDeviceType}">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:DeviceTypeOption">
+                                        <TextBlock Text="{Binding Text}" />
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                        </Grid>
+
+                        <Grid ColumnDefinitions="110,*">
+                            <TextBlock Classes="label" Text="传输端口" />
+                            <StackPanel
+                                Grid.Column="1"
+                                Orientation="Horizontal"
+                                Spacing="8">
+                                <TextBox
+                                    Width="90"
+                                    Text="{Binding PortText}" />
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    Classes="muted"
+                                    Text="对端需能访问该 TCP 端口（默认 5237）" />
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!--  接收  -->
+                <Border Padding="12" Classes="panel">
+                    <StackPanel Spacing="8">
+                        <TextBlock Classes="h1" Text="接收" />
+
+                        <Grid ColumnDefinitions="110,*">
+                            <TextBlock Classes="label" Text="保存目录" />
+                            <StackPanel
+                                Grid.Column="1"
+                                Orientation="Horizontal"
+                                Spacing="6">
+                                <TextBox
+                                    Width="340"
+                                    Watermark="留空 = 按文件类型自动归类（图片/视频/音乐/文档/下载）"
+                                    Text="{Binding SaveDirectory}" />
+                                <Button
+                                    MinWidth="64"
+                                    Command="{Binding BrowseSaveDirectoryCommand}"
+                                    Content="浏览..." />
+                                <Button
+                                    MinWidth="64"
+                                    Command="{Binding ClearSaveDirectoryCommand}"
+                                    Content="清除" />
+                            </StackPanel>
+                        </Grid>
+
+                        <CheckBox
+                            Content="自动接收「收藏设备」发来的文件（Quick Save，无需逐次确认）"
+                            IsChecked="{Binding AutoAcceptFromFavorites}" />
+                    </StackPanel>
+                </Border>
+
+                <!--  安全与网络  -->
+                <Border Padding="12" Classes="panel">
+                    <StackPanel Spacing="8">
+                        <TextBlock Classes="h1" Text="安全与网络" />
+
+                        <CheckBox
+                            Content="启用 TLS 加密传输（双方都开启时自动升级为加密通道）"
+                            IsChecked="{Binding TlsEnabled}" />
+
+                        <TextBlock
+                            Classes="muted"
+                            Text="发现方式：mDNS + UDP 组播 + UDP 广播 三路并行；若广播被拦截，请使用主页的「IP 直连」或「网段扫描」。"
+                            TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+
+                <!--  界面风格  -->
+                <Border Padding="12" Classes="panel">
+                    <StackPanel Spacing="8">
+                        <TextBlock Classes="h1" Text="界面风格" />
+                        <TextBlock
+                            Classes="muted"
+                            Text="切换后立即生效，无需重启；选择会随设置一起保存。"
+                            TextWrapping="Wrap" />
+                        <StackPanel Orientation="Horizontal" Spacing="24">
+                            <RadioButton
+                                GroupName="SkinGroup"
+                                IsChecked="{Binding IsWin7Skin}"
+                                Content="Windows 7 风格（Aero）" />
+                            <RadioButton
+                                GroupName="SkinGroup"
+                                IsChecked="{Binding IsWinXPSkin}"
+                                Content="Windows XP 风格（Luna）" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <StackPanel Margin="2,0,0,0" Orientation="Horizontal">
+                    <TextBlock Classes="muted" Text="配置文件：" />
+                    <TextBlock Classes="muted" Text="{Binding SettingsFilePath}" TextWrapping="Wrap" />
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!--  底部  -->
+        <Border Grid.Row="2" Padding="8,6" Classes="statusbar">
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBlock
+                    VerticalAlignment="Center"
+                    Classes="muted"
+                    Text="{Binding StatusMessage}"
+                    TextWrapping="Wrap" />
+                <StackPanel
+                    Grid.Column="1"
+                    Orientation="Horizontal"
+                    Spacing="6">
+                    <Button
+                        MinWidth="80"
+                        Classes="accent"
+                        Command="{Binding SaveCommand}"
+                        Content="保存" />
+                    <Button
+                        MinWidth="80"
+                        Command="{Binding BackCommand}"
+                        Content="关闭" />
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

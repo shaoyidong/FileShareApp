@@ -1,0 +1,306 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+        Windows 7 / Aero 风格皮肤。
+        约定：本文件只放「外观」，视图（Views/*.axaml）只放布局与语义化的 Classes，
+        两套皮肤必须定义完全相同的 Classes 集合，这样切换皮肤时布局不会跳动。
+    -->
+    <Styles.Resources>
+        <!--  调色板  -->
+        <SolidColorBrush x:Key="FsWindowBrush" Color="#F0F0F0" />
+        <SolidColorBrush x:Key="FsSurfaceBrush" Color="#FFFFFF" />
+        <SolidColorBrush x:Key="FsCardBrush" Color="#FFFFFF" />
+        <SolidColorBrush x:Key="FsBorderBrush" Color="#C6C6C6" />
+        <SolidColorBrush x:Key="FsSoftBorderBrush" Color="#DCDCDC" />
+        <SolidColorBrush x:Key="FsTextBrush" Color="#1F1F1F" />
+        <SolidColorBrush x:Key="FsMutedBrush" Color="#6D6D6D" />
+        <SolidColorBrush x:Key="FsAccentBrush" Color="#2E7BD6" />
+        <SolidColorBrush x:Key="FsAccentTextBrush" Color="#FFFFFF" />
+        <SolidColorBrush x:Key="FsDangerBrush" Color="#C42B1C" />
+        <SolidColorBrush x:Key="FsRowHoverBrush" Color="#EAF2FB" />
+        <SolidColorBrush x:Key="FsRowSelectedBrush" Color="#CFE4F8" />
+        <SolidColorBrush x:Key="FsButtonBorderBrush" Color="#ADADAD" />
+        <SolidColorBrush x:Key="FsButtonBorderHoverBrush" Color="#7EB4EA" />
+        <SolidColorBrush x:Key="FsInputBorderBrush" Color="#9AA5B1" />
+
+        <LinearGradientBrush x:Key="FsToolbarBrush" StartPoint="0%,0%" EndPoint="0%,100%">
+            <GradientStop Offset="0" Color="#FDFEFF" />
+            <GradientStop Offset="1" Color="#E6EEF9" />
+        </LinearGradientBrush>
+
+        <LinearGradientBrush x:Key="FsButtonFaceBrush" StartPoint="0%,0%" EndPoint="0%,100%">
+            <GradientStop Offset="0" Color="#FCFCFD" />
+            <GradientStop Offset="0.55" Color="#F1F1F1" />
+            <GradientStop Offset="1" Color="#E4E4E4" />
+        </LinearGradientBrush>
+
+        <LinearGradientBrush x:Key="FsButtonHoverBrush" StartPoint="0%,0%" EndPoint="0%,100%">
+            <GradientStop Offset="0" Color="#F7FBFF" />
+            <GradientStop Offset="1" Color="#DCEBFB" />
+        </LinearGradientBrush>
+
+        <LinearGradientBrush x:Key="FsButtonPressedBrush" StartPoint="0%,0%" EndPoint="0%,100%">
+            <GradientStop Offset="0" Color="#D9E7F7" />
+            <GradientStop Offset="1" Color="#F0F6FC" />
+        </LinearGradientBrush>
+
+        <LinearGradientBrush x:Key="FsAccentButtonBrush" StartPoint="0%,0%" EndPoint="0%,100%">
+            <GradientStop Offset="0" Color="#66A8E4" />
+            <GradientStop Offset="1" Color="#2A72C9" />
+        </LinearGradientBrush>
+
+        <LinearGradientBrush x:Key="FsAccentButtonHoverBrush" StartPoint="0%,0%" EndPoint="0%,100%">
+            <GradientStop Offset="0" Color="#7CB8EC" />
+            <GradientStop Offset="1" Color="#3A82D9" />
+        </LinearGradientBrush>
+
+        <FontFamily x:Key="FsFontFamily">Segoe UI, Microsoft YaHei</FontFamily>
+    </Styles.Resources>
+
+    <!--  窗口  -->
+    <Style Selector="Window">
+        <Setter Property="Background" Value="{StaticResource FsWindowBrush}" />
+        <Setter Property="Foreground" Value="{StaticResource FsTextBrush}" />
+        <Setter Property="FontFamily" Value="{StaticResource FsFontFamily}" />
+        <Setter Property="FontSize" Value="12" />
+    </Style>
+
+    <Style Selector="UserControl">
+        <Setter Property="FontFamily" Value="{StaticResource FsFontFamily}" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Foreground" Value="{StaticResource FsTextBrush}" />
+    </Style>
+
+    <!--  面板 / 卡片 / 工具栏 / 状态栏  -->
+    <Style Selector="Border.panel">
+        <Setter Property="Background" Value="{StaticResource FsSurfaceBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource FsBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="2" />
+    </Style>
+
+    <Style Selector="Border.card">
+        <Setter Property="Background" Value="{StaticResource FsCardBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource FsSoftBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="2" />
+    </Style>
+
+    <Style Selector="Border.toolbar">
+        <Setter Property="Background" Value="{StaticResource FsToolbarBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource FsBorderBrush}" />
+        <Setter Property="BorderThickness" Value="0,0,0,1" />
+    </Style>
+
+    <Style Selector="Border.statusbar">
+        <Setter Property="Background" Value="{StaticResource FsToolbarBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource FsBorderBrush}" />
+        <Setter Property="BorderThickness" Value="0,1,0,0" />
+    </Style>
+
+    <Style Selector="Border.separator">
+        <Setter Property="Background" Value="{StaticResource FsSoftBorderBrush}" />
+        <Setter Property="Width" Value="1" />
+        <Setter Property="Margin" Value="4,2" />
+    </Style>
+
+    <!--  文本（注意：不要给 TextBlock 全局设置 Foreground，否则会盖掉按钮等控件继承下去的前景色）  -->
+    <Style Selector="TextBlock.h1">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="Foreground" Value="{StaticResource FsTextBrush}" />
+        <Setter Property="Margin" Value="2,0,0,0" />
+    </Style>
+
+    <Style Selector="TextBlock.muted">
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="Foreground" Value="{StaticResource FsMutedBrush}" />
+    </Style>
+
+    <Style Selector="TextBlock.accent">
+        <Setter Property="Foreground" Value="{StaticResource FsAccentBrush}" />
+    </Style>
+
+    <Style Selector="TextBlock.danger">
+        <Setter Property="Foreground" Value="{StaticResource FsDangerBrush}" />
+    </Style>
+
+    <Style Selector="TextBlock.label">
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Margin" Value="0,0,6,0" />
+    </Style>
+
+    <Style Selector="TextBlock.iconGlyph">
+        <Setter Property="FontFamily" Value="avares://FileShare.Desktop/Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons" />
+        <Setter Property="FontSize" Value="16" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+    </Style>
+
+    <Style Selector="TextBlock.star">
+        <Setter Property="FontSize" Value="15" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Foreground" Value="#E8A200" />
+    </Style>
+
+    <Style Selector="TextBlock.starOff">
+        <Setter Property="FontSize" Value="15" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Foreground" Value="#B0B0B0" />
+    </Style>
+
+    <!--  按钮  -->
+    <Style Selector="Button">
+        <Setter Property="Background" Value="{StaticResource FsButtonFaceBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource FsButtonBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="2" />
+        <Setter Property="Padding" Value="10,3" />
+        <Setter Property="MinHeight" Value="23" />
+        <Setter Property="MinWidth" Value="64" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Foreground" Value="{StaticResource FsTextBrush}" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+
+    <Style Selector="Button:pointerover">
+        <Setter Property="BorderBrush" Value="{StaticResource FsButtonBorderHoverBrush}" />
+    </Style>
+
+    <Style Selector="Button:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource FsButtonHoverBrush}" />
+    </Style>
+
+    <Style Selector="Button:pressed /template/ ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource FsButtonPressedBrush}" />
+    </Style>
+
+    <Style Selector="Button:disabled">
+        <Setter Property="Opacity" Value="0.55" />
+    </Style>
+
+    <!--  主操作按钮  -->
+    <Style Selector="Button.accent">
+        <Setter Property="Background" Value="{StaticResource FsAccentButtonBrush}" />
+        <Setter Property="BorderBrush" Value="#1C5FAE" />
+        <Setter Property="Foreground" Value="{StaticResource FsAccentTextBrush}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Padding" Value="12,4" />
+    </Style>
+
+    <Style Selector="Button.accent /template/ ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource FsAccentButtonBrush}" />
+        <Setter Property="TextBlock.Foreground" Value="{StaticResource FsAccentTextBrush}" />
+    </Style>
+
+    <Style Selector="Button.accent:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource FsAccentButtonHoverBrush}" />
+    </Style>
+
+    <!--  图标按钮 / 文字按钮  -->
+    <Style Selector="Button.icon">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="MinWidth" Value="0" />
+        <Setter Property="MinHeight" Value="22" />
+        <Setter Property="Padding" Value="4" />
+        <Setter Property="CornerRadius" Value="2" />
+    </Style>
+
+    <Style Selector="Button.icon /template/ ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+
+    <Style Selector="Button.icon:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource FsRowHoverBrush}" />
+    </Style>
+
+    <Style Selector="Button.danger">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="MinWidth" Value="0" />
+        <Setter Property="MinHeight" Value="20" />
+        <Setter Property="Padding" Value="4" />
+        <Setter Property="Foreground" Value="{StaticResource FsDangerBrush}" />
+        <Setter Property="FontSize" Value="14" />
+    </Style>
+
+    <Style Selector="Button.danger /template/ ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="TextBlock.Foreground" Value="{StaticResource FsDangerBrush}" />
+    </Style>
+
+    <Style Selector="Button.danger:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="#FBE9E7" />
+        <Setter Property="TextBlock.Foreground" Value="{StaticResource FsDangerBrush}" />
+    </Style>
+
+    <!--  输入框  -->
+    <Style Selector="TextBox">
+        <Setter Property="Background" Value="#FFFFFF" />
+        <Setter Property="BorderBrush" Value="{StaticResource FsInputBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="2" />
+        <Setter Property="Padding" Value="6,3" />
+        <Setter Property="MinHeight" Value="23" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Foreground" Value="{StaticResource FsTextBrush}" />
+    </Style>
+
+    <Style Selector="TextBox:pointerover">
+        <Setter Property="BorderBrush" Value="{StaticResource FsButtonBorderHoverBrush}" />
+    </Style>
+
+    <Style Selector="TextBox:focus">
+        <Setter Property="BorderBrush" Value="{StaticResource FsAccentBrush}" />
+    </Style>
+
+    <!--  列表  -->
+    <Style Selector="ListBox">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="0" />
+    </Style>
+
+    <Style Selector="ListBoxItem">
+        <Setter Property="Padding" Value="6" />
+        <Setter Property="Margin" Value="0,0,0,2" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    </Style>
+
+    <Style Selector="ListBoxItem /template/ ContentPresenter">
+        <Setter Property="CornerRadius" Value="2" />
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+
+    <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource FsRowHoverBrush}" />
+    </Style>
+
+    <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource FsRowSelectedBrush}" />
+    </Style>
+
+    <Style Selector="ListBoxItem:selected">
+        <Setter Property="Foreground" Value="{StaticResource FsTextBrush}" />
+    </Style>
+
+    <!--  进度条  -->
+    <Style Selector="ProgressBar">
+        <Setter Property="Height" Value="10" />
+        <Setter Property="Background" Value="#E1E1E1" />
+        <Setter Property="Foreground" Value="{StaticResource FsAccentBrush}" />
+    </Style>
+
+    <!--  工具提示  -->
+    <Style Selector="ToolTip">
+        <Setter Property="Background" Value="#FFFFE1" />
+        <Setter Property="Foreground" Value="#1F1F1F" />
+        <Setter Property="BorderBrush" Value="#767676" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="Padding" Value="5,3" />
+    </Style>
+</Styles>

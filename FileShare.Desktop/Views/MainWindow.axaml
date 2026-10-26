@@ -2,84 +2,22 @@
     x:Class="FileShare.Desktop.Views.MainWindow"
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:converters="using:FileShare.Desktop.Converters"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-    xmlns:fonts="using:FileShare.Desktop.Assets.Fonts"
-    xmlns:local="using:FileShare.Desktop.Views"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:vm="using:FileShare.Desktop.ViewModels"
-    Title="{Binding LocalDevice.IpAddress}"
-    d:DesignHeight="600"
-    d:DesignWidth="900"
+    Title="{Binding WindowTitle}"
+    Width="1000"
+    Height="640"
+    MinWidth="860"
+    MinHeight="520"
+    d:DesignHeight="640"
+    d:DesignWidth="1000"
     x:DataType="vm:MainViewModel"
     Icon="/Assets/logo.ico"
+    WindowStartupLocation="CenterScreen"
     mc:Ignorable="d">
-    <Window.Styles>
-        <Style Selector="Button.red-button">
-            <Setter Property="Foreground" Value="Red" />
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Padding" Value="0" />
-        </Style>
-        <Style Selector="Button.red-button:pointerover /template/ ContentPresenter">
-            <Setter Property="TextBlock.Foreground" Value="Red" />
-            <Setter Property="Background" Value="Transparent" />
-        </Style>
-        <Style Selector="Button.red-button:pressed /template/ ContentPresenter">
-            <Setter Property="TextBlock.Foreground" Value="Red" />
-            <Setter Property="Background" Value="Transparent" />
-        </Style>
-        <Style Selector="Button.primary-button">
-            <Setter Property="Background" Value="#0078D4" />
-            <Setter Property="Foreground" Value="White" />
-            <Setter Property="CornerRadius" Value="8" />
-            <Setter Property="Padding" Value="12,8" />
-            <Setter Property="FontSize" Value="14" />
-        </Style>
-        <Style Selector="Button.secondary-button">
-            <Setter Property="Background" Value="#E6E6E6" />
-            <Setter Property="Foreground" Value="#333333" />
-            <Setter Property="CornerRadius" Value="6" />
-            <Setter Property="Padding" Value="8,4" />
-            <Setter Property="FontSize" Value="12" />
-        </Style>
-        <Style Selector="Button.accept-button">
-            <Setter Property="Background" Value="#0078D4" />
-            <Setter Property="Foreground" Value="White" />
-            <Setter Property="CornerRadius" Value="6" />
-            <Setter Property="Padding" Value="10,6" />
-            <Setter Property="FontSize" Value="12" />
-        </Style>
-        <Style Selector="Button.reject-button">
-            <Setter Property="Background" Value="#E6E6E6" />
-            <Setter Property="Foreground" Value="#333333" />
-            <Setter Property="CornerRadius" Value="6" />
-            <Setter Property="Padding" Value="10,6" />
-            <Setter Property="FontSize" Value="12" />
-        </Style>
-        <Style Selector="Button.icon-button">
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Padding" Value="4" />
-            <Setter Property="FontSize" Value="16" />
-        </Style>
-        <Style Selector="Button.fluentIcon-button">
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="FontFamily" Value="{StaticResource FluentIcons}" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Padding" Value="4" />
-            <Setter Property="FontSize" Value="16" />
-        </Style>
-    </Window.Styles>
-    <Design.DataContext>
-        <!--
-            This only sets the DataContext for the previewer in an IDE,
-            to set the actual DataContext for runtime, set the DataContext property in code (look at App.axaml.cs)
-        -->
-        <vm:MainViewModel />
-    </Design.DataContext>    
+    <!--  外观（背景、字体、按钮/输入框样式）全部由 Themes/Win7.axaml、Themes/WinXP.axaml 提供，便于统一切换皮肤  -->
     <Grid>
-        <!--  Main Content  -->
         <ContentControl Content="{Binding CurrentView}" />
     </Grid>
 </Window>

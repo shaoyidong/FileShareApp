@@ -1,9 +1,10 @@
-﻿using Avalonia;
+using Avalonia;
 using Avalonia.Media;
 using FileShare.Core.Network.Discovery;
 using FileShare.Core.Network.Tls;
 using FileShare.Core.Services;
 using FileShare.Desktop.Helpers;
+using FileShare.Desktop.Services;
 using FileShare.Desktop.ViewModels;
 using FileShare.Desktop.Views;
 using Microsoft.Extensions.DependencyInjection;
@@ -241,6 +242,12 @@ namespace FileShare.Desktop
            
             services.Configure<DiscoveryOptions>(_ => { });
 
+            // 用户设置（设备名 / 端口 / TLS / 保存目录 / 收藏 / 皮肤）
+            var settingsPath = Path.Combine(fileShareDir, "settings.json");
+            services.AddSingleton<IAppSettingsService>(sp =>
+                new JsonAppSettingsService(settingsPath, sp.GetRequiredService<ILoggerFactory>()));
+            services.AddSingleton<IThemeService, ThemeService>();
+
             // 数据库
             services.AddSingleton<IDatabaseService>(sp =>
                 new DatabaseService(databasePath));
@@ -255,13 +262,15 @@ namespace FileShare.Desktop
                 var dbSvc = sp.GetRequiredService<IDatabaseService>();                
                 var discOpt = sp.GetRequiredService<IOptions<DiscoveryOptions>>().Value;
                 var fac = sp.GetRequiredService<ILoggerFactory>();
+                var settings = sp.GetRequiredService<IAppSettingsService>().Current;
                 return new FileShareServiceManager(
                     dirSvc,
                     dbSvc,
-                    Environment.MachineName,
-                    Core.Models.DeviceType.Desktop,
-                    tlsEnabled: true,
+                    settings.DeviceName,
+                    settings.DeviceType,
+                    transferPort: settings.TransferPort,
                     discoveryOptions: discOpt,
+                    tlsEnabled: settings.TlsEnabled,
                     loggerFactory: fac);
             });
 
@@ -269,6 +278,7 @@ namespace FileShare.Desktop
             services.AddTransient<MainWindow>();
             services.AddTransient<MainView>();
             services.AddTransient<HistoryView>(); 
+            services.AddTransient<SettingsView>();
 
             // 构建并返回容器
             return services.BuildServiceProvider();
