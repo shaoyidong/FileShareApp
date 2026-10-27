@@ -25,6 +25,9 @@ namespace FileShare.Desktop
     {
         public static IServiceProvider? ServiceProvider { get; internal set; }
 
+        /// <summary>系统托盘服务（在主窗口创建时初始化）。</summary>
+        public static TrayService? TrayService { get; private set; }
+
         public override void Initialize()
         {
             AvaloniaXamlLoader.Load(this);
@@ -41,11 +44,14 @@ namespace FileShare.Desktop
             // 应用用户上次选择的皮肤（Win7 / WinXP）。必须在窗口创建前完成，避免首帧闪烁。
             try
             {
-                var settingsService = ServiceProvider?.GetService<IAppSettingsService>();
+                var uiPreferences = ServiceProvider?.GetService<IUiPreferencesService>();
+
+                // 语言必须在任何视图加载之前设置
+                FileShare.Desktop.Localization.Loc.SetLanguage(uiPreferences?.Current.Language ?? FileShare.Desktop.Localization.AppLanguage.ZhCN);
                 var themeService = ServiceProvider?.GetService<IThemeService>();
                 if (themeService is not null)
                 {
-                    themeService.Apply(settingsService?.Current.Skin ?? AppSkin.Win7);
+                    themeService.Apply(uiPreferences?.Current.Skin ?? AppSkin.Win7);
                 }
             }
             catch (Exception ex)
@@ -106,6 +112,9 @@ namespace FileShare.Desktop
                 var dialogService = new DialogService(desktop);
                 var syncContext = SynchronizationContext.Current ?? new SynchronizationContext();
 
+                // 托盘服务必须在拿到 lifetime 之后创建；MainViewModel 需要它来恢复窗口
+                TrayService = new TrayService(desktop);
+
                 // 创建 MainViewModel
                 var viewModel = new MainViewModel(
                     serviceManager,
@@ -114,17 +123,49 @@ namespace FileShare.Desktop
                     syncContext,
                     provider.GetRequiredService<ILoggerFactory>(),
                     provider.GetRequiredService<IAppSettingsService>(),
-                    provider.GetRequiredService<IThemeService>()
+                    provider.GetRequiredService<IThemeService>(),
+                    provider.GetRequiredService<IToastService>()
                 );
-               
+                // 网页分享（按设置决定是否启动；失败只记录日志，不影响主流程）
+                if (TrayService is not null)
+                {
+                    try
+                    {
+                        provider.GetRequiredService<IWebShareHost>().Apply();
+                    }
+                    catch (Exception ex)
+                    {
+                        provider.GetRequiredService<ILogger<App>>().LogWarning(ex, "启动网页分享失败");
+                    }
+                }
+
+
                 var mainWindow = provider.GetRequiredService<MainWindow>();
                 mainWindow.DataContext = viewModel;
-                desktop.MainWindow = mainWindow;
+                desktop.MainWindow = mainWindow;              
 
                 desktop.ShutdownRequested += (s, e) =>
                 {
+                    if (TrayService is not null)
+                    {
+                        TrayService.IsExiting = true;
+                    }
+
                     serviceManager.StopServicesAsync();
                 };
+
+                desktop.Exit += (s, e) =>
+                {
+                    TrayService?.Dispose();
+                    TrayService = null;
+                };
+
+                // 冒烟自检：`FileShare.Desktop.exe --smoke` 会自动把三个页面各渲染一遍后退出，
+                // 用于在没有人工点击的环境里验证 XAML / 皮肤 / 依赖注入是否正常。
+                if (desktop.Args?.Contains("--smoke") == true)
+                {
+                    RunSmokeTest(desktop, viewModel);
+                }
             }
 
             base.OnFrameworkInitializationCompleted();
@@ -142,6 +183,36 @@ namespace FileShare.Desktop
             {
                 BindingPlugins.DataValidators.Remove(plugin);
             }
+        }
+
+        /// <summary>
+        /// 逐页渲染自检：主界面 → 历史 → 设置 → 回到主界面，然后以 0 退出。
+        /// </summary>
+        private static void RunSmokeTest(IClassicDesktopStyleApplicationLifetime desktop, MainViewModel viewModel)
+        {
+            var step = 0;
+            var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1200) };
+            timer.Tick += (_, _) =>
+            {
+                step++;
+                switch (step)
+                {
+                    case 1:
+                        viewModel.ShowHistoryCommand.Execute(null);
+                        break;
+                    case 2:
+                        viewModel.ShowSettingsCommand.Execute(null);
+                        break;
+                    case 3:
+                        viewModel.CurrentView = viewModel;
+                        break;
+                    default:
+                        timer.Stop();
+                        desktop.Shutdown(0);
+                        break;
+                }
+            };
+            timer.Start();
         }
     }
 }

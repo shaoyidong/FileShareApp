@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Security.Cryptography.X509Certificates;
 
 namespace FileShare.Core.Crypto;
@@ -19,6 +20,64 @@ public sealed class FingerprintStore
     public FingerprintStore(string storePath)
     {
         _storePath = storePath;
+    }
+
+    /// <summary>
+    /// 首次信任某设备证书时触发（deviceId, fingerprint）。UI 可据此提示「已记录新设备指纹」。
+    /// </summary>
+    public event Action<string, string>? FirstUseTrusted;
+
+    /// <summary>
+    /// 指纹与已记录值不一致且旧证书未过期时触发（deviceId, 已知指纹, 本次指纹）。属于疑似中间人攻击。
+    /// </summary>
+    public event Action<string, string, string>? FingerprintMismatch;
+
+    /// <summary>
+    /// 读取当前信任的所有设备指纹。
+    /// </summary>
+    public IReadOnlyList<(string DeviceId, string Fingerprint, DateTime NotAfterUtc)> GetTrustedDevices()
+    {
+        lock (_lock)
+        {
+            return LoadEntries()
+                .Select(item => (item.Key, item.Value.Fingerprint, item.Value.NotAfterUtc))
+                .OrderBy(item => item.Key)
+                .ToList();
+        }
+    }
+
+    /// <summary>
+    /// 移除某个设备的信任记录（下次连接会重新 TOFU）。
+    /// </summary>
+    public bool Forget(string deviceId)
+    {
+        if (string.IsNullOrEmpty(deviceId))
+        {
+            return false;
+        }
+
+        lock (_lock)
+        {
+            var entries = LoadEntries();
+            if (!entries.Remove(deviceId))
+            {
+                return false;
+            }
+
+            SaveEntries(entries);
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// 清空全部信任记录。
+    /// </summary>
+    public void Clear()
+    {
+        lock (_lock)
+        {
+            SaveEntries(new Dictionary<string, Entry>(StringComparer.OrdinalIgnoreCase));
+        }
     }
 
     /// <summary>
@@ -42,6 +101,10 @@ public sealed class FingerprintStore
     {
         string fingerprint = ComputeFingerprint(certificate);
         DateTime notAfterUtc = certificate.NotAfter.ToUniversalTime();
+
+        var firstUse = false;
+        string? mismatchKnown = null;
+        bool accepted;
 
         lock (_lock)
         {
@@ -69,14 +132,30 @@ public sealed class FingerprintStore
                 }
 
                 // 指纹不匹配且旧证书未过期或未知 -> 拒绝
-                return false;
+                mismatchKnown = known.Fingerprint;
+                accepted = false;
             }
-
-            // 首次信任：记录指纹和过期时间
-            entries[deviceId] = new Entry(fingerprint, notAfterUtc);
-            SaveEntries(entries);
-            return true;
+            else
+            {
+                // 首次信任：记录指纹和过期时间
+                entries[deviceId] = new Entry(fingerprint, notAfterUtc);
+                SaveEntries(entries);
+                firstUse = true;
+                accepted = true;
+            }
         }
+
+        // 事件在锁外触发，避免订阅方在事件里回调本类造成死锁
+        if (firstUse)
+        {
+            FirstUseTrusted?.Invoke(deviceId, fingerprint);
+        }
+        else if (mismatchKnown is not null)
+        {
+            FingerprintMismatch?.Invoke(deviceId, mismatchKnown, fingerprint);
+        }
+
+        return accepted;
     }
 
     private record Entry(string Fingerprint, DateTime NotAfterUtc);

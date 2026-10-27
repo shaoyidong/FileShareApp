@@ -1,0 +1,80 @@
+<Window
+    x:Class="FileShare.Desktop.Views.ReceiveRequestWindow"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:loc="using:FileShare.Desktop.Localization"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    Title="{loc:Tr '文件传输请求'}"
+    Width="440"
+    SizeToContent="Height"
+    CanResize="False"
+    ShowInTaskbar="False"
+    WindowStartupLocation="CenterOwner"
+    d:DesignWidth="440"
+    mc:Ignorable="d">
+
+    <Grid RowDefinitions="Auto,*,Auto">
+
+        <Border Grid.Row="0" Classes="toolbar" Padding="10,7">
+            <TextBlock
+                VerticalAlignment="Center"
+                Classes="h1"
+                Text="{loc:Tr '收到文件传输请求'}" />
+        </Border>
+
+        <StackPanel
+            Grid.Row="1"
+            Margin="14"
+            Spacing="10">
+            <TextBlock
+                x:Name="SenderText"
+                TextWrapping="Wrap" />
+
+            <Border Padding="10" Classes="panel">
+                <StackPanel Spacing="4">
+                    <TextBlock
+                        x:Name="FileText"
+                        FontWeight="Bold"
+                        TextWrapping="Wrap" />
+                    <TextBlock
+                        x:Name="SizeText"
+                        Classes="muted" />
+                </StackPanel>
+            </Border>
+
+            <StackPanel Orientation="Horizontal" Spacing="4">
+                <TextBlock Classes="label" Text="{loc:Tr '保存到'}" />
+                <TextBlock
+                    x:Name="DirectoryText"
+                    VerticalAlignment="Center"
+                    Classes="muted"
+                    TextWrapping="Wrap" />
+            </StackPanel>
+
+            <CheckBox
+                x:Name="AlwaysAcceptCheck"
+                Content="{loc:Tr '以后自动接收此设备的文件（加入收藏）'}" />
+        </StackPanel>
+
+        <Border
+            Grid.Row="2"
+            Padding="10,8"
+            Classes="statusbar">
+            <StackPanel
+                HorizontalAlignment="Right"
+                Orientation="Horizontal"
+                Spacing="6">
+                <Button
+                    MinWidth="84"
+                    Classes="accent"
+                    Click="OnAcceptClick"
+                    Content="{loc:Tr '接收'}" />
+                <Button
+                    MinWidth="84"
+                    Click="OnRejectClick"
+                    Content="{loc:Tr '拒绝'}" />
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

@@ -6,8 +6,12 @@
     x:CompileBindings="True"
     RequestedThemeVariant="Light">
     <!--
-        皮肤（Win7 / WinXP）由 ThemeService 在运行时替换：
+        皮肤（Win7 / WinXP 蓝 / WinXP 米色）由 ThemeService 在运行时替换：
         这里先加载默认皮肤，App.Initialize 里会按用户保存的设置重新应用一次。
+
+        基础主题使用 SimpleTheme（而不是 FluentTheme）：
+        Simple 的控件模板几乎不带圆角、阴影、Reveal 高亮和主题色硬编码，
+        皮肤只需覆盖少量属性就能完全「古典化」，自建皮肤的友好度明显更高。
     -->
 
     <Application.Resources>
@@ -15,14 +19,14 @@
             <!--  Status Colors  -->
             <Color x:Key="StatusCompleted">#2e7d32</Color>
             <Color x:Key="StatusFailed">#c42b1c</Color>
-            <Color x:Key="StatusTransferring">#2e7bd6</Color>
+            <Color x:Key="StatusTransferring">#2e6fd0</Color>
             <Color x:Key="StatusPending">#b26a00</Color>
             <Color x:Key="StatusCancelled">#8a8a8a</Color>
             <Color x:Key="StatusUnknown">#7f8c8d</Color>
 
             <!--  Direction Colors  -->
             <Color x:Key="DirectionSend">#2e7d32</Color>
-            <Color x:Key="DirectionReceive">#2e7bd6</Color>
+            <Color x:Key="DirectionReceive">#2e6fd0</Color>
             <Color x:Key="DirectionUnknown">#7f8c8d</Color>
 
             <FontFamily x:Key="FluentIcons">avares://FileShare.Desktop/Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons</FontFamily>
@@ -30,7 +34,7 @@
     </Application.Resources>
 
     <Application.Styles>
-        <FluentTheme />
+        <SimpleTheme />
         <StyleInclude Source="avares://FileShare.Desktop/Themes/Win7.axaml" />
     </Application.Styles>
 </Application>

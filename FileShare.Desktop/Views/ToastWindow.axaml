@@ -1,0 +1,44 @@
+<Window
+    x:Class="FileShare.Desktop.Views.ToastWindow"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:loc="using:FileShare.Desktop.Localization"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    Width="360"
+    SizeToContent="Height"
+    CanResize="False"
+    ShowInTaskbar="False"
+    SystemDecorations="None"
+    Topmost="True"
+    d:DesignWidth="360"
+    mc:Ignorable="d"
+    WindowStartupLocation="Manual">
+
+    <Border
+        Padding="12"
+        Background="#FFFFFF"
+        BorderBrush="#2F6FD0"
+        BorderThickness="1"
+        CornerRadius="3">
+        <Grid ColumnDefinitions="Auto,*">
+            <Border
+                Grid.Column="0"
+                Width="3"
+                Margin="0,2,8,2"
+                Background="#2F6FD0" />
+            <StackPanel Grid.Column="1" Spacing="4">
+                <TextBlock
+                    x:Name="TitleText"
+                    FontWeight="Bold"
+                    TextWrapping="Wrap" />
+                <TextBlock
+                    x:Name="MessageText"
+                    Classes="muted"
+                    MaxHeight="80"
+                    TextWrapping="Wrap" />
+                <TextBlock Classes="muted" Text="{loc:Tr '点击查看（6 秒后自动关闭）'}" />
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

@@ -50,6 +50,24 @@ public class FileTransferInfo
     /// </summary>
     public string? SavePath { get; set; }
 
+    /// <summary>
+    /// 实际落盘的文件名。为空表示与 <see cref="FileName"/> 相同；
+    /// 收到同名文件时接收端会按策略自动重命名，这里记录最终名字，历史记录以它为准。
+    /// </summary>
+    public string? SavedFileName { get; set; }
+
+    /// <summary>
+    /// 文件夹传输时的相对路径（如 <c>照片/2024/a.jpg</c>）。单文件传输时为 <c>null</c>。
+    /// </summary>
+    public string? RelativePath { get; set; }
+
+    /// <summary>
+    /// 本机上的绝对文件路径：发送时是源文件，接收完成时是落盘文件。
+    /// 历史记录用它来「打开文件 / 在资源管理器中显示」，比 SavePath + FileName 拼接可靠
+    /// （发送与接收的目录语义不同）。
+    /// </summary>
+    public string? FilePath { get; set; }
+
     public TransferDirection Direction { get; set; }
 
     /// <summary>

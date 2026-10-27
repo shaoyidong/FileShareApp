@@ -54,8 +54,12 @@ public class TcpFileTransferService : IDisposable
     private readonly ConcurrentDictionary<string, double> _lastProgressValues;// 上次进度值，用于优化事件触发
     private readonly ConcurrentDictionary<string, int> _ipConnectionCounts; // 每IP并发连接计数
     private readonly ConcurrentDictionary<string, (DateTime Time, long Bytes)> _lastRateSamples; // 速率采样（按传输ID）
+    private readonly ConcurrentDictionary<string, string> _partFilePaths; // 未完成文件的临时路径（.part），校验通过后才改为正式文件名
+    private readonly ConcurrentDictionary<string, (string Directory, string FinalPath, string PartPath)> _plannedTargets; // 请求阶段算好的落盘路径（续传需与数据阶段一致）
     private readonly string _deviceId;
     private readonly IPlatformDirectoryService _directoryService;
+    private readonly FileNameConflictPolicy _conflictPolicy;
+    private readonly int _rateLimitBytesPerSecond; // 0 = 不限速
     private readonly ILogger<TcpFileTransferService> _logger;
     private int _activeTransfers; // 当前活跃传输数量（用于优雅关闭）
     private long _totalBytesSent; // 累计发送字节数
@@ -75,6 +79,11 @@ public class TcpFileTransferService : IDisposable
     public bool TlsEnabled => _tlsEnabled;
 
     /// <summary>
+    /// 证书指纹信任库（仅启用 TLS 时非空）。UI 可订阅其中的首次信任 / 指纹不一致事件。
+    /// </summary>
+    public FingerprintStore? FingerprintStore => _fingerprintStore;
+
+    /// <summary>
     /// 文件传输请求事件
     /// </summary>
     public event Action<FileTransferInfo>? OnTransferRequestSendAndReceive;
@@ -89,7 +98,14 @@ public class TcpFileTransferService : IDisposable
     /// </summary>
     public event Action<FileTransferInfo, string?>? OnTransferCompleted;
 
-    public TcpFileTransferService(string deviceId, IPlatformDirectoryService directoryService, int port = 5237, bool tlsEnabled = false, ILoggerFactory? loggerFactory = null)
+    public TcpFileTransferService(
+        string deviceId,
+        IPlatformDirectoryService directoryService,
+        int port = 5237,
+        bool tlsEnabled = false,
+        ILoggerFactory? loggerFactory = null,
+        FileNameConflictPolicy conflictPolicy = FileNameConflictPolicy.Rename,
+        int rateLimitKBps = 0)
     {
         _port = port;
         _listener = new TcpListener(IPAddress.Any, port);
@@ -101,8 +117,12 @@ public class TcpFileTransferService : IDisposable
         _lastProgressValues = new ConcurrentDictionary<string, double>();
         _ipConnectionCounts = new ConcurrentDictionary<string, int>();
         _lastRateSamples = new ConcurrentDictionary<string, (DateTime, long)>();
+        _partFilePaths = new ConcurrentDictionary<string, string>();
+        _plannedTargets = new ConcurrentDictionary<string, (string, string, string)>();
         _deviceId = deviceId;
         _directoryService = directoryService;
+        _conflictPolicy = conflictPolicy;
+        _rateLimitBytesPerSecond = rateLimitKBps > 0 ? rateLimitKBps * 1024 : 0;
         _logger = loggerFactory?.CreateLogger<TcpFileTransferService>() ?? NullLogger<TcpFileTransferService>.Instance;
 
         if (tlsEnabled)
@@ -556,6 +576,19 @@ public class TcpFileTransferService : IDisposable
 
         if (string.IsNullOrEmpty(request.FileName) || request.FileName.Length > 255)
             return false;
+
+        // 文件名不允许带路径（文件夹传输请用 RelativePath），杜绝 "../" 之类的目录穿越
+        if (request.FileName.IndexOfAny(new[] { '/', '\\', ':', '\0' }) >= 0)
+            return false;
+
+        if (request.FileName is "." or "..")
+            return false;
+
+        if (!string.IsNullOrEmpty(request.RelativePath) &&
+            (request.RelativePath.Length > FileNameHelper.MaxRelativePathLength ||
+             request.RelativePath.Contains("..", StringComparison.Ordinal)))
+            return false;
+
         return true;
     }
 
@@ -748,6 +781,7 @@ public class TcpFileTransferService : IDisposable
             ReceiverId = request.ReceiverId,
             Status = TransferStatus.Pending,
             Direction = TransferDirection.Receive,
+            RelativePath = string.IsNullOrWhiteSpace(request.RelativePath) ? null : request.RelativePath,
         };
 
         // 创建TaskCompletionSource来等待用户选择
@@ -788,13 +822,49 @@ public class TcpFileTransferService : IDisposable
                 _incomingTransfers.TryRemove(transferInfo.TransferId, out _);
                 _logger.LogDebug($"从_incomingTransfers移除传输任务");
             }
+            // 断点续传：存在未完成的 .part 且长度合理时，告诉发送端从这里继续
+            long resumeOffset = 0;
+            if (accepted)
+            {
+                try
+                {
+                    var planned = ResolveTargetPaths(request, transferInfo);
+                    _plannedTargets[transferInfo.TransferId] = planned;
+                    var (targetDirectory, finalFilePath, partFilePath) = planned;
+                    transferInfo.SavePath = targetDirectory;
+                    transferInfo.SavedFileName = Path.GetFileName(finalFilePath);
+                    transferInfo.FilePath = finalFilePath;
+
+                    if (File.Exists(partFilePath))
+                    {
+                        var length = new FileInfo(partFilePath).Length;
+                        if (length > 0 && length < request.FileSize)
+                        {
+                            resumeOffset = length;
+                            transferInfo.TransferredSize = length;
+                            _partFilePaths[transferInfo.TransferId] = partFilePath;
+                            _logger.LogInformation("发现未完成的接收文件，可续传 {Offset} 字节: {Path}", length, partFilePath);
+                        }
+                        else if (length >= request.FileSize)
+                        {
+                            DeleteFileQuietly(partFilePath);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "计算断点续传偏移失败，按从头传输处理");
+                }
+            }
+
 
             // 发送响应
             var response = new TransferResponse
             {
                 TransferId = transferInfo.TransferId,
                 Accepted = accepted,
-                Message = accepted ? "准备接收文件" : "文件传输请求已被拒绝"
+                Message = accepted ? (resumeOffset > 0 ? "断点续传" : "准备接收文件") : "文件传输请求已被拒绝",
+                ResumeOffset = resumeOffset
             };
 
             await SendResponseAsync(stream, response, cancellationToken).ConfigureAwait(false);
@@ -824,20 +894,52 @@ public class TcpFileTransferService : IDisposable
             await SendErrorResponseAsync(request.TransferId, stream, "传输不存在", cancellationToken).ConfigureAwait(false);
             return;
         }
-
-        var savePath = transferInfo.SavePath;
-        if (string.IsNullOrEmpty(savePath))
+        // 目标路径：优先复用请求阶段算好的结果（续传要求两边指向同一个 .part）
+        if (!_plannedTargets.TryRemove(request.TransferId, out var plannedPaths))
         {
-            savePath = FileTypeHelper.GetDirectoryByFileType(request.FileName, _directoryService);
-            transferInfo.SavePath = savePath;
+            plannedPaths = ResolveTargetPaths(request, transferInfo);
         }
-        var tempFilePath = Path.Combine(savePath, request.FileName);
 
-            // 这个操作创建了一个新的 CancellationTokenSource，
-            // 它会在两个条件之一发生时取消：
-            // 1. 外部 cancellationToken 被取消时
-            // 2. 自己调用 cts.Cancel() 时
-            // 创建取消令牌源并保存到字典中
+        var (targetDirectory, finalFilePath, partFilePath) = plannedPaths;
+
+        // 断点续传：发送端声明从 StartOffset 开始；不合法则按 0 处理（并丢弃旧 .part）
+        var startOffset = request.StartOffset > 0 && request.StartOffset <= request.FileSize
+            ? request.StartOffset
+            : 0;
+
+        if (startOffset == 0)
+        {
+            DeleteFileQuietly(partFilePath);
+        }
+
+
+        // 磁盘空间预检：空间不足时直接拒绝，避免写一半才失败（对大文件尤其重要）
+        if (!HasEnoughFreeSpace(targetDirectory, request.FileSize))
+        {
+            transferInfo.Status = TransferStatus.Failed;
+            OnTransferCompleted?.Invoke(transferInfo, "磁盘空间不足");
+            try
+            {
+                await SendErrorResponseAsync(request.TransferId, stream, "接收方磁盘空间不足", cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception)
+            {
+                // 忽略错误响应发送失败
+            }
+
+            return;
+        }
+
+        transferInfo.SavePath = targetDirectory;
+        transferInfo.SavedFileName = Path.GetFileName(finalFilePath);
+        transferInfo.FilePath = finalFilePath;
+        _partFilePaths[request.TransferId] = partFilePath;
+
+        // 这个操作创建了一个新的 CancellationTokenSource，
+        // 它会在两个条件之一发生时取消：
+        // 1. 外部 cancellationToken 被取消时
+        // 2. 自己调用 cts.Cancel() 时
+        // 创建取消令牌源并保存到字典中
         bool isFailedOrCancelled = true;
         var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         try
@@ -847,13 +949,37 @@ public class TcpFileTransferService : IDisposable
             transferInfo.Status = TransferStatus.Transferring;
             OnTransferProgressUpdated?.Invoke(transferInfo);
 
-            if (!Directory.Exists(savePath))
-            {
-                Directory.CreateDirectory(savePath);
-            }
+            Directory.CreateDirectory(targetDirectory);
+
             using var sha256 = SHA256.Create();
-            var totalBytesRead = 0L;
-            using var fileStream = new FileStream(tempFilePath, FileMode.Create);
+            var totalBytesRead = startOffset;
+
+            // 续传：先对已存在的 .part 前缀重算哈希，保证最终校验和覆盖整个文件
+            if (startOffset > 0 && File.Exists(partFilePath))
+            {
+                using var existing = new FileStream(partFilePath, FileMode.Open, FileAccess.Read, System.IO.FileShare.Read, BUFFER_SIZE, useAsync: false);
+                var existingBuffer = new byte[BUFFER_SIZE];
+                int existingRead;
+                while ((existingRead = existing.Read(existingBuffer, 0, existingBuffer.Length)) > 0)
+                {
+                    sha256.TransformBlock(existingBuffer, 0, existingRead, null, 0);
+                }
+
+                transferInfo.TransferredSize = startOffset;
+                _logger.LogInformation("断点续传：已有 {Offset} 字节，从该处继续接收", startOffset);
+            }
+            else if (startOffset > 0)
+            {
+                // 声明了续传但 .part 不见了：只能从头开始
+                startOffset = 0;
+                totalBytesRead = 0;
+            }
+
+            var fileStream = startOffset > 0
+                ? new FileStream(partFilePath, FileMode.Append, FileAccess.Write, System.IO.FileShare.None, BUFFER_SIZE, useAsync: true)
+                : new FileStream(partFilePath, FileMode.Create, FileAccess.Write, System.IO.FileShare.None, BUFFER_SIZE, useAsync: true);
+
+            await using var fileStreamScope = fileStream;
 
             var buffer = new byte[BUFFER_SIZE];
 
@@ -861,21 +987,23 @@ public class TcpFileTransferService : IDisposable
             {
                 int bytesToRead = (int)Math.Min(buffer.Length, request.FileSize - totalBytesRead);
                 var bytesRead = await stream.ReadAsync(buffer, 0, bytesToRead, cts.Token).ConfigureAwait(false);
-                if (bytesRead == 0) 
+                if (bytesRead == 0)
                     break;
 
                 await fileStream.WriteAsync(buffer, 0, bytesRead, cts.Token).ConfigureAwait(false);
                 totalBytesRead += bytesRead;
-                
+
                 Interlocked.Add(ref _totalBytesReceived, bytesRead);
 
                 sha256.TransformBlock(buffer, 0, bytesRead, null, 0);
                 UpdateTransferProgress(transferInfo, totalBytesRead);
             }
+
+            await fileStream.FlushAsync(cts.Token).ConfigureAwait(false);
             
             if (cts.Token.IsCancellationRequested)
             {
-                await OnReceiverCancelled(stream, transferInfo, tempFilePath).ConfigureAwait(false);
+                await OnReceiverCancelled(stream, transferInfo, partFilePath).ConfigureAwait(false);
                 return;
             }
 
@@ -885,7 +1013,7 @@ public class TcpFileTransferService : IDisposable
                 sha256.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
                 byte[] localHash = sha256.Hash!;
 
-                transferInfo.ReceivedHash = localHash;   // 需在 FileTransferInfo 中增加此字段
+                transferInfo.ReceivedHash = localHash;
                 transferInfo.Status = TransferStatus.WaitingChecksum;
                 isFailedOrCancelled = false;
           
@@ -910,7 +1038,7 @@ public class TcpFileTransferService : IDisposable
         }
         catch (OperationCanceledException)
         {
-            await OnReceiverCancelled(stream, transferInfo, tempFilePath).ConfigureAwait(false);
+            await OnReceiverCancelled(stream, transferInfo, partFilePath).ConfigureAwait(false);
             return;
         }
         catch (Exception ex)
@@ -935,13 +1063,34 @@ public class TcpFileTransferService : IDisposable
                 _incomingTransfers.TryRemove(transferInfo.TransferId, out _);
                 _transferCancellationTokens.TryRemove(request.TransferId, out _);
                 cts?.Dispose();
-                if (File.Exists(tempFilePath))
-                {
-                    File.Delete(tempFilePath);
-                }
+                // 中断/取消时保留 .part：下次重试同一文件可直接续传
+                _partFilePaths.TryRemove(request.TransferId, out _);
             }            
             _lastProgressValues.TryRemove(transferInfo.TransferId, out _);
             _lastRateSamples.TryRemove(transferInfo.TransferId, out _);            
+        }
+    }
+
+    /// <summary>
+    /// 安静地删除文件（不存在/被占用时忽略异常）。
+    /// </summary>
+    private static void DeleteFileQuietly(string? path)
+    {
+        if (string.IsNullOrEmpty(path))
+        {
+            return;
+        }
+
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch (Exception)
+        {
+            // 忽略：临时文件清理失败不应影响传输结果
         }
     }
 
@@ -972,10 +1121,9 @@ public class TcpFileTransferService : IDisposable
         {
             if (isFailedOrCancelled)
             {
-                // 删除临时文件
-                string savePath = transferInfo.SavePath ?? FileTypeHelper.GetDirectoryByFileType(transferInfo.FileName, _directoryService);
-                string tempFilePath = Path.Combine(savePath, transferInfo.FileName);
-                if (File.Exists(tempFilePath)) File.Delete(tempFilePath);
+                // 删除未完成的临时文件
+                _partFilePaths.TryRemove(transferInfo.TransferId, out var partPath);
+                DeleteFileQuietly(partPath);
             }
             // 清理（避免内存泄漏）
             _incomingTransfers.TryRemove(transferInfo.TransferId, out _);
@@ -1009,6 +1157,23 @@ public class TcpFileTransferService : IDisposable
             }
 
             bool valid = string.Equals(Convert.ToHexString(transferInfo.ReceivedHash), request.Checksum, StringComparison.OrdinalIgnoreCase);
+
+            // 校验通过后先把 .part 提交为正式文件，**再**回复 Accepted：
+            // 这样发送方拿到「成功」时，文件一定已经落在磁盘上（避免「回复成功但落盘失败」的不一致）。
+            if (valid)
+            {
+                if (_partFilePaths.TryRemove(request.TransferId, out var partPath) &&
+                    transferInfo.SavedFileName is { } savedName &&
+                    transferInfo.SavePath is { } savedDirectory)
+                {
+                    valid = CommitPartFile(partPath, Path.Combine(savedDirectory, savedName));
+                }
+                else
+                {
+                    valid = false;
+                }
+            }
+
             var response = new TransferResponse
             {
                 TransferId = request.TransferId,
@@ -1026,9 +1191,8 @@ public class TcpFileTransferService : IDisposable
             else
             {
                 transferInfo.Status = TransferStatus.Failed;
-                _logger.LogError($"'{request.FileName}'文件校验失败");
-                OnTransferCompleted?.Invoke(transferInfo, "校验失败");
-               
+                _logger.LogError($"'{request.FileName}'文件校验或落盘失败");
+                OnTransferCompleted?.Invoke(transferInfo, "校验或落盘失败");
             }
         }
         catch (Exception ex)
@@ -1039,10 +1203,8 @@ public class TcpFileTransferService : IDisposable
         {
             if (isFailedOrCancelled)
             {
-                // 删除临时文件
-                string savePath = transferInfo.SavePath ?? FileTypeHelper.GetDirectoryByFileType(transferInfo.FileName, _directoryService);
-                string tempFilePath = Path.Combine(savePath, transferInfo.FileName);
-                if (File.Exists(tempFilePath)) File.Delete(tempFilePath);
+                _partFilePaths.TryRemove(request.TransferId, out var partPath);
+                DeleteFileQuietly(partPath);
             }
             // 清理（避免内存泄漏）
             _incomingTransfers.TryRemove(request.TransferId, out _);
@@ -1050,6 +1212,135 @@ public class TcpFileTransferService : IDisposable
             _lastProgressValues.TryRemove(request.TransferId, out _);
             _lastRateSamples.TryRemove(request.TransferId, out _);
             cts?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// 简单限速：按「已发送字节 / 目标速率」计算出应耗时，落后时等待差额。
+    /// </summary>
+    private static async Task ThrottleAsync(
+        System.Diagnostics.Stopwatch watch,
+        long sentBytes,
+        int bytesPerSecond,
+        CancellationToken cancellationToken)
+    {
+        var expectedMs = sentBytes * 1000.0 / bytesPerSecond;
+        var waitMs = expectedMs - watch.Elapsed.TotalMilliseconds;
+
+        if (waitMs > 1)
+        {
+            // 单次最多等 1 秒，保证取消能及时响应
+            await Task.Delay(TimeSpan.FromMilliseconds(Math.Min(waitMs, 1000)), cancellationToken)
+                .ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// 解析接收目标路径（保存目录 + 相对路径 + 同名策略），供请求阶段与数据阶段共用，
+    /// 这样断点续传时两边能定位到同一个 .part 文件。
+    /// </summary>
+    private (string TargetDirectory, string FinalFilePath, string PartFilePath) ResolveTargetPaths(
+        TransferRequest request,
+        FileTransferInfo transferInfo)
+    {
+        var saveRoot = transferInfo.SavePath;
+        if (string.IsNullOrEmpty(saveRoot))
+        {
+            saveRoot = FileTypeHelper.GetDirectoryByFileType(request.FileName, _directoryService);
+        }
+
+        var relativePath = FileNameHelper.SanitizeRelativePath(transferInfo.RelativePath);
+        var safeFileName = FileNameHelper.SanitizeFileName(request.FileName);
+        string? relativeDirectory = null;
+
+        if (!string.IsNullOrEmpty(relativePath))
+        {
+            var relativeName = Path.GetFileName(relativePath);
+            var relativeDir = Path.GetDirectoryName(relativePath);
+
+            if (!string.IsNullOrEmpty(relativeName))
+            {
+                safeFileName = FileNameHelper.SanitizeFileName(relativeName, safeFileName);
+            }
+
+            if (!string.IsNullOrEmpty(relativeDir))
+            {
+                relativeDirectory = relativeDir;
+            }
+        }
+
+        var targetDirectory = string.IsNullOrEmpty(relativeDirectory)
+            ? saveRoot
+            : Path.Combine(saveRoot, relativeDirectory);
+
+        var finalFilePath = FileNameHelper.ResolveTargetPath(targetDirectory, safeFileName, _conflictPolicy);
+
+        return (targetDirectory, finalFilePath, finalFilePath + ".part");
+    }
+
+    /// <summary>
+    /// 判断目标目录所在磁盘是否有足够空间（预留 64MB 余量）。无法判断时放行。
+    /// </summary>
+    private static bool HasEnoughFreeSpace(string directory, long requiredBytes)
+    {
+        try
+        {
+            var fullPath = Path.GetFullPath(directory);
+            var root = Path.GetPathRoot(fullPath);
+            if (string.IsNullOrEmpty(root))
+            {
+                return true;
+            }
+
+            var drive = new DriveInfo(root);
+            if (!drive.IsReady)
+            {
+                return true;
+            }
+
+            const long margin = 64L * 1024 * 1024;
+            return drive.AvailableFreeSpace > requiredBytes + margin;
+        }
+        catch (Exception)
+        {
+            // 网络路径、权限受限等情况无法判断，交给后续写入去报错
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// 把临时文件提交为正式文件（同样遵守同名策略，避免与其他并发传输/已有文件冲突）。
+    /// </summary>
+    private bool CommitPartFile(string partPath, string finalPath)
+    {
+        try
+        {
+            if (!File.Exists(partPath))
+            {
+                _logger.LogWarning("临时文件不存在，无法提交: {Path}", partPath);
+                return false;
+            }
+
+            var directory = Path.GetDirectoryName(finalPath);
+            if (!string.IsNullOrEmpty(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            if (File.Exists(finalPath) && _conflictPolicy == FileNameConflictPolicy.Rename)
+            {
+                finalPath = FileNameHelper.ResolveTargetPath(directory ?? string.Empty, Path.GetFileName(finalPath), _conflictPolicy);
+            }
+
+            File.Move(partPath, finalPath, overwrite: true);
+            _logger.LogDebug("文件已保存: {Path}", finalPath);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "提交接收文件失败: {Part} -> {Final}", partPath, finalPath);
+            DeleteFileQuietly(partPath);
+            return false;
         }
     }
 
@@ -1121,9 +1412,19 @@ public class TcpFileTransferService : IDisposable
     #region 发送文件
 
     /// <summary>
-    /// 发送文件到指定设备
+    /// 发送文件到指定设备。
     /// </summary>
-    public async Task<bool> SendFileAsync(string filePath, DeviceInfo targetDevice, string senderId)
+    /// <param name="filePath">本地文件路径。</param>
+    /// <param name="targetDevice">目标设备。</param>
+    /// <param name="senderId">发送方设备 ID。</param>
+    /// <param name="relativePath">文件夹传输时的相对路径（如 <c>相册/2024/a.jpg</c>），单文件传 null。</param>
+    /// <param name="fileNameOverride">对端看到的文件名（用于文本消息这类本地临时文件名不同的场景）。</param>
+    public async Task<bool> SendFileAsync(
+        string filePath,
+        DeviceInfo targetDevice,
+        string senderId,
+        string? relativePath = null,
+        string? fileNameOverride = null)
     {
         string? transferId = null;
         CancellationTokenSource? userCts = null;
@@ -1139,17 +1440,24 @@ public class TcpFileTransferService : IDisposable
             }
 
             var fileInfo = new FileInfo(filePath);
+            var displayName = string.IsNullOrWhiteSpace(fileNameOverride)
+                ? fileInfo.Name
+                : FileNameHelper.SanitizeFileName(fileNameOverride);
+
             transferId = Guid.NewGuid().ToString();           
 
             transferInfo = new FileTransferInfo
             {
                 TransferId = transferId,
-                FileName = fileInfo.Name,
+                FileName = displayName,
                 FileSize = fileInfo.Length,
                 SenderId = senderId,
                 ReceiverId = targetDevice.DeviceId,
                 Status = TransferStatus.Pending,
                 Direction = TransferDirection.Send,
+                RelativePath = string.IsNullOrWhiteSpace(relativePath) ? null : relativePath,
+                // 发送侧记住源文件绝对路径，供「发送历史」打开文件/定位使用
+                FilePath = fileNameOverride is null ? filePath : null,
             };
 
             OnTransferRequestSendAndReceive?.Invoke(transferInfo);
@@ -1177,10 +1485,11 @@ public class TcpFileTransferService : IDisposable
                         {
                             Type = TransferRequestType.SendFileRequest,
                             TransferId = transferId,
-                            FileName = fileInfo.Name,
+                            FileName = displayName,
                             FileSize = fileInfo.Length,
                             SenderId = senderId,
                             ReceiverId = targetDevice.DeviceId,
+                            RelativePath = transferInfo.RelativePath,
                         };
 
                         await SendRequestAsync(stream, request, cts.Token).ConfigureAwait(false);
@@ -1193,8 +1502,19 @@ public class TcpFileTransferService : IDisposable
                             // 发送文件数据，增加文件传输的超时时间
                             // 初始设置超时，后续会根据进度更新重置
                             timeoutCts.CancelAfter(TimeSpan.FromMilliseconds(REQUEST_TIMEOUT_MS));
+                            // 断点续传：接收端已有多少字节，就从那里开始发（旧接收端返回 0）
+                            var resumeOffset = response.ResumeOffset > 0 && response.ResumeOffset < fileInfo.Length
+                                ? response.ResumeOffset
+                                : 0;
 
-                            var (dataSent, preReadResponse) = await SendFileDataAsync(stream, filePath, transferInfo, cts.Token, timeoutCts).ConfigureAwait(false);
+                            if (resumeOffset > 0)
+                            {
+                                transferInfo.TransferredSize = resumeOffset;
+                                _logger.LogInformation("断点续传：已有 {Offset} 字节，从该处继续发送", resumeOffset);
+                            }
+
+
+                            var (dataSent, preReadResponse) = await SendFileDataAsync(stream, filePath, transferInfo, cts.Token, timeoutCts, resumeOffset).ConfigureAwait(false);
                             //发送流程未被接收方取消
                             if (dataSent)
                             {
@@ -1319,7 +1639,7 @@ public class TcpFileTransferService : IDisposable
     /// <param name="timeoutCts">超时取消令牌源，用于在进度更新时重置</param>
     /// <returns>(DataSent, PreReadResponse)：DataSent=true 表示数据已发完或自行取消，false 表示接收方取消；
     /// PreReadResponse 为监听任务读到的完成响应（避免上层重复读取被阻塞），null 表示需上层自行读取或已取消。</returns>
-    private async Task<(bool DataSent, TransferResponse? PreReadResponse)> SendFileDataAsync(Stream stream, string filePath, FileTransferInfo transferInfo, CancellationToken cancellationToken = default, CancellationTokenSource? timeoutCts = null)
+    private async Task<(bool DataSent, TransferResponse? PreReadResponse)> SendFileDataAsync(Stream stream, string filePath, FileTransferInfo transferInfo, CancellationToken cancellationToken = default, CancellationTokenSource? timeoutCts = null, long startOffset = 0)
     {
         transferInfo.Status = TransferStatus.Transferring;
         // 触发传输进度事件，通知UI状态变化
@@ -1333,9 +1653,11 @@ public class TcpFileTransferService : IDisposable
             FileName = transferInfo.FileName,
             FileSize = transferInfo.FileSize,
             SenderId = transferInfo.SenderId,
-            ReceiverId = transferInfo.ReceiverId
+            ReceiverId = transferInfo.ReceiverId,
+            StartOffset = startOffset
         };
         await SendRequestAsync(stream, request, cancellationToken).ConfigureAwait(false);
+
 
         // 有界 Channel 提供背压：生产者读文件，消费者写网络，容量4使读写可重叠且不爆内存
         var channel = Channel.CreateBounded<(byte[] Buffer, int Length)>(
@@ -1394,6 +1716,25 @@ public class TcpFileTransferService : IDisposable
             {
                 using var sha256 = SHA256.Create();
                 using var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, System.IO.FileShare.Read, BUFFER_SIZE, useAsync: true);
+                // 断点续传：先对已发送的前缀做哈希（校验和覆盖整个文件），再从起点继续发送
+                if (startOffset > 0)
+                {
+                    var prefixBuffer = new byte[BUFFER_SIZE];
+                    var remainingPrefix = startOffset;
+                    while (remainingPrefix > 0)
+                    {
+                        var toRead = (int)Math.Min(prefixBuffer.Length, remainingPrefix);
+                        var read = await fileStream.ReadAsync(prefixBuffer.AsMemory(0, toRead), linkedCts.Token).ConfigureAwait(false);
+                        if (read == 0)
+                        {
+                            break;
+                        }
+
+                        sha256.TransformBlock(prefixBuffer, 0, read, null, 0);
+                        remainingPrefix -= read;
+                    }
+                }
+
                 while (true)
                 {
                     byte[]? buffer = null;
@@ -1431,7 +1772,7 @@ public class TcpFileTransferService : IDisposable
         });
 
         // 消费者（主流程）：从 Channel 读出并写入网络
-        var totalBytesRead = 0L;
+        var totalBytesRead = startOffset;
         try
         {
             await foreach (var (buffer, length) in channel.Reader.ReadAllAsync(linkedCts.Token).ConfigureAwait(false))
@@ -1680,6 +2021,15 @@ public class TransferRequest
     public required string SenderId { get; set; }
     public required string ReceiverId { get; set; }
     public string? Checksum { get; set; }
+
+    /// <summary>
+    /// 文件夹传输时的相对路径（例如 <c>相册/2024/IMG_0001.jpg</c>）。
+    /// 单文件传输为 <c>null</c>，旧客户端不认识该字段时会忽略，退化为平铺保存。
+    /// </summary>
+    public string? RelativePath { get; set; }
+
+    /// <summary>断点续传起点（字节，0 表示从头）。</summary>
+    public long StartOffset { get; set; }
 }
 
 /// <summary>
@@ -1690,4 +2040,7 @@ public class TransferResponse
     public required string TransferId { get; set; }
     public bool Accepted { get; set; }
     public string? Message { get; set; }
+
+    /// <summary>接收端已有字节数，发送端应从这里继续；0 表示从头。</summary>
+    public long ResumeOffset { get; set; }
 }

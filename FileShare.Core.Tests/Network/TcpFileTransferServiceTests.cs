@@ -108,7 +108,8 @@ public class TcpFileTransferServiceTests
     public async Task StartAsync_And_StopAsync_ExecuteWithoutException()
     {
         // Arrange: 准备测试数据
-        using var service = new TcpFileTransferService(_mockDirectoryService.Object); 
+        // 用随机空闲端口，避免与本机正在运行的实例（默认 5237）冲突
+        using var service = new TcpFileTransferService(_mockDirectoryService.Object, GetFreePort()); 
         
         // Act & Assert: 验证 StartAsync 和 StopAsync 方法执行过程中没有抛出异常
         await service.StartAsync();
@@ -151,5 +152,13 @@ public class TcpFileTransferServiceTests
         service.Dispose(); // 第三次调用不应该抛出异常
         
         Assert.NotNull(service);
+    }
+    private static int GetFreePort()
+    {
+        using var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
+        listener.Stop();
+        return port;
     }
 }

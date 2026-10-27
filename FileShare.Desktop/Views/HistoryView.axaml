@@ -2,6 +2,7 @@
     x:Class="FileShare.Desktop.Views.HistoryView"
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:loc="using:FileShare.Desktop.Localization"
     xmlns:converters="using:FileShare.Desktop.Converters"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:fonts="using:FileShare.Desktop.Assets.Fonts"
@@ -25,22 +26,42 @@
                     <Button
                         Classes="icon"
                         Command="{Binding BackCommand}"
-                        ToolTip.Tip="返回">
+                        ToolTip.Tip="{loc:Tr '返回'}">
                         <TextBlock
                             Classes="iconGlyph"
                             Text="{x:Static fonts:FluentUI.arrow_left_24_regular}" />
                     </Button>
                     <TextBlock
+                        VerticalAlignment="Center"
                         Classes="h1"
-                        Text="接收历史"
-                        VerticalAlignment="Center" />
+                        Text="{loc:Tr '传输历史'}" />
+                    <Border
+                        Height="18"
+                        VerticalAlignment="Center"
+                        Classes="separator" />
+                    <Button
+                        MinWidth="0"
+                        Content="{loc:Tr '全部'}"
+                        Command="{Binding ShowAllCommand}" />
+                    <Button
+                        MinWidth="0"
+                        Content="{loc:Tr '仅接收'}"
+                        Command="{Binding ShowReceivedCommand}" />
+                    <Button
+                        MinWidth="0"
+                        Content="{loc:Tr '仅发送'}"
+                        Command="{Binding ShowSentCommand}" />
+                    <TextBlock
+                        VerticalAlignment="Center"
+                        Classes="muted"
+                        Text="{Binding HistoryCountText}" />
                 </StackPanel>
                 <Button
                     Grid.Column="2"
                     VerticalAlignment="Center"
                     Classes="icon"
                     Command="{Binding DeleteHistoryCommand}"
-                    ToolTip.Tip="清空全部记录">
+                    ToolTip.Tip="{loc:Tr '清空全部记录'}">
                     <TextBlock
                         Classes="iconGlyph"
                         Text="{x:Static fonts:FluentUI.delete_24_regular}" />
@@ -111,6 +132,11 @@
 
                                         <!--  文件信息  -->
                                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <TextBlock Classes="muted" Text="{Binding DirectionText}" />
+                                                <TextBlock Classes="accent" Text="{Binding StatusText}" IsVisible="{Binding IsSuccess}" />
+                                                <TextBlock Classes="danger" Text="{Binding StatusText}" IsVisible="{Binding !IsSuccess}" />
+                                            </StackPanel>
                                             <TextBlock
                                                 FontWeight="Bold"
                                                 Text="{Binding FileName}"
@@ -123,7 +149,7 @@
                                                 <Run Text="  ·  " />
                                                 <Run Text="{Binding FileSize, Mode=OneWay, Converter={x:Static converters:FileSizeToFormatFileSizeConverter.Instance}}" />
                                                 <Run Text="  ·  " />
-                                                <Run Text="{Binding SenderDeviceName}" />
+                                                <Run Text="{Binding PeerDisplayName}" />
                                             </TextBlock>
                                         </StackPanel>
 
@@ -141,15 +167,17 @@
                                                     <MenuItem
                                                         Command="{Binding $parent[UserControl].DataContext.OpenFileCommand}"
                                                         CommandParameter="{Binding $parent[Button].Tag}"
-                                                        Header="打开文件" />
+                                                        Header="{loc:Tr '打开文件'}"
+                                                        IsEnabled="{Binding HasFile}" />
                                                     <MenuItem
                                                         Command="{Binding $parent[UserControl].DataContext.ShowInFileManagerCommand}"
                                                         CommandParameter="{Binding $parent[Button].Tag}"
-                                                        Header="在文件管理器中显示" />
+                                                        Header="{loc:Tr '在文件管理器中显示'}"
+                                                        IsEnabled="{Binding HasFile}" />
                                                     <MenuItem
                                                         Command="{Binding $parent[UserControl].DataContext.DeleteSingleHistoryCommand}"
                                                         CommandParameter="{Binding $parent[Button].Tag}"
-                                                        Header="从历史记录中删除" />
+                                                        Header="{loc:Tr '从历史记录中删除'}" />
                                                 </MenuFlyout>
                                             </Button.Flyout>
                                         </Button>
@@ -166,14 +194,17 @@
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center"
                         Classes="accent"
-                        Text="加载中..." />
+                        Text="{loc:Tr '加载中...'}" />
                 </Border>
             </Grid>
         </Border>
 
         <!--  状态栏  -->
         <Border Grid.Row="2" Padding="8,3" Classes="statusbar">
-            <TextBlock Classes="muted" Text="{Binding ReceiveHistory.Count, StringFormat={}{0} 条记录}" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock Classes="muted" Text="{Binding FilterText, StringFormat='筛选：{0}'}" />
+                <TextBlock Classes="muted" Text="{Binding HistoryCountText}" />
+            </StackPanel>
         </Border>
     </Grid>
 </UserControl>

@@ -60,10 +60,54 @@ public class DatabaseService : IDatabaseService
                 FileName TEXT NOT NULL,
                 FileSize INTEGER NOT NULL,
                 SavePath TEXT NOT NULL,
-                CreatedAt DATETIME NOT NULL
+                CreatedAt DATETIME NOT NULL,
+                Direction INTEGER NOT NULL DEFAULT 0,
+                PeerId TEXT,
+                PeerName TEXT,
+                FilePath TEXT,
+                Status INTEGER NOT NULL DEFAULT 2,
+                ErrorMessage TEXT
             );";
         
         connection.Execute(createTableSql);
+
+        // 老版本数据库没有 Direction / PeerId / PeerName 列，这里做一次幂等迁移
+        EnsureColumn(connection, "ReceiveHistory", "Direction", "INTEGER NOT NULL DEFAULT 0");
+        EnsureColumn(connection, "ReceiveHistory", "PeerId", "TEXT");
+        EnsureColumn(connection, "ReceiveHistory", "PeerName", "TEXT");
+        EnsureColumn(connection, "ReceiveHistory", "FilePath", "TEXT");
+        EnsureColumn(connection, "ReceiveHistory", "Status", "INTEGER NOT NULL DEFAULT 2");
+        EnsureColumn(connection, "ReceiveHistory", "ErrorMessage", "TEXT");
+    }
+
+    /// <summary>
+    /// 如果表缺少某列则补上（SQLite 不支持 ADD COLUMN IF NOT EXISTS，用 PRAGMA 判断）。
+    /// </summary>
+    private static void EnsureColumn(SqliteConnection connection, string table, string column, string definition)
+    {
+        try
+        {
+            var columns = connection.Query<TableColumnInfo>($"PRAGMA table_info({table});");
+            foreach (var info in columns)
+            {
+                if (string.Equals(info.Name, column, StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+            }
+
+            connection.Execute($"ALTER TABLE {table} ADD COLUMN {column} {definition};");
+        }
+        catch (Exception)
+        {
+            // 迁移失败不应阻止应用启动：旧库仍可读写（只是缺少新字段）
+        }
+    }
+
+    /// <summary>PRAGMA table_info 的结果行。</summary>
+    private sealed class TableColumnInfo
+    {
+        public string Name { get; set; } = string.Empty;
     }
     
     /// <summary>
@@ -98,23 +142,26 @@ public class DatabaseService : IDatabaseService
     }
     
     /// <summary>
-    /// 增加一条接收历史
+    /// 增加一条传输历史（接收/发送共用）
     /// </summary>
-    /// <param name="receiveHistory"></param>
-    /// <returns></returns>
+    /// <param name="receiveHistory">历史记录</param>
+    /// <returns>是否写入成功</returns>
     public async Task<bool> AddSingleReceiveHistoryAsync(ReceiveHistoryEntity receiveHistory)
     {
         using var connection = new SqliteConnection(_connectionString);
         await connection.OpenAsync();
         
-        const string insertSql = "INSERT INTO ReceiveHistory (SenderId, SenderDeviceName, FileName, FileSize, SavePath, CreatedAt) VALUES (@SenderId, @SenderDeviceName, @FileName, @FileSize, @SavePath, @CreatedAt);";
+        const string insertSql = @"INSERT INTO ReceiveHistory (SenderId, SenderDeviceName, FileName, FileSize, SavePath, CreatedAt, Direction, PeerId, PeerName, FilePath, Status, ErrorMessage)
+                                   VALUES (@SenderId, @SenderDeviceName, @FileName, @FileSize, @SavePath, @CreatedAt, @Direction, @PeerId, @PeerName, @FilePath, @Status, @ErrorMessage);";
+        receiveHistory.PeerId ??= receiveHistory.SenderId;
+        receiveHistory.PeerName ??= receiveHistory.SenderDeviceName;
         var result = await connection.ExecuteAsync(insertSql, receiveHistory);
         
         return result > 0;
     }
     
     /// <summary>
-    /// 删除一条接收历史
+    /// 删除一条历史
     /// </summary>
     /// <param name="id"></param>
     /// <returns></returns>
@@ -130,7 +177,7 @@ public class DatabaseService : IDatabaseService
     }
     
     /// <summary>
-    /// 清空接收历史
+    /// 清空历史
     /// </summary>
     /// <returns></returns>
     public async Task<bool> ClearReceiveHistoryAsync()
@@ -146,7 +193,7 @@ public class DatabaseService : IDatabaseService
     }
     
     /// <summary>
-    /// 获取所有接收历史
+    /// 获取所有历史（接收 + 发送），按时间倒序
     /// </summary>
     /// <returns></returns>
     public async Task<IEnumerable<ReceiveHistoryEntity>> GetAllReceiveHistoryAsync()

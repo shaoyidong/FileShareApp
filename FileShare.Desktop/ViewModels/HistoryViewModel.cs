@@ -11,6 +11,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows.Input;
+using FileShare.Desktop.Localization;
 
 namespace FileShare.Desktop.ViewModels
 {
@@ -19,6 +20,7 @@ namespace FileShare.Desktop.ViewModels
         private readonly IFileShareServiceManager _serviceManager;
         private readonly IDialogService _dialogService;
         private readonly Action _backAction;
+        private readonly List<ReceiveHistoryEntity> _allHistory = new();
 
         [ObservableProperty]
         private ObservableCollection<ReceiveHistoryEntity> _receiveHistory;
@@ -26,11 +28,20 @@ namespace FileShare.Desktop.ViewModels
         [ObservableProperty]
         private bool _isLoading;
 
+        [ObservableProperty]
+        private string _filterText = Loc.Get("全部");
+
         public ICommand BackCommand { get; }
         public ICommand DeleteHistoryCommand { get; }
         public ICommand OpenFileCommand { get; }
         public ICommand ShowInFileManagerCommand { get; }
         public ICommand DeleteSingleHistoryCommand { get; }
+        public ICommand ShowAllCommand { get; }
+        public ICommand ShowReceivedCommand { get; }
+        public ICommand ShowSentCommand { get; }
+
+        /// <summary>当前筛选：null = 全部，Receive = 接收，Send = 发送。</summary>
+        public FileShare.Core.Models.TransferDirection? DirectionFilter { get; private set; }
 
         public HistoryViewModel(IFileShareServiceManager serviceManager, IDialogService dialogService, Action backAction)
         {
@@ -44,9 +55,40 @@ namespace FileShare.Desktop.ViewModels
             OpenFileCommand = new RelayCommand<ReceiveHistoryEntity>(OpenFile);
             ShowInFileManagerCommand = new RelayCommand<ReceiveHistoryEntity>(ShowInFileManager);
             DeleteSingleHistoryCommand = new RelayCommand<ReceiveHistoryEntity>(async (history) => await DeleteSingleHistoryAsync(history));
+            ShowAllCommand = new RelayCommand(() => ApplyFilter(null, Loc.Get("全部")));
+            ShowReceivedCommand = new RelayCommand(() => ApplyFilter(FileShare.Core.Models.TransferDirection.Receive, Loc.Get("仅接收")));
+            ShowSentCommand = new RelayCommand(() => ApplyFilter(FileShare.Core.Models.TransferDirection.Send, Loc.Get("仅发送")));
 
             _ = LoadHistoryAsync();
         }
+
+        /// <summary>
+        /// 切换筛选条件并重建显示列表。
+        /// </summary>
+        private void ApplyFilter(FileShare.Core.Models.TransferDirection? direction, string filterText)
+        {
+            DirectionFilter = direction;
+            FilterText = filterText;
+            RefreshView();
+        }
+
+        private void RefreshView()
+        {
+            ReceiveHistory.Clear();
+
+            foreach (var item in _allHistory)
+            {
+                if (DirectionFilter is null || item.Direction == DirectionFilter)
+                {
+                    ReceiveHistory.Add(item);
+                }
+            }
+
+            OnPropertyChanged(nameof(HistoryCountText));
+        }
+
+        /// <summary>当前显示的记录条数。</summary>
+        public string HistoryCountText => Loc.F("共 {0} 条", ReceiveHistory.Count);
 
         private async Task LoadHistoryAsync()
         {
@@ -54,15 +96,13 @@ namespace FileShare.Desktop.ViewModels
             try
             {
                 var history = await _serviceManager.GetAllReceiveHistoryAsync();
-                ReceiveHistory.Clear();
-                foreach (var item in history)
-                {
-                    ReceiveHistory.Add(item);
-                }
+                _allHistory.Clear();
+                _allHistory.AddRange(history);
+                RefreshView();
             }
             catch (Exception ex)
             {
-                await _dialogService.ShowInfomationDialogAsync("错误", $"加载历史记录失败: {ex.Message}");
+                await _dialogService.ShowInfomationDialogAsync(Loc.Get("错误"), Loc.F("加载历史记录失败: {0}", ex.Message));
             }
             finally
             {
@@ -77,7 +117,7 @@ namespace FileShare.Desktop.ViewModels
 
         private async Task DeleteHistoryAsync()
         {
-            var confirmed = await _dialogService.ShowConfirmationDialogAsync("确认", "确定要清空所有历史记录吗？");
+            var confirmed = await _dialogService.ShowConfirmationDialogAsync(Loc.Get("确认"), Loc.Get("确定要清空所有历史记录吗？"));
             if (confirmed)
             {
                 try
@@ -87,9 +127,30 @@ namespace FileShare.Desktop.ViewModels
                 }
                 catch (Exception ex)
                 {
-                    await _dialogService.ShowInfomationDialogAsync("错误", $"清空历史记录失败: {ex.Message}");
+                    await _dialogService.ShowInfomationDialogAsync(Loc.Get("错误"), Loc.F("清空历史记录失败: {0}", ex.Message));
                 }
             }
+        }
+
+        /// <summary>
+        /// 解析历史记录对应的本机文件路径。
+        /// <para>优先用绝对路径 <see cref="ReceiveHistoryEntity.FilePath"/>：
+        /// 接收记录指向落盘位置，发送记录指向源文件位置（旧版本发送记录没有该字段，退回 SavePath + FileName）。</para>
+        /// </summary>
+        private static string? ResolveFilePath(ReceiveHistoryEntity history)
+        {
+            if (!string.IsNullOrWhiteSpace(history.FilePath))
+            {
+                return File.Exists(history.FilePath) ? history.FilePath : null;
+            }
+
+            if (string.IsNullOrWhiteSpace(history.SavePath))
+            {
+                return null;
+            }
+
+            var legacy = Path.Combine(history.SavePath, history.FileName);
+            return File.Exists(legacy) ? legacy : null;
         }
 
         private void OpenFile(ReceiveHistoryEntity? history)
@@ -98,10 +159,15 @@ namespace FileShare.Desktop.ViewModels
             {
                 return;
             }
-            string fullname = Path.Combine(history.SavePath, history.FileName);
-            if (!File.Exists(fullname))
+
+            var fullname = ResolveFilePath(history);
+            if (fullname is null)
             {
-                _dialogService.ShowInfomationDialogAsync("错误", "文件不存在或路径无效");
+                _ = _dialogService.ShowInfomationDialogAsync(
+                    Loc.Get("无法打开"),
+                    history.IsSuccess
+                        ? Loc.Get("找不到该文件（可能已被移动或删除）。")
+                        : Loc.F("这条记录的状态是「{0}」，没有生成文件。{1}{2}", history.StatusText, Environment.NewLine, history.ErrorMessage));
                 return;
             }
 
@@ -115,17 +181,22 @@ namespace FileShare.Desktop.ViewModels
             }
             catch (Exception ex)
             {
-                _dialogService.ShowInfomationDialogAsync("错误", $"打开文件失败: {ex.Message}");
+                _ = _dialogService.ShowInfomationDialogAsync(Loc.Get("错误"), Loc.F("打开文件失败: {0}", ex.Message));
             }
         }
 
         private void ShowInFileManager(ReceiveHistoryEntity? history)
         {           
             if (history == null) return;
-            string fullname = Path.Combine(history.SavePath, history.FileName);
-            if (!File.Exists(fullname))
+
+            var fullname = ResolveFilePath(history);
+            if (fullname is null)
             {
-                _dialogService.ShowInfomationDialogAsync("错误", "文件不存在或路径无效");
+                _ = _dialogService.ShowInfomationDialogAsync(
+                    Loc.Get("无法定位"),
+                    history.IsSuccess
+                        ? Loc.Get("找不到该文件（可能已被移动或删除）。")
+                        : Loc.F("这条记录的状态是「{0}」，没有生成文件。", history.StatusText));
                 return;
             }
 
@@ -163,7 +234,7 @@ namespace FileShare.Desktop.ViewModels
             }
             catch (Exception ex)
             {
-                _dialogService.ShowInfomationDialogAsync("错误", $"打开文件管理器失败: {ex.Message}");
+                _dialogService.ShowInfomationDialogAsync(Loc.Get("错误"), Loc.F("打开文件管理器失败: {0}", ex.Message));
             }
         }
 
@@ -178,7 +249,7 @@ namespace FileShare.Desktop.ViewModels
             }
             catch (Exception ex)
             {
-                await _dialogService.ShowInfomationDialogAsync("错误", $"删除历史记录失败: {ex.Message}");
+                await _dialogService.ShowInfomationDialogAsync(Loc.Get("错误"), Loc.F("删除历史记录失败: {0}", ex.Message));
             }
         }
     }

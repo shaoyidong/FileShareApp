@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Security.Cryptography.X509Certificates;
@@ -43,9 +43,7 @@ namespace FileShare.Core.Crypto
 
         private CryptoManager()
         {
-            var appName = Assembly.GetEntryAssembly()?.GetName().Name ?? "FileShare";
-            var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            _baseDir = Path.Combine(appData, appName, "crypto");
+            _baseDir = Services.AppPaths.GetCryptoDirectory();
             Directory.CreateDirectory(_baseDir);
 
             // 初始化所有组件

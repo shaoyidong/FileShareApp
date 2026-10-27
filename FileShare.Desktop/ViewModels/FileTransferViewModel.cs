@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using FileShare.Core.Models;
+using FileShare.Desktop.Localization;
 
 namespace FileShare.Desktop.ViewModels
 {
@@ -102,6 +103,18 @@ namespace FileShare.Desktop.ViewModels
         /// </summary>
         public string? SenderId { get; set; }
 
+        /// <summary>本机源文件路径（仅发送方向有值，用于「重试」）。</summary>
+        public string? SourcePath { get; set; }
+
+        /// <summary>目标设备 ID（仅发送方向有值）。</summary>
+        public string? TargetDeviceId { get; set; }
+
+        /// <summary>是否允许「重试」（发送失败且知道源文件时）。</summary>
+        public bool CanRetry => Direction == TransferDirection.Send
+                                && Status == TransferStatus.Failed
+                                && !string.IsNullOrEmpty(SourcePath)
+                                && !string.IsNullOrEmpty(TargetDeviceId);
+
         /// <summary>
         /// 接收方ID
         /// </summary>
@@ -120,12 +133,12 @@ namespace FileShare.Desktop.ViewModels
         // 状态文本显示
         public string StatusText => Status switch
         {
-            TransferStatus.Pending => "等待中",
-            TransferStatus.Transferring => "传输中",
-            TransferStatus.Completed => "已完成",
-            TransferStatus.Failed => "失败",
-            TransferStatus.Cancelled => "已取消",
-            _ => "未知状态"
+            TransferStatus.Pending => Loc.Get("等待中"),
+            TransferStatus.Transferring => Loc.Get("传输中"),
+            TransferStatus.Completed => Loc.Get("已完成"),
+            TransferStatus.Failed => Loc.Get("失败"),
+            TransferStatus.Cancelled => Loc.Get("已取消"),
+            _ => Loc.Get("未知状态")
         };
 
         private TransferDirection _direction;
@@ -144,9 +157,9 @@ namespace FileShare.Desktop.ViewModels
 
         public string DirectionText => Direction switch
         {
-            TransferDirection.Send => "发送",
-            TransferDirection.Receive => "接收",
-            _ => "未知状态"
+            TransferDirection.Send => Loc.Get("发送"),
+            TransferDirection.Receive => Loc.Get("接收"),
+            _ => Loc.Get("未知状态")
         };
 
         // 只有在接收且处于 Pending 时显示接受/拒绝
@@ -182,7 +195,9 @@ namespace FileShare.Desktop.ViewModels
                 ProgressPercentage = model.ProgressPercentage,
                 SavePath = model.SavePath,
                 Direction = model.Direction,
-                SpeedBytesPerSecond = model.TransferRateBytesPerSec
+                SpeedBytesPerSecond = model.TransferRateBytesPerSec,
+                SourcePath = model.Direction == TransferDirection.Send ? model.FilePath : null,
+                TargetDeviceId = model.Direction == TransferDirection.Send ? model.ReceiverId : null
             };
         }
     }

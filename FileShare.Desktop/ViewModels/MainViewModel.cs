@@ -6,6 +6,7 @@ using FileShare.Core.Network;
 using FileShare.Core.Network.Discovery;
 using FileShare.Core.Services;
 using FileShare.Desktop.Services;
+using FileShare.Desktop.Views;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using System;
@@ -16,6 +17,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Input;
+using FileShare.Desktop.Localization;
 
 namespace FileShare.Desktop.ViewModels
 {
@@ -28,12 +30,21 @@ namespace FileShare.Desktop.ViewModels
         private readonly IDialogService _dialogService;
         private readonly IAppSettingsService _settingsService;
         private readonly IThemeService _themeService;
+        private readonly IToastService? _toastService;
+        private readonly ITrayService? _trayService;
         private readonly SynchronizationContext _uiContext;
         private readonly IClassicDesktopStyleApplicationLifetime? _appLifetime;
         private readonly ILogger<MainViewModel> _logger;
         private readonly string _localDeviceId;
 
         private CancellationTokenSource? _scanCts;
+        private TransferQueueControl? _sendQueue;
+
+        [ObservableProperty]
+        private bool _isSending;
+
+        [ObservableProperty]
+        private bool _isSendPaused;
 
         [ObservableProperty]
         private bool _isScanning;
@@ -54,13 +65,25 @@ namespace FileShare.Desktop.ViewModels
         private string _manualAddress = string.Empty;
 
         [ObservableProperty]
-        private string _statusMessage = "准备就绪";
+        private string _statusMessage = Loc.Get("准备就绪");
 
         [ObservableProperty]
         private object? _currentView;
-
-        [ObservableProperty]
+        
         private DeviceItemViewModel? _selectedItem;
+
+        public DeviceItemViewModel? SelectedItem
+        {
+            get => _selectedItem;
+            set
+            {
+                if (SetProperty(ref _selectedItem, value))
+                {
+                    OnPropertyChanged(nameof(SelectedDevice));
+                    OnPropertyChanged(nameof(IsDeviceSelected));
+                }
+            }
+        }
 
         [ObservableProperty]
         private string _localDeviceSummary = string.Empty;
@@ -70,8 +93,8 @@ namespace FileShare.Desktop.ViewModels
 
         /// <summary>窗口标题。</summary>
         public string WindowTitle => LocalDevice is null
-            ? "FileShare 局域网传输"
-            : $"FileShare 局域网传输 - {LocalDevice.DeviceName} ({LocalDevice.IpAddress})";
+            ? Loc.Get("FileShare 局域网传输")
+            : Loc.F("FileShare 局域网传输 - {0} ({1})", LocalDevice.DeviceName, LocalDevice.IpAddress);
 
         /// <summary>
         /// 当前选中的设备。保留 <see cref="DeviceInfo"/> 形态，便于外部/测试直接赋值。
@@ -103,16 +126,27 @@ namespace FileShare.Desktop.ViewModels
         public bool HasTransferTasks => TransferTasks.Count > 0;
 
         /// <summary>设备数量文本。</summary>
-        public string DeviceCountText => $"共 {Devices.Count} 台";
+        public string DeviceCountText => Loc.F("共 {0} 台", Devices.Count);
 
         public ObservableCollection<DeviceItemViewModel> Devices { get; }
         public ObservableCollection<FileTransferViewModel> TransferTasks { get; }
         public ObservableCollection<FileTransferViewModel> SentTransferTasks { get; }
         public ObservableCollection<FileTransferViewModel> ReceivedTransferTasks { get; }
 
+        /// <summary>待发送队列（可重排）。</summary>
+        public ObservableCollection<SendQueueItemViewModel> SendQueue { get; } = new();
+
+        /// <summary>队列是否有待发送项。</summary>
+        public bool HasQueue => SendQueue.Count > 0;
+
+        /// <summary>队列数量文本。</summary>
+        public string QueueCountText => Loc.F("待发送 {0} 项", SendQueue.Count);
+
         public ICommand RefreshDevicesCommand { get; }
         public ICommand SendFileCommand { get; }
         public ICommand SendFilesCommand { get; }
+        public ICommand SendFolderCommand { get; }
+        public ICommand SendTextCommand { get; }
         public ICommand ConnectByAddressCommand { get; }
         public ICommand ScanSubnetCommand { get; }
         public ICommand CancelSubnetScanCommand { get; }
@@ -120,8 +154,16 @@ namespace FileShare.Desktop.ViewModels
         public ICommand AcceptTransferCommand { get; }
         public ICommand RejectTransferCommand { get; }
         public ICommand RemoveTransferCommand { get; }
+        public ICommand RetryTransferCommand { get; }
         public ICommand ShowHistoryCommand { get; }
         public ICommand ShowSettingsCommand { get; }
+        public ICommand PauseSendCommand { get; }
+        public ICommand ResumeSendCommand { get; }
+        public ICommand CancelSendCommand { get; }
+        public ICommand MoveQueueUpCommand { get; }
+        public ICommand MoveQueueDownCommand { get; }
+        public ICommand RemoveQueueItemCommand { get; }
+        public ICommand ClearQueueCommand { get; }
 
         public MainViewModel(
             IFileShareServiceManager serviceManager,
@@ -130,7 +172,9 @@ namespace FileShare.Desktop.ViewModels
             SynchronizationContext uiContext,
             ILoggerFactory? loggerFactory = null,
             IAppSettingsService? settingsService = null,
-            IThemeService? themeService = null)
+            IThemeService? themeService = null,
+            IToastService? toastService = null,
+            ITrayService? trayService = null)
         {
             _serviceManager = serviceManager ?? throw new ArgumentNullException(nameof(serviceManager));
             _dialogService = dialogService ?? throw new ArgumentNullException(nameof(dialogService));
@@ -141,6 +185,8 @@ namespace FileShare.Desktop.ViewModels
             // 设置与皮肤服务缺失时退化为「进程内默认值」，保证视图模型可独立创建（单元测试/设计器）
             _settingsService = settingsService ?? new InMemoryAppSettingsService();
             _themeService = themeService ?? new NoOpThemeService();
+            _toastService = toastService;
+            _trayService = trayService;
 
             Devices = new ObservableCollection<DeviceItemViewModel>();
             TransferTasks = new ObservableCollection<FileTransferViewModel>();
@@ -148,12 +194,17 @@ namespace FileShare.Desktop.ViewModels
             ReceivedTransferTasks = new ObservableCollection<FileTransferViewModel>();
             TransferTasks.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasTransferTasks));
             Devices.CollectionChanged += (_, _) => OnPropertyChanged(nameof(DeviceCountText));
+            SendQueue.CollectionChanged += (_, _) =>
+            {
+                OnPropertyChanged(nameof(HasQueue));
+                OnPropertyChanged(nameof(QueueCountText));
+            };
 
             LocalDevice = _serviceManager.GetLocalDeviceInfo();
             _localDeviceId = LocalDevice?.DeviceId ?? string.Empty;
             if (LocalDevice is not null)
             {
-                LocalDeviceSummary = $"本机：{LocalDevice.DeviceName} · {LocalDevice.IpAddress}:{LocalDevice.Port}";
+                LocalDeviceSummary = Loc.F("本机：{0} · {1}:{2}", LocalDevice.DeviceName, LocalDevice.IpAddress, LocalDevice.Port);
             }
 
             // 默认填入本机所在网段，用户直接点「扫描」即可
@@ -164,10 +215,15 @@ namespace FileShare.Desktop.ViewModels
             _serviceManager.OnTransferRequestSendAndReceive += OnTransferRequestSendAndReceive;
             _serviceManager.OnTransferProgressUpdated += OnTransferProgressUpdated;
             _serviceManager.OnTransferCompleted += OnTransferCompleted;
+            _settingsService.Changed += OnSettingsChanged;
+            _serviceManager.OnFirstUseTrusted += OnFirstUseTrusted;
+            _serviceManager.OnFingerprintMismatch += OnFingerprintMismatch;
 
             RefreshDevicesCommand = new RelayCommand(async () => await RefreshDevicesAsync());
             SendFileCommand = new RelayCommand(async () => await SendFileAsync());
             SendFilesCommand = new RelayCommand(async () => await SendFilesAsync());
+            SendFolderCommand = new RelayCommand(async () => await SendFolderAsync());
+            SendTextCommand = new RelayCommand(async () => await SendTextAsync());
             ConnectByAddressCommand = new RelayCommand(async () => await ConnectByAddressAsync());
             ScanSubnetCommand = new RelayCommand(async () => await ScanSubnetAsync());
             CancelSubnetScanCommand = new RelayCommand(CancelSubnetScan);
@@ -175,8 +231,16 @@ namespace FileShare.Desktop.ViewModels
             AcceptTransferCommand = new RelayCommand<FileTransferViewModel>(AcceptTransfer);
             RejectTransferCommand = new RelayCommand<FileTransferViewModel>(RejectTransfer);
             RemoveTransferCommand = new RelayCommand<FileTransferViewModel>(RemoveTransfer);
+            RetryTransferCommand = new RelayCommand<FileTransferViewModel>(RetryTransfer);
             ShowHistoryCommand = new RelayCommand(ShowHistory);
             ShowSettingsCommand = new RelayCommand(ShowSettings);
+            PauseSendCommand = new RelayCommand(PauseSending);
+            ResumeSendCommand = new RelayCommand(ResumeSending);
+            CancelSendCommand = new RelayCommand(CancelSending);
+            MoveQueueUpCommand = new RelayCommand<SendQueueItemViewModel>(item => MoveQueueItem(item, -1));
+            MoveQueueDownCommand = new RelayCommand<SendQueueItemViewModel>(item => MoveQueueItem(item, 1));
+            RemoveQueueItemCommand = new RelayCommand<SendQueueItemViewModel>(RemoveQueueItem);
+            ClearQueueCommand = new RelayCommand(ClearQueue);
 
             CurrentView = this;
 
@@ -201,7 +265,7 @@ namespace FileShare.Desktop.ViewModels
         {
             if (LocalDevice is not null)
             {
-                LocalDeviceSummary = $"本机：{LocalDevice.DeviceName} · {LocalDevice.IpAddress}:{LocalDevice.Port}";
+                LocalDeviceSummary = Loc.F("本机：{0} · {1}:{2}", LocalDevice.DeviceName, LocalDevice.IpAddress, LocalDevice.Port);
             }
         }
 
@@ -210,12 +274,15 @@ namespace FileShare.Desktop.ViewModels
             try
             {
                 await _serviceManager.StartServicesAsync();
-                StatusMessage = "准备就绪";
+                StatusMessage = Loc.Get("准备就绪");
                 _logger.LogInformation("服务启动成功");
             }
             catch (Exception ex)
             {
-                StatusMessage = $"启动服务失败: {ex.Message}";
+                // 端口被占用是最常见的启动失败原因（另一实例已在运行 / 端口被其它程序占用）
+                StatusMessage = ex is System.Net.Sockets.SocketException
+                    ? Loc.F("启动服务失败：端口被占用（{0}）。请关闭另一个实例，或在设置里换一个端口。", _settingsService.Current.TransferPort)
+                    : Loc.F("启动服务失败: {0}", ex.Message);
                 _logger.LogError(ex, "启动服务失败");
             }
         }
@@ -225,14 +292,14 @@ namespace FileShare.Desktop.ViewModels
             try
             {
                 IsScanning = true;
-                StatusMessage = "正在扫描设备...";
+                StatusMessage = Loc.Get("正在扫描设备...");
                 await _serviceManager.RefreshDevicesAsync();
                 await Task.Delay(2000); // 等待设备响应
-                StatusMessage = $"扫描完成，当前在线 {Devices.Count} 台设备";
+                StatusMessage = Loc.F("扫描完成，当前在线 {0} 台设备", Devices.Count);
             }
             catch (Exception ex)
             {
-                StatusMessage = $"扫描设备失败: {ex.Message}";
+                StatusMessage = Loc.F("扫描设备失败: {0}", ex.Message);
                 _logger.LogError(ex, "扫描设备失败");
             }
             finally
@@ -248,14 +315,14 @@ namespace FileShare.Desktop.ViewModels
         {
             if (SelectedDevice is null)
             {
-                StatusMessage = "请先选择目标设备";
+                StatusMessage = Loc.Get("请先选择目标设备");
                 return;
             }
 
             var target = SelectedDevice;
             var files = await _dialogService.OpenFilePickerAsync(new Avalonia.Platform.Storage.FilePickerOpenOptions
             {
-                Title = "选择要发送的文件",
+                Title = Loc.Get("选择要发送的文件"),
                 AllowMultiple = false
             });
 
@@ -268,23 +335,23 @@ namespace FileShare.Desktop.ViewModels
 
             try
             {
-                StatusMessage = $"准备发送文件: {Path.GetFileName(filePath)}";
+                StatusMessage = Loc.F("准备发送文件: {0}", Path.GetFileName(filePath));
                 var success = await _serviceManager.SendFileAsync(filePath, target);
 
                 if (success)
                 {
-                    StatusMessage = "文件发送成功";
+                    StatusMessage = Loc.Get("文件发送成功");
                     _logger.LogInformation("文件发送成功: {Path} 到设备 {Device}", filePath, target.DeviceName);
                 }
                 else
                 {
-                    StatusMessage = "文件发送失败";
+                    StatusMessage = Loc.Get("文件发送失败");
                     _logger.LogError("文件发送失败: {Path} 到设备 {Device}", filePath, target.DeviceName);
                 }
             }
             catch (Exception ex)
             {
-                StatusMessage = $"发送文件失败: {ex.Message}";
+                StatusMessage = Loc.F("发送文件失败: {0}", ex.Message);
                 _logger.LogError(ex, "发送文件失败: {Path} 到设备 {Device}", filePath, target.DeviceName);
             }
         }
@@ -296,14 +363,14 @@ namespace FileShare.Desktop.ViewModels
         {
             if (SelectedDevice is null)
             {
-                StatusMessage = "请先选择目标设备";
+                StatusMessage = Loc.Get("请先选择目标设备");
                 return;
             }
 
             var target = SelectedDevice;
             var files = await _dialogService.OpenFilePickerAsync(new Avalonia.Platform.Storage.FilePickerOpenOptions
             {
-                Title = "选择要发送的文件（可多选）",
+                Title = Loc.Get("选择要发送的文件（可多选）"),
                 AllowMultiple = true
             });
 
@@ -315,27 +382,350 @@ namespace FileShare.Desktop.ViewModels
             var paths = files.Select(file => file.Path.LocalPath).Where(File.Exists).ToList();
             if (paths.Count == 0)
             {
-                StatusMessage = "没有可发送的文件";
+                StatusMessage = Loc.Get("没有可发送的文件");
                 return;
             }
 
             var progress = new Progress<FileSendProgress>(item =>
             {
-                StatusMessage = $"正在发送 ({item.Index}/{item.Total}): {Path.GetFileName(item.FilePath)}";
+                StatusMessage = Loc.F("正在发送 ({0}/{1}): {2}", item.Index, item.Total, Path.GetFileName(item.FilePath));
             });
 
+            EnqueueFiles(paths);
+            await StartQueueIfIdleAsync();
+        }
+
+        /// <summary>
+        /// 把文件加入发送队列（文件夹会展开为其中的文件，保留相对路径）。
+        /// </summary>
+        private void EnqueueFiles(IEnumerable<string> filePaths, string? folderRoot = null, string? folderName = null)
+        {
+            foreach (var path in filePaths)
+            {
+                string? relativePath = null;
+                if (!string.IsNullOrEmpty(folderRoot) && !string.IsNullOrEmpty(folderName))
+                {
+                    relativePath = Path.Combine(folderName, Path.GetRelativePath(folderRoot, path));
+                }
+
+                SendQueue.Add(new SendQueueItemViewModel(path, relativePath));
+            }
+        }
+
+        private void EnqueueFolder(string folderPath)
+        {
             try
             {
-                var allSucceeded = await _serviceManager.SendFilesAsync(paths, target, progress);
-                StatusMessage = allSucceeded
-                    ? $"{paths.Count} 个文件发送成功"
-                    : "部分文件发送失败，详见任务列表";
+                var root = new DirectoryInfo(folderPath);
+                var files = root.EnumerateFiles("*", SearchOption.AllDirectories)
+                    .Select(file => file.FullName)
+                    .ToList();
+
+                if (files.Count == 0)
+                {
+                    StatusMessage = Loc.Get("文件夹为空，无需发送");
+                    return;
+                }
+
+                EnqueueFiles(files, folderPath, root.Name);
+                StatusMessage = Loc.F("已加入队列：{0} 个文件", files.Count);
             }
             catch (Exception ex)
             {
-                StatusMessage = $"发送文件失败: {ex.Message}";
-                _logger.LogError(ex, "批量发送文件失败");
+                StatusMessage = Loc.F("读取文件夹失败: {0}", ex.Message);
+                _logger.LogError(ex, "读取文件夹失败: {Path}", folderPath);
             }
+        }
+
+        private void MoveQueueItem(SendQueueItemViewModel? item, int offset)
+        {
+            if (item is null)
+            {
+                return;
+            }
+
+            var index = SendQueue.IndexOf(item);
+            var target = index + offset;
+
+            if (index < 0 || target < 0 || target >= SendQueue.Count)
+            {
+                return;
+            }
+
+            SendQueue.Move(index, target);
+        }
+
+        private void RemoveQueueItem(SendQueueItemViewModel? item)
+        {
+            if (item is not null)
+            {
+                SendQueue.Remove(item);
+            }
+        }
+
+        private void ClearQueue()
+        {
+            if (IsSending)
+            {
+                StatusMessage = Loc.Get("正在发送，请先暂停或取消后再清空队列");
+                return;
+            }
+
+            SendQueue.Clear();
+            StatusMessage = Loc.Get("已清空发送队列");
+        }
+
+        /// <summary>
+        /// 按当前队列顺序逐项发送（暂停后可调整顺序，重排立即生效）。
+        /// </summary>
+        private async Task StartQueueIfIdleAsync()
+        {
+            if (IsSending || SendQueue.Count == 0)
+            {
+                return;
+            }
+
+            var target = SelectedDevice;
+            if (target is null)
+            {
+                StatusMessage = Loc.Get("请先选择目标设备，选择后可继续发送队列");
+                return;
+            }
+
+            var total = SendQueue.Count;
+            var index = 0;
+            var failed = 0;
+            var queue = BeginSendQueue();
+
+            try
+            {
+                while (SendQueue.Count > 0)
+                {
+                    if (queue.IsCancelled)
+                    {
+                        break;
+                    }
+
+                    var item = SendQueue[0];
+                    index++;
+                    StatusMessage = Loc.F("正在发送 ({0}/{1}): {2}", index, total, item.DisplayName);
+
+                    bool success;
+                    try
+                    {
+                        success = await _serviceManager.SendSingleAsync(item.Path, target, item.RelativePath, queue);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        break;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "发送文件失败: {Path}", item.Path);
+                        success = false;
+                    }
+
+                    if (!success)
+                    {
+                        failed++;
+                    }
+
+                    SendQueue.Remove(item);
+                }
+
+                StatusMessage = queue.IsCancelled
+                    ? Loc.Get("已取消发送（剩余项目仍在队列中）")
+                    : failed == 0
+                        ? Loc.F("{0} 个文件发送成功", total)
+                        : Loc.F("发送完成：成功 {0} 个，失败 {1} 个", total - failed, failed);
+            }
+            finally
+            {
+                EndSendQueue();
+            }
+        }
+
+        /// <summary>
+        /// 开始一批发送：创建队列控制器，返回给 SendFilesAsync / SendFolderAsync。
+        /// </summary>
+        private TransferQueueControl BeginSendQueue()
+        {
+            EndSendQueue();
+
+            _sendQueue = new TransferQueueControl();
+            IsSending = true;
+            IsSendPaused = false;
+            return _sendQueue;
+        }
+
+        /// <summary>结束一批发送并释放队列控制器。</summary>
+        private void EndSendQueue()
+        {
+            _sendQueue?.Dispose();
+            _sendQueue = null;
+            IsSending = false;
+            IsSendPaused = false;
+        }
+
+        private void PauseSending()
+        {
+            if (_sendQueue is null || _sendQueue.IsPaused)
+            {
+                return;
+            }
+
+            _sendQueue.Pause();
+            IsSendPaused = true;
+            StatusMessage = Loc.Get("已暂停：当前文件传完后暂停，点击「继续」恢复");
+        }
+
+        private void ResumeSending()
+        {
+            if (_sendQueue is null || !_sendQueue.IsPaused)
+            {
+                return;
+            }
+
+            _sendQueue.Resume();
+            IsSendPaused = false;
+            StatusMessage = Loc.Get("已继续发送");
+        }
+
+        private void CancelSending()
+        {
+            if (_sendQueue is null)
+            {
+                return;
+            }
+
+            _sendQueue.Cancel();
+            StatusMessage = Loc.Get("正在取消发送...");
+        }
+        /// <summary>
+        /// 发送整个文件夹（保留目录结构）。
+        /// </summary>
+        private async Task SendFolderAsync()
+        {
+            if (SelectedDevice is null)
+            {
+                StatusMessage = Loc.Get("请先选择目标设备");
+                return;
+            }
+
+            var target = SelectedDevice;
+            var folders = await _dialogService.OpenFolderPickerAsync(new Avalonia.Platform.Storage.FolderPickerOpenOptions
+            {
+                Title = Loc.Get("选择要发送的文件夹"),
+                AllowMultiple = false
+            });
+
+            if (folders.Count == 0)
+            {
+                return;
+            }
+
+            var uri = folders[0].Path;
+            var folderPath = uri.IsAbsoluteUri && uri.Scheme == Uri.UriSchemeFile ? uri.LocalPath : uri.OriginalString;
+
+            var progress = new Progress<FileSendProgress>(item =>
+            {
+                StatusMessage = Loc.F("正在发送文件夹 ({0}/{1}): {2}", item.Index, item.Total, Path.GetFileName(item.FilePath));
+            });
+
+            EnqueueFolder(folderPath);
+            await StartQueueIfIdleAsync();
+        }
+
+        /// <summary>
+        /// 发送文本（对端收到一个 .txt 文件）。
+        /// </summary>
+        private async Task SendTextAsync()
+        {
+            if (SelectedDevice is null)
+            {
+                StatusMessage = Loc.Get("请先选择目标设备");
+                return;
+            }
+
+            var target = SelectedDevice;
+            var owner = _appLifetime?.MainWindow;
+
+            if (owner is null)
+            {
+                StatusMessage = Loc.Get("当前窗口不可用，无法打开文本编辑框");
+                return;
+            }
+
+            var window = new Views.SendTextWindow(target.DeviceName);
+            var text = await window.ShowDialog<string?>(owner);
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return;
+            }
+
+            try
+            {
+                StatusMessage = Loc.F("正在发送文本（{0} 字符）...", text.Length);
+                var success = await _serviceManager.SendTextAsync(text, target);
+                StatusMessage = success ? Loc.Get("文本已发送") : Loc.Get("文本发送失败");
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = Loc.F("发送文本失败: {0}", ex.Message);
+                _logger.LogError(ex, "发送文本失败");
+            }
+        }
+
+        /// <summary>
+        /// 处理拖拽进来的文件/文件夹（由 MainView 的 DragDrop 事件调用）。
+        /// </summary>
+        public async Task HandleDroppedPathsAsync(IReadOnlyList<string> paths)
+        {
+            if (paths is null || paths.Count == 0)
+            {
+                return;
+            }
+
+            // 未选设备但只发现了一台时，自动选中，省一次点击
+            if (SelectedDevice is null)
+            {
+                if (Devices.Count == 1)
+                {
+                    SelectedItem = Devices[0];
+                }
+                else
+                {
+                    StatusMessage = Loc.Get("请先在左侧选择目标设备，再拖入文件");
+                    return;
+                }
+            }
+
+            var target = SelectedDevice!;
+            var files = paths.Where(File.Exists).ToList();
+            var folders = paths.Where(Directory.Exists).ToList();
+
+            if (files.Count == 0 && folders.Count == 0)
+            {
+                StatusMessage = Loc.Get("拖入的内容无法识别");
+                return;
+            }
+
+            var progress = new Progress<FileSendProgress>(item =>
+            {
+                StatusMessage = Loc.F("正在发送 ({0}/{1}): {2}", item.Index, item.Total, Path.GetFileName(item.FilePath));
+            });
+
+            if (files.Count > 0)
+            {
+                EnqueueFiles(files);
+            }
+
+            foreach (var folder in folders)
+            {
+                EnqueueFolder(folder);
+            }
+
+            await StartQueueIfIdleAsync();
         }
 
         /// <summary>
@@ -351,36 +741,36 @@ namespace FileShare.Desktop.ViewModels
             var input = ManualAddress?.Trim();
             if (string.IsNullOrEmpty(input))
             {
-                StatusMessage = "请输入设备 IP 地址，例如 192.168.1.20 或 192.168.1.20:5237";
+                StatusMessage = Loc.Get("请输入设备 IP 地址，例如 192.168.1.20 或 192.168.1.20:5237");
                 return;
             }
 
             if (!DeviceAddress.TryParse(input, _settingsService.Current.TransferPort, out _, out var error))
             {
-                StatusMessage = error ?? "地址格式不正确";
+                StatusMessage = error ?? Loc.Get("地址格式不正确");
                 return;
             }
 
             IsConnecting = true;
-            StatusMessage = $"正在连接 {input} ...";
+            StatusMessage = Loc.F("正在连接 {0} ...", input);
             try
             {
                 var device = await _serviceManager.ConnectByAddressAsync(input);
                 if (device is null)
                 {
-                    StatusMessage = $"无法连接 {input}，请确认对端已启动、端口开放且网络可达";
+                    StatusMessage = Loc.F("无法连接 {0}，请确认对端已启动、端口开放且网络可达", input);
                     _logger.LogWarning("手动连接失败: {Address}", input);
                     return;
                 }
 
                 AddOrUpdateDevice(device);
                 SelectedDevice = device;
-                StatusMessage = $"已连接 {device.DeviceName} ({device.IpAddress}:{device.Port})";
+                StatusMessage = Loc.F("已连接 {0} ({1}:{2})", device.DeviceName, device.IpAddress, device.Port);
                 ManualAddress = string.Empty;
             }
             catch (Exception ex)
             {
-                StatusMessage = $"连接失败: {ex.Message}";
+                StatusMessage = Loc.F("连接失败: {0}", ex.Message);
                 _logger.LogError(ex, "手动连接失败: {Address}", input);
             }
             finally
@@ -401,7 +791,7 @@ namespace FileShare.Desktop.ViewModels
 
             if (!SubnetScanner.TryParseCidr(SubnetCidr, out _, out _, out var error))
             {
-                StatusMessage = error ?? "网段格式不正确";
+                StatusMessage = error ?? Loc.Get("网段格式不正确");
                 return;
             }
 
@@ -419,22 +809,22 @@ namespace FileShare.Desktop.ViewModels
 
                 if (item.CurrentAddress is not null)
                 {
-                    StatusMessage = $"正在扫描 {item.CurrentAddress} ... ({item.Scanned}/{item.Total})";
+                    StatusMessage = Loc.F("正在扫描 {0} ... ({1}/{2})", item.CurrentAddress, item.Scanned, item.Total);
                 }
             });
 
             try
             {
                 var devices = await _serviceManager.ScanSubnetAsync(SubnetCidr, progress, _scanCts.Token);
-                StatusMessage = $"扫描完成，网段 {SubnetCidr} 内发现 {devices.Count} 台设备";
+                StatusMessage = Loc.F("扫描完成，网段 {0} 内发现 {1} 台设备", SubnetCidr, devices.Count);
             }
             catch (OperationCanceledException)
             {
-                StatusMessage = "已停止扫描";
+                StatusMessage = Loc.Get("已停止扫描");
             }
             catch (Exception ex)
             {
-                StatusMessage = $"扫描失败: {ex.Message}";
+                StatusMessage = Loc.F("扫描失败: {0}", ex.Message);
                 _logger.LogError(ex, "扫描网段失败: {Cidr}", SubnetCidr);
             }
             finally
@@ -479,8 +869,8 @@ namespace FileShare.Desktop.ViewModels
             }
 
             StatusMessage = isFavorite
-                ? $"已收藏 {item.DeviceName}；在设置中开启「自动接收收藏设备」后可免确认接收"
-                : $"已取消收藏 {item.DeviceName}";
+                ? Loc.F("已收藏 {0}；在设置中开启「自动接收收藏设备」后可免确认接收", item.DeviceName)
+                : Loc.F("已取消收藏 {0}", item.DeviceName);
         }
 
         private async void AcceptTransfer(FileTransferViewModel? viewModel)
@@ -495,13 +885,13 @@ namespace FileShare.Desktop.ViewModels
             if (!string.IsNullOrEmpty(fixedDirectory))
             {
                 _serviceManager.HandleTransferRequest(viewModel.TransferId, true, fixedDirectory);
-                StatusMessage = $"开始接收文件: {viewModel.FileName} (保存到: {fixedDirectory})";
+                StatusMessage = Loc.F("开始接收文件: {0} (保存到: {1})", viewModel.FileName, fixedDirectory);
                 return;
             }
 
             var folder = await _dialogService.OpenFolderPickerAsync(new Avalonia.Platform.Storage.FolderPickerOpenOptions
             {
-                Title = "选择文件保存位置",
+                Title = Loc.Get("选择文件保存位置"),
                 AllowMultiple = false
             });
 
@@ -512,7 +902,7 @@ namespace FileShare.Desktop.ViewModels
 
             var savePath = GetSafePath(folder[0].Path);
             _serviceManager.HandleTransferRequest(viewModel.TransferId, true, savePath);
-            StatusMessage = $"开始接收文件: {viewModel.FileName} (保存到: {savePath})";
+            StatusMessage = Loc.F("开始接收文件: {0} (保存到: {1})", viewModel.FileName, savePath);
             _logger.LogInformation("开始接收文件: {File} (保存到: {Path})", viewModel.FileName, savePath);
         }
 
@@ -546,7 +936,7 @@ namespace FileShare.Desktop.ViewModels
             }
 
             _serviceManager.HandleTransferRequest(viewModel.TransferId, false);
-            StatusMessage = $"已拒绝文件: {viewModel.FileName}";
+            StatusMessage = Loc.F("已拒绝文件: {0}", viewModel.FileName);
             _logger.LogInformation("已拒绝文件: {File}", viewModel.FileName);
         }
 
@@ -577,7 +967,7 @@ namespace FileShare.Desktop.ViewModels
                 Devices.Add(item);
             }
 
-            StatusMessage = $"发现设备: {device.DeviceName}";
+            StatusMessage = Loc.F("发现设备: {0}", device.DeviceName);
             _logger.LogInformation("发现设备: {Name} ({Id})", device.DeviceName, device.DeviceId);
         }
 
@@ -607,11 +997,58 @@ namespace FileShare.Desktop.ViewModels
                 }
 
                 Devices.Remove(existing);
-                StatusMessage = $"设备已离线: {existing.DeviceName}";
+                StatusMessage = Loc.F("设备已离线: {0}", existing.DeviceName);
                 _logger.LogInformation("设备已离线: {Name} ({Id})", existing.DeviceName, deviceId);
             });
         }
 
+        /// <summary>
+        /// 重试一次失败的发送。接收端会保留未完成的 .part，因此可自动续传。
+        /// </summary>
+        private async void RetryTransfer(FileTransferViewModel? model)
+        {
+            if (model?.SourcePath is null || model.TargetDeviceId is null)
+            {
+                return;
+            }
+
+            if (!File.Exists(model.SourcePath))
+            {
+                StatusMessage = Loc.Get("找不到该文件（可能已被移动或删除）。");
+                return;
+            }
+
+            var target = Devices.FirstOrDefault(item => item.DeviceId == model.TargetDeviceId)?.Device;
+            target ??= _serviceManager.GetLocalDeviceInfo() is { } local && local.DeviceId == model.TargetDeviceId
+                ? local
+                : null;
+
+            if (target is null)
+            {
+                StatusMessage = Loc.Get("设备已离线: {0}").Replace("{0}", model.TargetDeviceId);
+                return;
+            }
+
+            try
+            {
+                model.Status = TransferStatus.Pending;
+                StatusMessage = Loc.F("准备发送文件: {0}", model.FileName);
+
+                var success = await _serviceManager.SendSingleAsync(model.SourcePath, target, null, null);
+
+                if (!success)
+                {
+                    model.Status = TransferStatus.Failed;
+                    StatusMessage = Loc.Get("文件发送失败");
+                }
+            }
+            catch (Exception ex)
+            {
+                model.Status = TransferStatus.Failed;
+                StatusMessage = Loc.F("发送文件失败: {0}", ex.Message);
+                _logger.LogError(ex, "重试发送失败: {Path}", model.SourcePath);
+            }
+        }
         private async void RemoveTransfer(FileTransferViewModel? model)
         {
             if (model?.TransferId == null)
@@ -623,11 +1060,11 @@ namespace FileShare.Desktop.ViewModels
             {
                 case TransferStatus.Pending:
                     _serviceManager.CancelTransfer(model.TransferId);
-                    StatusMessage = $"已拒绝文件: {model.FileName}";
+                    StatusMessage = Loc.F("已拒绝文件: {0}", model.FileName);
                     _logger.LogInformation("已拒绝文件: {File}", model.FileName);
                     break;
                 case TransferStatus.Transferring:
-                    var result = await _dialogService.ShowConfirmationDialogAsync("移除确认", "正在传输中，确定要移除吗？");
+                    var result = await _dialogService.ShowConfirmationDialogAsync(Loc.Get("移除确认"), Loc.Get("正在传输中，确定要移除吗？"));
                     if (!result)
                     {
                         return;
@@ -665,13 +1102,13 @@ namespace FileShare.Desktop.ViewModels
                 if (info.SenderId == _localDeviceId)
                 {
                     SentTransferTasks.Insert(0, transferViewModel);
-                    StatusMessage = $"准备发送文件: {info.FileName}";
+                    StatusMessage = Loc.F("准备发送文件: {0}", info.FileName);
                     _logger.LogInformation("准备发送文件: {File} ({Id})", info.FileName, info.TransferId);
                 }
                 else
                 {
                     ReceivedTransferTasks.Insert(0, transferViewModel);
-                    StatusMessage = $"收到文件传输请求: {info.FileName}";
+                    StatusMessage = Loc.F("收到文件传输请求: {0}", info.FileName);
                     _logger.LogInformation("收到文件传输请求: {File} ({Id})", info.FileName, info.TransferId);
                 }
             });
@@ -683,9 +1120,164 @@ namespace FileShare.Desktop.ViewModels
                 _settingsService.Current.IsFavorite(info.SenderId))
             {
                 _serviceManager.HandleTransferRequest(info.TransferId, true, _settingsService.Current.SaveDirectory);
-                RunOnUiThread(() => StatusMessage = $"已自动接收收藏设备的文件: {info.FileName}");
+                RunOnUiThread(() => StatusMessage = Loc.F("已自动接收收藏设备的文件: {0}", info.FileName));
                 _logger.LogInformation("自动接收收藏设备文件: {File} ({Id})", info.FileName, info.TransferId);
+                return;
             }
+
+            // 接收请求用模态窗口确认（P0）：任务列表里的内联按钮保留，但 60 秒窗口很容易被错过
+            if (info.Direction == TransferDirection.Receive && info.SenderId != _localDeviceId)
+            {
+                RunOnUiThread(() => _ = ShowReceiveRequestDialogAsync(info));
+            }
+        }
+
+        /// <summary>
+        /// 显示接收确认窗口，并在用户选择后把结果回传给传输服务。
+        /// </summary>
+        private async Task ShowReceiveRequestDialogAsync(FileTransferInfo info)
+        {
+            var owner = _appLifetime?.MainWindow;
+            if (owner is null)
+            {
+                // 没有主窗口（单元测试/无界面场景）：保持内联按钮的默认行为
+                return;
+            }
+
+            try
+            {
+                owner.Show();
+                if (owner.WindowState == Avalonia.Controls.WindowState.Minimized)
+                {
+                    owner.WindowState = Avalonia.Controls.WindowState.Normal;
+                }
+
+                owner.Activate();
+
+                var senderName = Devices.FirstOrDefault(item => item.DeviceId == info.SenderId)?.DeviceName
+                                 ?? info.SenderId;
+
+                // 托盘/后台时用通知卡片提醒，点击回到主窗口
+                _toastService?.Show(
+                    Loc.Get("收到文件传输请求"),
+                    Loc.F("{0} 想发送：{1}", senderName, info.FileName),
+                    ActivateMainWindow);
+
+                var window = new Views.ReceiveRequestWindow(info, _settingsService.Current.SaveDirectory, senderName);
+                var result = await window.ShowDialog<ReceiveRequestResult?>(owner);
+
+                if (result is null)
+                {
+                    return;
+                }
+
+                if (result.AlwaysAccept)
+                {
+                    // Update 会触发 Changed，由 OnSettingsChanged 统一刷新星标与排序
+                    _settingsService.Update(settings => settings.ToggleFavorite(info.SenderId));
+                }
+
+                var savePath = _settingsService.Current.SaveDirectory;
+                _serviceManager.HandleTransferRequest(info.TransferId, result.Accept, savePath);
+
+                StatusMessage = result.Accept
+                    ? Loc.F("已接受文件: {0}", info.FileName)
+                    : Loc.F("已拒绝文件: {0}", info.FileName);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "显示接收确认窗口失败，回退为内联确认");
+            }
+        }
+
+        /// <summary>
+        /// 设置变化时刷新设备列表中的收藏状态：
+        /// 这样在「接收请求」弹窗里勾选「以后自动接收」，列表里的 ★ 会立即同步（并置顶）。
+        /// </summary>
+        private void OnSettingsChanged(object? sender, EventArgs e)
+        {
+            RunOnUiThread(() =>
+            {
+                foreach (var item in Devices)
+                {
+                    var isFavorite = _settingsService.Current.IsFavorite(item.DeviceId);
+                    if (item.IsFavorite != isFavorite)
+                    {
+                        item.IsFavorite = isFavorite;
+                    }
+                }
+
+                // 收藏设备置顶（Move 而不是清空重建，避免丢失 ListBox 选中项）
+                var insertAt = 0;
+                foreach (var favorite in Devices.Where(device => device.IsFavorite).ToList())
+                {
+                    var index = Devices.IndexOf(favorite);
+                    if (index > insertAt)
+                    {
+                        Devices.Move(index, insertAt);
+                    }
+
+                    insertAt++;
+                }
+            });
+        }
+        /// <summary>把主窗口唤到前台（通知卡片点击、托盘恢复共用）。</summary>
+        private void ActivateMainWindow()
+        {
+            var window = _appLifetime?.MainWindow;
+            if (window is null)
+            {
+                return;
+            }
+
+            window.Show();
+            if (window.WindowState == Avalonia.Controls.WindowState.Minimized)
+            {
+                window.WindowState = Avalonia.Controls.WindowState.Normal;
+            }
+
+            window.Activate();
+        }
+        /// <summary>
+        /// 首次信任某设备证书（TOFU）。
+        /// </summary>
+        private void OnFirstUseTrusted(string peerId, string fingerprint)
+        {
+            RunOnUiThread(() =>
+            {
+                StatusMessage = Loc.F("已记录新设备的证书指纹（{0}），再次连接会校验一致性", ShortenFingerprint(fingerprint));
+            });
+
+            _logger.LogInformation("TOFU 首次信任: {Peer} {Fingerprint}", peerId, fingerprint);
+        }
+
+        /// <summary>
+        /// 证书指纹不一致：疑似中间人攻击。连接已被拒绝，这里只负责提醒用户。
+        /// </summary>
+        private void OnFingerprintMismatch(string peerId, string knownFingerprint, string presentedFingerprint)
+        {
+            _logger.LogWarning("证书指纹不一致（疑似中间人）: {Peer} 已知={Known} 本次={Presented}", peerId, knownFingerprint, presentedFingerprint);
+
+            RunOnUiThread(() =>
+            {
+                StatusMessage = Loc.Get("安全警告：设备证书指纹与记录不一致，连接已拒绝");
+                _ = _dialogService.ShowInfomationDialogAsync(
+                    Loc.Get("安全警告"),
+                    Loc.F("设备 {0} 的证书指纹与之前记录的不一致，可能存在中间人攻击，连接已被拒绝。\n\n", peerId) +
+                    Loc.F("已记录：{0}\n", ShortenFingerprint(knownFingerprint)) +
+                    Loc.F("本次：  {0}\n\n", ShortenFingerprint(presentedFingerprint)) +
+                    Loc.Get("如果确认对方重装过系统/重新生成了证书，可在「设置 → 信任设备」中清除该设备的记录后重试。"));
+            });
+        }
+
+        private static string ShortenFingerprint(string? fingerprint)
+        {
+            if (string.IsNullOrEmpty(fingerprint))
+            {
+                return Loc.Get("(空)");
+            }
+
+            return fingerprint.Length <= 16 ? fingerprint : $"{fingerprint[..16]}…";
         }
 
         private void OnTransferProgressUpdated(FileTransferInfo updatedInfo)
@@ -704,7 +1296,7 @@ namespace FileShare.Desktop.ViewModels
                 viewModel.ProgressPercentage = updatedInfo.ProgressPercentage;
                 viewModel.SpeedBytesPerSecond = updatedInfo.TransferRateBytesPerSec;
 
-                StatusMessage = $"正在传输: {updatedInfo.FileName} ({updatedInfo.ProgressPercentage:F1}%)";
+                StatusMessage = Loc.F("正在传输: {0} ({1:F1}%)", updatedInfo.FileName, updatedInfo.ProgressPercentage);
             });
         }
 
@@ -725,15 +1317,19 @@ namespace FileShare.Desktop.ViewModels
                 switch (updatedInfo.Status)
                 {
                     case TransferStatus.Completed:
-                        StatusMessage = $"文件传输完成: {updatedInfo.FileName}";
+                        StatusMessage = Loc.F("文件传输完成: {0}", updatedInfo.FileName);
+                        if (_appLifetime?.MainWindow is { IsActive: false })
+                        {
+                            _toastService?.Show(Loc.Get("传输完成"), updatedInfo.FileName, ActivateMainWindow);
+                        }
                         _logger.LogInformation("文件传输完成: {File} ({Id})", updatedInfo.FileName, updatedInfo.TransferId);
                         break;
                     case TransferStatus.Failed:
-                        StatusMessage = $"文件传输失败: {errorMessage ?? string.Empty}";
+                        StatusMessage = Loc.F("文件传输失败: {0}", errorMessage ?? string.Empty);
                         _logger.LogError("文件传输失败: {File} ({Id}), {Error}", updatedInfo.FileName, updatedInfo.TransferId, errorMessage);
                         break;
                     case TransferStatus.Cancelled:
-                        StatusMessage = $"文件传输取消: {errorMessage ?? string.Empty}";
+                        StatusMessage = Loc.F("文件传输取消: {0}", errorMessage ?? string.Empty);
                         _logger.LogInformation("文件传输取消: {File} ({Id}), {Error}", updatedInfo.FileName, updatedInfo.TransferId, errorMessage);
                         break;
                     default:
@@ -771,6 +1367,9 @@ namespace FileShare.Desktop.ViewModels
             _serviceManager.OnTransferRequestSendAndReceive -= OnTransferRequestSendAndReceive;
             _serviceManager.OnTransferProgressUpdated -= OnTransferProgressUpdated;
             _serviceManager.OnTransferCompleted -= OnTransferCompleted;
+            _settingsService.Changed -= OnSettingsChanged;
+            _serviceManager.OnFirstUseTrusted -= OnFirstUseTrusted;
+            _serviceManager.OnFingerprintMismatch -= OnFingerprintMismatch;
             _serviceManager.Dispose();
         }
     }
@@ -808,6 +1407,8 @@ namespace FileShare.Desktop.ViewModels
     internal sealed class NoOpThemeService : IThemeService
     {
         public AppSkin Current { get; private set; } = AppSkin.Win7;
+
+        public IReadOnlyList<AppSkin> AvailableSkins { get; } = new[] { AppSkin.Win7, AppSkin.WinXP, AppSkin.WinXPOlive };
 
         public void Apply(AppSkin skin) => Current = skin;
     }

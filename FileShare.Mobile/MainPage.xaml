@@ -128,7 +128,7 @@
                     Radius="4"
                     Offset="0,2" />
             </Border.Shadow>
-            <Grid RowDefinitions="auto,*,auto">
+            <Grid RowDefinitions="auto,auto,*,auto">
                 <Grid Margin="0,0,0,12" ColumnDefinitions="*,Auto">
                     <Label
                         Style="{StaticResource TitleLabel}"
@@ -253,8 +253,40 @@
                     </Grid>
                 </Grid>
 
+                <!--  手动直连 / 网段扫描：跨子网或广播被拦截时的兜底入口  -->
+                <VerticalStackLayout Grid.Row="1" Margin="0,0,0,10" Spacing="6">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <Entry
+                            Grid.Column="0"
+                            Keyboard="Text"
+                            Placeholder="IP 直连：192.168.1.20:5237"
+                            Text="{Binding ManualAddress}" />
+                        <Button
+                            Grid.Column="1"
+                            Command="{Binding ConnectByAddressCommand}"
+                            Style="{StaticResource SecondaryButton}"
+                            Text="连接" />
+                    </Grid>
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <Entry
+                            Grid.Column="0"
+                            Keyboard="Text"
+                            Placeholder="网段扫描：192.168.1.0/24"
+                            Text="{Binding SubnetCidr}" />
+                        <Button
+                            Grid.Column="1"
+                            Command="{Binding ScanSubnetCommand}"
+                            IsEnabled="{Binding IsNotSubnetScanning}"
+                            Style="{StaticResource SecondaryButton}"
+                            Text="扫描" />
+                    </Grid>
+                    <ProgressBar
+                        Progress="{Binding SubnetScanProgress01}"
+                        IsVisible="{Binding IsSubnetScanning}" />
+                </VerticalStackLayout>
+
                 <CollectionView
-                    Grid.Row="1"
+                    Grid.Row="2"
                     BackgroundColor="Transparent"
                     ItemsSource="{Binding Devices}"
                     SelectedItem="{Binding SelectedDevice}"
@@ -312,7 +344,7 @@
                 </CollectionView>
 
                 <Grid
-                    Grid.Row="2"
+                    Grid.Row="3"
                     Margin="0,16,0,0"
                     ColumnDefinitions="*,*"
                     ColumnSpacing="10">

@@ -72,6 +72,8 @@
 		<PackageReference Include="Avalonia" Version="11.3.22" />
 		<PackageReference Include="Avalonia.Desktop" Version="11.3.22" />
 		<PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.22" />
+		<!--  基础主题改用 Simple：模板更少、内置动画/圆角/资源硬编码更少，最适合被经典皮肤整体覆盖  -->
+		<PackageReference Include="Avalonia.Themes.Simple" Version="11.3.19" />
 		<PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
 		<PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.12" />
 		<PackageReference Include="Serilog" Version="4.4.0" />

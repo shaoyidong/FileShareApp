@@ -16,10 +16,10 @@ namespace FileShare.Core.Network
         private const int MaxDiscoveredDevices = 200;
         private readonly ILogger<CompositeDiscoveryService> _logger;
         private readonly ConcurrentDictionary<string, DeviceInfo> _devices = new();
-        private readonly IDeviceDiscoveryService _udpMulticast;
-        private readonly IDeviceDiscoveryService _udpBroadcast;
+        private readonly IDeviceDiscoveryService? _udpMulticast;
+        private readonly IDeviceDiscoveryService? _udpBroadcast;
         private readonly DiscoveryOptions _discoveryOptions;
-        private readonly IDeviceDiscoveryService _mdns;
+        private readonly IDeviceDiscoveryService? _mdns;
         private readonly DeviceInfo _localDevice;
 
         private CancellationTokenSource? _cts;
@@ -43,9 +43,29 @@ namespace FileShare.Core.Network
             }
             _discoveryOptions = discoveryOptions;
 
-            _mdns = new MdnsService(localDevice, loggerFactory);
-            _udpMulticast = new UdpMulticastDiscoveryService(localDevice,discoveryOptions.UdpMulticastAddress, discoveryOptions.UdpMulticastPort, loggerFactory);
-            _udpBroadcast = new UdpBroadcastDiscoveryService(localDevice, discoveryOptions.UdpBroadcastPort, loggerFactory);
+            _mdns = discoveryOptions.EnableMdns ? new MdnsService(localDevice, loggerFactory) : null;
+            _udpMulticast = discoveryOptions.EnableUdpMulticast
+                ? new UdpMulticastDiscoveryService(
+                    localDevice,
+                    discoveryOptions.UdpMulticastAddress,
+                    discoveryOptions.UdpMulticastPort,
+                    loggerFactory,
+                    discoveryOptions.NetworkWhitelist,
+                    discoveryOptions.NetworkBlacklist)
+                : null;
+            _udpBroadcast = discoveryOptions.EnableUdpBroadcast
+                ? new UdpBroadcastDiscoveryService(
+                    localDevice,
+                    discoveryOptions.UdpBroadcastPort,
+                    loggerFactory,
+                    discoveryOptions.NetworkWhitelist,
+                    discoveryOptions.NetworkBlacklist)
+                : null;
+
+            if (_mdns is null && _udpMulticast is null && _udpBroadcast is null)
+            {
+                _logger.LogWarning("所有自动发现方式都被关闭，只能通过「IP 直连」或「网段扫描」添加设备");
+            }
 
             // 统一通过 Subscribe/Unsubscribe 管理，避免 StopAsync 之后再 StartAsync 时事件链丢失
             Subscribe();
@@ -63,12 +83,9 @@ namespace FileShare.Core.Network
                 return;
             }
 
-            _mdns.OnDeviceDiscovered += OnChildDeviceDiscovered;
-            _mdns.OnDeviceRemoved += OnChildDeviceRemoved;
-            _udpMulticast.OnDeviceDiscovered += OnChildDeviceDiscovered;
-            _udpMulticast.OnDeviceRemoved += OnChildDeviceRemoved;
-            _udpBroadcast.OnDeviceDiscovered += OnChildDeviceDiscovered;
-            _udpBroadcast.OnDeviceRemoved += OnChildDeviceRemoved;
+            SubscribeChild(_mdns);
+            SubscribeChild(_udpMulticast);
+            SubscribeChild(_udpBroadcast);
             _subscribed = true;
         }
 
@@ -82,13 +99,32 @@ namespace FileShare.Core.Network
                 return;
             }
 
-            _mdns.OnDeviceDiscovered -= OnChildDeviceDiscovered;
-            _mdns.OnDeviceRemoved -= OnChildDeviceRemoved;
-            _udpMulticast.OnDeviceDiscovered -= OnChildDeviceDiscovered;
-            _udpMulticast.OnDeviceRemoved -= OnChildDeviceRemoved;
-            _udpBroadcast.OnDeviceDiscovered -= OnChildDeviceDiscovered;
-            _udpBroadcast.OnDeviceRemoved -= OnChildDeviceRemoved;
+            UnsubscribeChild(_mdns);
+            UnsubscribeChild(_udpMulticast);
+            UnsubscribeChild(_udpBroadcast);
             _subscribed = false;
+        }
+
+        private void SubscribeChild(IDeviceDiscoveryService? service)
+        {
+            if (service is null)
+            {
+                return;
+            }
+
+            service.OnDeviceDiscovered += OnChildDeviceDiscovered;
+            service.OnDeviceRemoved += OnChildDeviceRemoved;
+        }
+
+        private void UnsubscribeChild(IDeviceDiscoveryService? service)
+        {
+            if (service is null)
+            {
+                return;
+            }
+
+            service.OnDeviceDiscovered -= OnChildDeviceDiscovered;
+            service.OnDeviceRemoved -= OnChildDeviceRemoved;
         }
 
         private void OnChildDeviceDiscovered(DeviceInfo device) => MergeDevice(device);
@@ -182,19 +218,24 @@ namespace FileShare.Core.Network
             // 支持 Stop → Start 的循环（例如用户在设置里重启服务），重新挂上子服务事件
             Subscribe();
 
-            var mdnsStartTask = Task.Run(async () =>
+            var startTasks = new List<Task>();
+            if (_mdns is not null)
             {
-                _mdnsSuccess = await _mdns.StartAsync();
-            });
-            var udpMulticastStartTask = Task.Run(async () =>
+                startTasks.Add(Task.Run(async () => _mdnsSuccess = await _mdns.StartAsync()));
+            }
+            if (_udpMulticast is not null)
             {
-                _udpMulticastSuccess = await _udpMulticast.StartAsync();
-            });
-            var udpBroadcastStartTask = Task.Run(async () =>
+                startTasks.Add(Task.Run(async () => _udpMulticastSuccess = await _udpMulticast.StartAsync()));
+            }
+            if (_udpBroadcast is not null)
             {
-                _udpBroadcastSuccess = await _udpBroadcast.StartAsync();
-            });
-            await Task.WhenAll(mdnsStartTask, udpMulticastStartTask, udpBroadcastStartTask);
+                startTasks.Add(Task.Run(async () => _udpBroadcastSuccess = await _udpBroadcast.StartAsync()));
+            }
+
+            if (startTasks.Count > 0)
+            {
+                await Task.WhenAll(startTasks);
+            }
 
             _cts = new CancellationTokenSource();
             _ = Task.Run(() => CleanupExpiredDevicesLoopAsync(_cts.Token));
@@ -221,7 +262,24 @@ namespace FileShare.Core.Network
 
             Stop();
 
-            await Task.WhenAll(_mdns.StopAsync(), _udpMulticast.StopAsync(), _udpBroadcast.StopAsync());
+            var stopTasks = new List<Task>();
+            if (_mdns is not null)
+            {
+                stopTasks.Add(_mdns.StopAsync());
+            }
+            if (_udpMulticast is not null)
+            {
+                stopTasks.Add(_udpMulticast.StopAsync());
+            }
+            if (_udpBroadcast is not null)
+            {
+                stopTasks.Add(_udpBroadcast.StopAsync());
+            }
+
+            if (stopTasks.Count > 0)
+            {
+                await Task.WhenAll(stopTasks);
+            }
         }
 
         private void Stop()
@@ -233,7 +291,24 @@ namespace FileShare.Core.Network
 
         public async Task SendServiceQueryAsync()
         {
-            await Task.WhenAll(_mdns.SendServiceQueryAsync(), _udpMulticast.SendServiceQueryAsync(), _udpBroadcast.SendServiceQueryAsync());
+            var queryTasks = new List<Task>();
+            if (_mdns is not null)
+            {
+                queryTasks.Add(_mdns.SendServiceQueryAsync());
+            }
+            if (_udpMulticast is not null)
+            {
+                queryTasks.Add(_udpMulticast.SendServiceQueryAsync());
+            }
+            if (_udpBroadcast is not null)
+            {
+                queryTasks.Add(_udpBroadcast.SendServiceQueryAsync());
+            }
+
+            if (queryTasks.Count > 0)
+            {
+                await Task.WhenAll(queryTasks);
+            }
         }
 
         public async Task StartAnnounceLoopAsync()
@@ -241,15 +316,15 @@ namespace FileShare.Core.Network
             if (!_isRunning || _disposedValue)
                 return;            
 
-            if (_mdnsSuccess)
+            if (_mdnsSuccess && _mdns is not null)
             {
                 await _mdns.StartAnnounceLoopAsync();
             }
-            else if (_udpMulticastSuccess) 
+            else if (_udpMulticastSuccess && _udpMulticast is not null) 
             {
                 await _udpMulticast.StartAnnounceLoopAsync();
             }
-            else if(_udpBroadcastSuccess)
+            else if(_udpBroadcastSuccess && _udpBroadcast is not null)
             {
                 await _udpBroadcast.StartAnnounceLoopAsync();
             }            

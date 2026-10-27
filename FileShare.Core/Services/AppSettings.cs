@@ -2,17 +2,6 @@ using FileShare.Core.Models;
 
 namespace FileShare.Core.Services;
 
-/// <summary>
-/// 界面皮肤。用同一套语义化样式键在不同皮肤文件中实现，因此切换皮肤不会影响布局。
-/// </summary>
-public enum AppSkin
-{
-    /// <summary>Windows 7 / Aero 风格（默认）。</summary>
-    Win7 = 0,
-
-    /// <summary>Windows XP / Luna 风格。</summary>
-    WinXP = 1,
-}
 
 /// <summary>
 /// 应用设置。对应 LocalSend 的「设置」页：设备名、设备类型、保存目录、自动接收、加密开关等。
@@ -42,11 +31,60 @@ public sealed class AppSettings
     /// </summary>
     public string? SaveDirectory { get; set; }
 
-    /// <summary>界面皮肤。</summary>
-    public AppSkin Skin { get; set; } = AppSkin.Win7;
 
     /// <summary>收藏（信任）的设备 ID 列表。</summary>
     public List<string> FavoriteDeviceIds { get; set; } = new();
+
+    /// <summary>接收同名文件时的处理策略（默认自动重命名，绝不静默覆盖）。</summary>
+    public FileNameConflictPolicy ConflictPolicy { get; set; } = FileNameConflictPolicy.Rename;
+
+    /// <summary>界面语言：<c>zh-CN</c> / <c>en-US</c>（需要重启生效）。</summary>
+    public string Language { get; set; } = "zh-CN";
+
+    /// <summary>最小化窗口时隐藏到系统托盘。</summary>
+    public bool MinimizeToTray { get; set; }
+
+    /// <summary>关闭主窗口时隐藏到托盘（而不是退出）。</summary>
+    public bool CloseToTray { get; set; }
+
+    /// <summary>是否启用 mDNS 发现。</summary>
+    public bool EnableMdns { get; set; } = true;
+
+    /// <summary>是否启用 UDP 组播发现。</summary>
+    public bool EnableMulticast { get; set; } = true;
+
+    /// <summary>是否启用 UDP 广播发现。</summary>
+    public bool EnableBroadcast { get; set; } = true;
+
+    /// <summary>组播地址（默认 224.0.0.167，与 LocalSend 一致）。</summary>
+    public string MulticastAddress { get; set; } = "224.0.0.167";
+
+    /// <summary>组播端口（默认 53317）。</summary>
+    public int MulticastPort { get; set; } = 53317;
+
+    /// <summary>广播端口（默认 5236）。</summary>
+    public int BroadcastPort { get; set; } = 5236;
+
+    /// <summary>多文件同时发送的并发数量（1~4，1 表示逐个发送）。</summary>
+    public int ParallelTransfers { get; set; } = 1;
+
+    /// <summary>发送限速（KB/s），0 表示不限速。</summary>
+    public int UploadLimitKBps { get; set; }
+
+    /// <summary>是否启用「网页分享」（浏览器上传，无需安装 App）。</summary>
+    public bool WebShareEnabled { get; set; }
+
+    /// <summary>网页分享端口（默认 8088）。</summary>
+    public int WebSharePort { get; set; } = 8088;
+
+    /// <summary>网页分享 PIN（6 位数字；为空时首次启用自动生成）。</summary>
+    public string WebSharePin { get; set; } = string.Empty;
+
+    /// <summary>发现用的网段白名单（逗号分隔，支持 CIDR；为空=不限制）。</summary>
+    public string NetworkWhitelist { get; set; } = string.Empty;
+
+    /// <summary>发现用的网段黑名单（优先级高于白名单）。</summary>
+    public string NetworkBlacklist { get; set; } = string.Empty;
 
     /// <summary>是否收藏了指定设备。</summary>
     public bool IsFavorite(string? deviceId)
@@ -85,8 +123,24 @@ public sealed class AppSettings
             TlsEnabled = TlsEnabled,
             AutoAcceptFromFavorites = AutoAcceptFromFavorites,
             SaveDirectory = SaveDirectory,
-            Skin = Skin,
-            FavoriteDeviceIds = new List<string>(FavoriteDeviceIds)
+            FavoriteDeviceIds = new List<string>(FavoriteDeviceIds),
+            ConflictPolicy = ConflictPolicy,
+            Language = Language,
+            MinimizeToTray = MinimizeToTray,
+            CloseToTray = CloseToTray,
+            EnableMdns = EnableMdns,
+            EnableMulticast = EnableMulticast,
+            EnableBroadcast = EnableBroadcast,
+            MulticastAddress = MulticastAddress,
+            MulticastPort = MulticastPort,
+            BroadcastPort = BroadcastPort,
+            ParallelTransfers = ParallelTransfers,
+            UploadLimitKBps = UploadLimitKBps,
+            WebShareEnabled = WebShareEnabled,
+            WebSharePort = WebSharePort,
+            WebSharePin = WebSharePin,
+            NetworkWhitelist = NetworkWhitelist,
+            NetworkBlacklist = NetworkBlacklist
         };
     }
 
@@ -114,10 +168,6 @@ public sealed class AppSettings
             DeviceType = DeviceType.Desktop;
         }
 
-        if (!Enum.IsDefined(Skin))
-        {
-            Skin = AppSkin.Win7;
-        }
 
         if (FavoriteDeviceIds is null)
         {
@@ -132,5 +182,60 @@ public sealed class AppSettings
         }
 
         SaveDirectory = string.IsNullOrWhiteSpace(SaveDirectory) ? null : SaveDirectory.Trim();
+
+        if (!Enum.IsDefined(ConflictPolicy))
+        {
+            ConflictPolicy = FileNameConflictPolicy.Rename;
+        }
+
+        if (Language is not ("zh-CN" or "en-US"))
+        {
+            Language = "zh-CN";
+        }
+
+        if (MulticastPort is < 1024 or > 65535)
+        {
+            MulticastPort = 53317;
+        }
+
+        if (BroadcastPort is < 1024 or > 65535)
+        {
+            BroadcastPort = 5236;
+        }
+
+        if (ParallelTransfers is < 1 or > 4)
+        {
+            ParallelTransfers = 1;
+        }
+
+        if (UploadLimitKBps < 0 || UploadLimitKBps > 1_000_000)
+        {
+            UploadLimitKBps = 0;
+        }
+
+        if (WebSharePort is < 1024 or > 65535)
+        {
+            WebSharePort = 8088;
+        }
+
+        WebSharePin = (WebSharePin ?? string.Empty).Trim();
+        NetworkWhitelist = (NetworkWhitelist ?? string.Empty).Trim();
+        NetworkBlacklist = (NetworkBlacklist ?? string.Empty).Trim();
+
+        if (NetworkWhitelist.Length > 512)
+        {
+            NetworkWhitelist = NetworkWhitelist[..512];
+        }
+
+        if (NetworkBlacklist.Length > 512)
+        {
+            NetworkBlacklist = NetworkBlacklist[..512];
+        }
+
+        if (!System.Net.IPAddress.TryParse(MulticastAddress, out var multicast) ||
+            multicast.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork)
+        {
+            MulticastAddress = "224.0.0.167";
+        }
     }
 }
