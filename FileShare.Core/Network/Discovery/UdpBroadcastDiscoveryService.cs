@@ -31,6 +31,8 @@ public class UdpBroadcastDiscoveryService : IDeviceDiscoveryService
     private const int MaxFailedBroadcasts = 3; // 最大失败次数阈值        
 
     private readonly int _discoveryPort;
+    private readonly string? _networkWhitelist;
+    private readonly string? _networkBlacklist;
     private readonly IPEndPoint _broadcastEndPoint;
     private readonly IPAddress _localIp;
     private readonly DeviceInfo _localDevice;
@@ -60,8 +62,15 @@ public class UdpBroadcastDiscoveryService : IDeviceDiscoveryService
     /// </summary>
     public event Action<string>? OnDeviceRemoved;
 
-    public UdpBroadcastDiscoveryService(DeviceInfo localDevice, int udpBroadcastPort, ILoggerFactory? loggerFactory = null)
+    public UdpBroadcastDiscoveryService(
+        DeviceInfo localDevice,
+        int udpBroadcastPort,
+        ILoggerFactory? loggerFactory = null,
+        string? networkWhitelist = null,
+        string? networkBlacklist = null)
     {
+        _networkWhitelist = networkWhitelist;
+        _networkBlacklist = networkBlacklist;
         _localDevice = localDevice;
         _logger = loggerFactory?.CreateLogger<UdpBroadcastDiscoveryService>() ?? NullLogger<UdpBroadcastDiscoveryService>.Instance;
         _localIp = ParseLocalIp(localDevice.IpAddress);
@@ -180,7 +189,7 @@ public class UdpBroadcastDiscoveryService : IDeviceDiscoveryService
 
             try
             {
-                HandleMessage(msg, result.RemoteEndPoint);
+                await SafeHandleMessageAsync(msg, result.RemoteEndPoint).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -236,7 +245,25 @@ public class UdpBroadcastDiscoveryService : IDeviceDiscoveryService
         }
     }
 
-    private async void HandleMessage(string msg, IPEndPoint remoteIp)
+    /// <summary>
+    /// 安全处理单条报文：异常必须在这里收敛，否则会变成未观察的任务异常（原实现是 async void，异常会直接打崩进程）。
+    /// </summary>
+    private async Task SafeHandleMessageAsync(string msg, IPEndPoint remoteEndpoint)
+    {
+        try
+        {
+            await HandleMessageAsync(msg, remoteEndpoint).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // 正常停止
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "处理发现报文失败");
+        }
+    }
+    private async Task HandleMessageAsync(string msg, IPEndPoint remoteIp)
     {
         // ---- 处理下线消息 ----
         if (msg.StartsWith(GoodbyeMessage, StringComparison.Ordinal))

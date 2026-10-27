@@ -1,0 +1,64 @@
+<Window
+    x:Class="FileShare.Desktop.Views.SendTextWindow"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:loc="using:FileShare.Desktop.Localization"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    Title="{loc:Tr '发送文本'}"
+    Width="540"
+    Height="400"
+    MinWidth="420"
+    MinHeight="300"
+    ShowInTaskbar="False"
+    WindowStartupLocation="CenterOwner"
+    d:DesignWidth="540"
+    d:DesignHeight="400"
+    mc:Ignorable="d">
+
+    <Grid RowDefinitions="Auto,*,Auto">
+
+        <Border Grid.Row="0" Classes="toolbar" Padding="10,7">
+            <TextBlock
+                VerticalAlignment="Center"
+                Classes="h1"
+                Text="{loc:Tr '发送文本'}" />
+        </Border>
+
+        <TextBox
+            x:Name="ContentBox"
+            Grid.Row="1"
+            Margin="12"
+            AcceptsReturn="True"
+            TextWrapping="Wrap"
+            VerticalContentAlignment="Top"
+            Watermark="{loc:Tr '在这里输入要发送的文本，对端会收到一个 .txt 文件'}" />
+
+        <Border
+            Grid.Row="2"
+            Padding="10,8"
+            Classes="statusbar">
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBlock
+                    x:Name="TargetText"
+                    VerticalAlignment="Center"
+                    Classes="muted"
+                    TextTrimming="CharacterEllipsis" />
+                <StackPanel
+                    Grid.Column="1"
+                    Orientation="Horizontal"
+                    Spacing="6">
+                    <Button
+                        MinWidth="84"
+                        Classes="accent"
+                        Click="OnSendClick"
+                        Content="{loc:Tr '发送'}" />
+                    <Button
+                        MinWidth="84"
+                        Click="OnCancelClick"
+                        Content="{loc:Tr '取消'}" />
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

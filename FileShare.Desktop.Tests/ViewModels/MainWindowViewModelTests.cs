@@ -305,8 +305,10 @@ namespace FileShare.Desktop.Tests.ViewModels
             await Task.Delay(100);
 
             // Assert
-            _mockServiceManager.Verify(m => m.HandleTransferRequest("test-transfer-1", true, folderPath), Times.Once);
-            Assert.Equal($"开始接收文件: {transferViewModel.FileName} (保存到: {folderPath})", _viewModel.StatusMessage);
+            // 保存目录会补上末尾分隔符（GetSafePath 的既定行为），期望值需一致
+            var expectedSavePath = folderPath + Path.DirectorySeparatorChar;
+            _mockServiceManager.Verify(m => m.HandleTransferRequest("test-transfer-1", true, expectedSavePath), Times.Once);
+            Assert.Equal($"开始接收文件: {transferViewModel.FileName} (保存到: {expectedSavePath})", _viewModel.StatusMessage);
         }
 
         [Fact]

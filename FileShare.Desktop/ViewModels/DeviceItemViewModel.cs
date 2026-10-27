@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using FileShare.Core.Models;
+using FileShare.Desktop.Localization;
 
 namespace FileShare.Desktop.ViewModels;
 
@@ -27,13 +28,13 @@ public partial class DeviceItemViewModel : ViewModelBase
     /// <summary>设备类型的中文说明。</summary>
     public string DeviceTypeText => Device.DeviceType switch
     {
-        DeviceType.Mobile => "手机",
-        DeviceType.Tablet => "平板",
-        _ => "桌面"
+        DeviceType.Mobile => Loc.Get("手机"),
+        DeviceType.Tablet => Loc.Get("平板"),
+        _ => Loc.Get("桌面")
     };
 
     /// <summary>第二行副标题：类型 · IP · 加密标记。</summary>
-    public string MetaText => $"{DeviceTypeText} · {Device.IpAddress}" + (Device.SupportsTls ? " · 加密" : string.Empty);
+    public string MetaText => $"{DeviceTypeText} · {Device.IpAddress}" + (Device.SupportsTls ? Loc.Get(" · 加密") : string.Empty);
 
     [ObservableProperty]
     private bool _isFavorite;

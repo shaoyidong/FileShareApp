@@ -1,4 +1,4 @@
-﻿using FileShare.Core.Common;
+using FileShare.Core.Common;
 using FileShare.Core.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -37,6 +37,8 @@ public class UdpMulticastDiscoveryService : IDeviceDiscoveryService
     private readonly IPEndPoint _multicastEndPoint;
     private readonly IPAddress _localIp;
     private readonly ConcurrentDictionary<string, DateTime> _lastResponseTimes = new();
+    private readonly string? _networkWhitelist;
+    private readonly string? _networkBlacklist;
 
     private UdpClient? _udpClient;
     private CancellationTokenSource? _cts;
@@ -50,9 +52,16 @@ public class UdpMulticastDiscoveryService : IDeviceDiscoveryService
     public event Action<DeviceInfo>? OnDeviceDiscovered;
 
     public event Action<string>? OnDeviceRemoved;
-
-    public UdpMulticastDiscoveryService(DeviceInfo localDevice, string? udpMulticastAddress, int udpMulticastPort, ILoggerFactory? loggerFactory = null)
+    public UdpMulticastDiscoveryService(
+        DeviceInfo localDevice,
+        string? udpMulticastAddress,
+        int udpMulticastPort,
+        ILoggerFactory? loggerFactory = null,
+        string? networkWhitelist = null,
+        string? networkBlacklist = null)
     {
+        _networkWhitelist = networkWhitelist;
+        _networkBlacklist = networkBlacklist;
         _localDevice = localDevice;
         _logger = loggerFactory?.CreateLogger<UdpMulticastDiscoveryService>() ?? NullLogger<UdpMulticastDiscoveryService>.Instance;
         _localIp = ParseLocalIp(localDevice.IpAddress);
@@ -74,7 +83,30 @@ public class UdpMulticastDiscoveryService : IDeviceDiscoveryService
             _udpClient = new UdpClient();
             _udpClient.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
             _udpClient.Client.Bind(new IPEndPoint(IPAddress.Any, _multicastPort));
-            _udpClient.JoinMulticastGroup(IPAddress.Parse(_multicastAddress));
+            // 按白/黑名单选择要在哪些网卡上加入组播组；没有规则时用默认网卡
+            var group = IPAddress.Parse(_multicastAddress);
+            var interfaces = LocalNetworkHelper.GetLocalIPv4Addresses()
+                .Where(address => NetworkFilter.IsAllowed(address, _networkWhitelist, _networkBlacklist))
+                .ToList();
+
+            if (interfaces.Count > 0)
+            {
+                foreach (var localAddress in interfaces)
+                {
+                    try
+                    {
+                        _udpClient.JoinMulticastGroup(group, localAddress);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogDebug(ex, "在 {Address} 上加入组播组失败", localAddress);
+                    }
+                }
+            }
+            else
+            {
+                _udpClient.JoinMulticastGroup(group);
+            }
             try { _udpClient.Ttl = 1; } catch { /* 部分平台不支持，忽略 */ }
         }
         catch (Exception ex)
@@ -170,7 +202,7 @@ public class UdpMulticastDiscoveryService : IDeviceDiscoveryService
 
             try
             {
-                HandleMessage(msg, result.RemoteEndPoint);
+                await SafeHandleMessageAsync(msg, result.RemoteEndPoint).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -212,7 +244,25 @@ public class UdpMulticastDiscoveryService : IDeviceDiscoveryService
         }
     }
 
-    private async void HandleMessage(string msg, IPEndPoint remoteIp)
+    /// <summary>
+    /// 安全处理单条报文：异常必须在这里收敛，否则会变成未观察的任务异常（原实现是 async void，异常会直接打崩进程）。
+    /// </summary>
+    private async Task SafeHandleMessageAsync(string msg, IPEndPoint remoteEndpoint)
+    {
+        try
+        {
+            await HandleMessageAsync(msg, remoteEndpoint).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // 正常停止
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "处理发现报文失败");
+        }
+    }
+    private async Task HandleMessageAsync(string msg, IPEndPoint remoteIp)
     {
         // ---- 处理下线消息 ----
         if (msg.StartsWith(GoodbyeMessage, StringComparison.Ordinal))

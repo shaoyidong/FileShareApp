@@ -2,11 +2,12 @@
     x:Class="FileShare.Desktop.Views.SettingsView"
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:loc="using:FileShare.Desktop.Localization"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:fonts="using:FileShare.Desktop.Assets.Fonts"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:vm="using:FileShare.Desktop.ViewModels"
-    d:DesignHeight="600"
+    d:DesignHeight="640"
     d:DesignWidth="960"
     x:CompileBindings="True"
     x:DataType="vm:SettingsViewModel"
@@ -23,7 +24,7 @@
                 <Button
                     Classes="icon"
                     Command="{Binding BackCommand}"
-                    ToolTip.Tip="返回">
+                    ToolTip.Tip="{loc:Tr '返回'}">
                     <TextBlock
                         Classes="iconGlyph"
                         Text="{x:Static fonts:FluentUI.arrow_left_24_regular}" />
@@ -31,7 +32,7 @@
                 <TextBlock
                     VerticalAlignment="Center"
                     Classes="h1"
-                    Text="设置" />
+                    Text="{loc:Tr '设置'}" />
             </StackPanel>
         </Border>
 
@@ -41,20 +42,20 @@
                 <!--  设备  -->
                 <Border Padding="12" Classes="panel">
                     <StackPanel Spacing="8">
-                        <TextBlock Classes="h1" Text="设备" />
+                        <TextBlock Classes="h1" Text="{loc:Tr '设备（以下三项需重启生效）'}" />
 
-                        <Grid ColumnDefinitions="110,*" RowDefinitions="Auto">
-                            <TextBlock Classes="label" Text="设备名称" />
+                        <Grid ColumnDefinitions="130,*">
+                            <TextBlock Classes="label" Text="{loc:Tr '设备名称'}" />
                             <TextBox
                                 Grid.Column="1"
                                 MaxWidth="320"
                                 HorizontalAlignment="Left"
-                                Watermark="其他设备看到的名字"
+                                Watermark="{loc:Tr '其他设备看到的名字'}"
                                 Text="{Binding DeviceName}" />
                         </Grid>
 
-                        <Grid ColumnDefinitions="110,*">
-                            <TextBlock Classes="label" Text="设备类型" />
+                        <Grid ColumnDefinitions="130,*">
+                            <TextBlock Classes="label" Text="{loc:Tr '设备类型'}" />
                             <ComboBox
                                 Grid.Column="1"
                                 MinWidth="220"
@@ -69,19 +70,17 @@
                             </ComboBox>
                         </Grid>
 
-                        <Grid ColumnDefinitions="110,*">
-                            <TextBlock Classes="label" Text="传输端口" />
+                        <Grid ColumnDefinitions="130,*">
+                            <TextBlock Classes="label" Text="{loc:Tr '传输端口'}" />
                             <StackPanel
                                 Grid.Column="1"
                                 Orientation="Horizontal"
                                 Spacing="8">
-                                <TextBox
-                                    Width="90"
-                                    Text="{Binding PortText}" />
+                                <TextBox Width="90" Text="{Binding PortText}" />
                                 <TextBlock
                                     VerticalAlignment="Center"
                                     Classes="muted"
-                                    Text="对端需能访问该 TCP 端口（默认 5237）" />
+                                    Text="{loc:Tr '对端需能访问该 TCP 端口（默认 5237）'}" />
                             </StackPanel>
                         </Grid>
                     </StackPanel>
@@ -90,47 +89,225 @@
                 <!--  接收  -->
                 <Border Padding="12" Classes="panel">
                     <StackPanel Spacing="8">
-                        <TextBlock Classes="h1" Text="接收" />
+                        <TextBlock Classes="h1" Text="{loc:Tr '接收'}" />
 
-                        <Grid ColumnDefinitions="110,*">
-                            <TextBlock Classes="label" Text="保存目录" />
+                        <Grid ColumnDefinitions="130,*">
+                            <TextBlock Classes="label" Text="{loc:Tr '保存目录'}" />
                             <StackPanel
                                 Grid.Column="1"
                                 Orientation="Horizontal"
                                 Spacing="6">
                                 <TextBox
-                                    Width="340"
-                                    Watermark="留空 = 按文件类型自动归类（图片/视频/音乐/文档/下载）"
+                                    Width="330"
+                                    Watermark="{loc:Tr '留空 = 按文件类型自动归类'}"
                                     Text="{Binding SaveDirectory}" />
                                 <Button
                                     MinWidth="64"
                                     Command="{Binding BrowseSaveDirectoryCommand}"
-                                    Content="浏览..." />
+                                    Content="{loc:Tr '浏览...'}" />
                                 <Button
                                     MinWidth="64"
                                     Command="{Binding ClearSaveDirectoryCommand}"
-                                    Content="清除" />
+                                    Content="{loc:Tr '清除'}" />
                             </StackPanel>
                         </Grid>
 
                         <CheckBox
-                            Content="自动接收「收藏设备」发来的文件（Quick Save，无需逐次确认）"
+                            Content="{loc:Tr '自动接收「收藏设备」发来的文件（Quick Save）'}"
                             IsChecked="{Binding AutoAcceptFromFavorites}" />
+
+                        <CheckBox
+                            Content="{loc:Tr '同名文件直接覆盖（默认关闭：自动重命名为「xxx (1).ext」）'}"
+                            IsChecked="{Binding OverwriteExisting}" />
                     </StackPanel>
                 </Border>
 
-                <!--  安全与网络  -->
+                <!--  安全与发现  -->
                 <Border Padding="12" Classes="panel">
                     <StackPanel Spacing="8">
-                        <TextBlock Classes="h1" Text="安全与网络" />
+                        <TextBlock Classes="h1" Text="{loc:Tr '安全与发现（重启生效）'}" />
 
                         <CheckBox
-                            Content="启用 TLS 加密传输（双方都开启时自动升级为加密通道）"
+                            Content="{loc:Tr '启用 TLS 加密传输（双方都开启时自动升级为加密通道）'}"
                             IsChecked="{Binding TlsEnabled}" />
+
+                        <CheckBox
+                            Content="{loc:Tr 'mDNS 发现（_fileshare._tcp，5353）'}"
+                            IsChecked="{Binding EnableMdns}" />
+                        <CheckBox
+                            Content="{loc:Tr 'UDP 组播发现（224.x）'}"
+                            IsChecked="{Binding EnableMulticast}" />
+                        <CheckBox
+                            Content="{loc:Tr 'UDP 广播发现（子网内）'}"
+                            IsChecked="{Binding EnableBroadcast}" />
+
+                        <Grid ColumnDefinitions="130,*">
+                            <TextBlock Classes="label" Text="{loc:Tr '组播地址'}" />
+                            <StackPanel
+                                Grid.Column="1"
+                                Orientation="Horizontal"
+                                Spacing="8">
+                                <TextBox Width="150" Text="{Binding MulticastAddress}" />
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    Classes="label"
+                                    Text="{loc:Tr '端口'}" />
+                                <TextBox Width="80" Text="{Binding MulticastPortText}" />
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    Classes="label"
+                                    Text="{loc:Tr '广播端口'}" />
+                                <TextBox Width="80" Text="{Binding BroadcastPortText}" />
+                            </StackPanel>
+                        </Grid>
+
+                        <Grid ColumnDefinitions="130,*">
+                            <TextBlock Classes="label" Text="{loc:Tr '允许网段'}" />
+                            <TextBox Grid.Column="1"
+                                Watermark="{loc:Tr '例如 192.168.1.0/24，多个用逗号分隔（留空=不限制）'}"
+                                Text="{Binding NetworkWhitelistText}" />
+                        </Grid>
+
+                        <Grid ColumnDefinitions="130,*">
+                            <TextBlock Classes="label" Text="{loc:Tr '排除网段'}" />
+                            <TextBox Grid.Column="1"
+                                Watermark="{loc:Tr '例如 172.17.0.0/16（VPN / 虚拟网卡）'}"
+                                Text="{Binding NetworkBlacklistText}" />
+                        </Grid>
+
+                        <Grid ColumnDefinitions="130,*,Auto">
+                            <TextBlock Classes="label" Text="{loc:Tr '信任设备'}" />
+                            <StackPanel
+                                Grid.Column="1"
+                                VerticalAlignment="Center"
+                                Orientation="Horizontal"
+                                Spacing="8">
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    Classes="muted"
+                                    Text="{Binding TrustedDeviceCountText}" />
+                                <Button
+                                    MinWidth="64"
+                                    Command="{Binding RefreshTrustedDevicesCommand}"
+                                    Content="{loc:Tr '刷新'}" />
+                            </StackPanel>
+                            <Button
+                                Grid.Column="2"
+                                MinWidth="0"
+                                Command="{Binding ClearTrustedDevicesCommand}"
+                                Content="{loc:Tr '清除全部信任记录'}" />
+                        </Grid>
 
                         <TextBlock
                             Classes="muted"
-                            Text="发现方式：mDNS + UDP 组播 + UDP 广播 三路并行；若广播被拦截，请使用主页的「IP 直连」或「网段扫描」。"
+                            Text="{loc:Tr '提示：广播被拦截或设备跨子网时，请用主页的「IP 直连」或「网段扫描」。'}"
+                            TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+
+                <!--  性能  -->
+                <Border Padding="12" Classes="panel">
+                    <StackPanel Spacing="8">
+                        <TextBlock Classes="h1" Text="{loc:Tr '发送'}" />
+
+                        <Grid ColumnDefinitions="130,*">
+                            <TextBlock Classes="label" Text="{loc:Tr '同时发送数'}" />
+                            <StackPanel
+                                Grid.Column="1"
+                                Orientation="Horizontal"
+                                Spacing="8">
+                                <TextBox Width="60" Text="{Binding ParallelTransfersText}" />
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    Classes="muted"
+                                    Text="{loc:Tr '1 = 逐个发送（默认）；2~4 可提升大量小文件的吞吐'}" />
+                            </StackPanel>
+                        </Grid>
+
+                        <Grid ColumnDefinitions="130,*">
+                            <TextBlock Classes="label" Text="{loc:Tr '上传限速'}" />
+                            <StackPanel
+                                Grid.Column="1"
+                                Orientation="Horizontal"
+                                Spacing="8">
+                                <TextBox Width="80" Text="{Binding UploadLimitText}" />
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    Classes="muted"
+                                    Text="{loc:Tr 'KB/s，0 = 不限速（重启生效）'}" />
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!--  窗口与托盘  -->
+                <Border Padding="12" Classes="panel">
+                    <StackPanel Spacing="8">
+                        <TextBlock Classes="h1" Text="{loc:Tr '窗口与托盘'}" />
+
+                        <CheckBox
+                            Content="{loc:Tr '最小化时隐藏到系统托盘'}"
+                            IsChecked="{Binding MinimizeToTray}" />
+                        <CheckBox
+                            Content="{loc:Tr '关闭窗口时隐藏到托盘（从托盘菜单退出）'}"
+                            IsChecked="{Binding CloseToTray}" />
+
+                        <TextBlock
+                            Classes="muted"
+                            Text="{loc:Tr '托盘不可用的桌面环境（部分 Linux）会自动退化为普通最小化。'}"
+                            TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+
+                <!--  网页分享  -->
+                <Border Padding="12" Classes="panel">
+                    <StackPanel Spacing="8">
+                        <TextBlock Classes="h1" Text="{loc:Tr '网页分享（手机浏览器直接传文件）'}" />
+
+                        <CheckBox
+                            Content="{loc:Tr '启用网页分享（无需安装 App，浏览器输入 PIN 即可上传）'}"
+                            IsChecked="{Binding WebShareEnabled}" />
+
+                        <Grid ColumnDefinitions="130,*">
+                            <TextBlock Classes="label" Text="{loc:Tr '端口'}" />
+                            <TextBox
+                                Width="90"
+                                HorizontalAlignment="Left"
+                                Text="{Binding WebSharePortText}" />
+                        </Grid>
+
+                        <Grid ColumnDefinitions="130,*,Auto">
+                            <TextBlock Classes="label" Text="{loc:Tr '访问地址'}" />
+                            <TextBlock
+                                Grid.Column="1"
+                                VerticalAlignment="Center"
+                                Classes="accent"
+                                Text="{Binding WebShareUrlText}"
+                                TextWrapping="Wrap" />
+                            <Button
+                                Grid.Column="2"
+                                MinWidth="0"
+                                Command="{Binding OpenWebShareCommand}"
+                                Content="{loc:Tr '打开'}" />
+                        </Grid>
+
+                        <Grid ColumnDefinitions="130,*,Auto">
+                            <TextBlock Classes="label" Text="PIN" />
+                            <TextBlock
+                                Grid.Column="1"
+                                VerticalAlignment="Center"
+                                FontWeight="Bold"
+                                Text="{Binding WebSharePinText}" />
+                            <Button
+                                Grid.Column="2"
+                                MinWidth="0"
+                                Command="{Binding RegenerateWebSharePinCommand}"
+                                Content="{loc:Tr '重新生成'}" />
+                        </Grid>
+
+                        <TextBlock
+                            Classes="muted"
+                            Text="{loc:Tr '保存后立即生效；手机与电脑在同一局域网即可访问。收到的文件会存到「保存目录」（留空则为下载目录）。'}"
                             TextWrapping="Wrap" />
                     </StackPanel>
                 </Border>
@@ -138,33 +315,58 @@
                 <!--  界面风格  -->
                 <Border Padding="12" Classes="panel">
                     <StackPanel Spacing="8">
-                        <TextBlock Classes="h1" Text="界面风格" />
+                        <TextBlock Classes="h1" Text="{loc:Tr '界面风格'}" />
+
+                        <Grid ColumnDefinitions="130,*">
+                            <TextBlock Classes="label" Text="{loc:Tr '界面语言'}" />
+                            <ComboBox
+                                Grid.Column="1"
+                                MinWidth="180"
+                                HorizontalAlignment="Left"
+                                ItemsSource="{Binding LanguageOptions}"
+                                SelectedValue="{Binding SelectedLanguageCode}"
+                                SelectedValueBinding="{Binding Code}">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:LanguageOption">
+                                        <TextBlock Text="{Binding Text}" />
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                        </Grid>
                         <TextBlock
                             Classes="muted"
-                            Text="切换后立即生效，无需重启；选择会随设置一起保存。"
+                            Text="{loc:Tr '切换后立即生效，选择会随设置保存。'}"
                             TextWrapping="Wrap" />
-                        <StackPanel Orientation="Horizontal" Spacing="24">
-                            <RadioButton
-                                GroupName="SkinGroup"
-                                IsChecked="{Binding IsWin7Skin}"
-                                Content="Windows 7 风格（Aero）" />
-                            <RadioButton
-                                GroupName="SkinGroup"
-                                IsChecked="{Binding IsWinXPSkin}"
-                                Content="Windows XP 风格（Luna）" />
-                        </StackPanel>
+                        <RadioButton
+                            GroupName="SkinGroup"
+                            IsChecked="{Binding IsWin7Skin}"
+                            Content="Windows 7（Aero）" />
+                        <RadioButton
+                            GroupName="SkinGroup"
+                            IsChecked="{Binding IsWinXPSkin}"
+                            Content="{loc:Tr 'Windows XP 经典蓝（Luna Blue）'}" />
+                        <RadioButton
+                            GroupName="SkinGroup"
+                            IsChecked="{Binding IsWinXPOliveSkin}"
+                            Content="{loc:Tr 'Windows XP 橄榄绿（Luna Olive）'}" />
                     </StackPanel>
                 </Border>
 
                 <StackPanel Margin="2,0,0,0" Orientation="Horizontal">
-                    <TextBlock Classes="muted" Text="配置文件：" />
-                    <TextBlock Classes="muted" Text="{Binding SettingsFilePath}" TextWrapping="Wrap" />
+                    <TextBlock Classes="muted" Text="{loc:Tr '配置文件：'}" />
+                    <TextBlock
+                        Classes="muted"
+                        Text="{Binding SettingsFilePath}"
+                        TextWrapping="Wrap" />
                 </StackPanel>
             </StackPanel>
         </ScrollViewer>
 
         <!--  底部  -->
-        <Border Grid.Row="2" Padding="8,6" Classes="statusbar">
+        <Border
+            Grid.Row="2"
+            Padding="8,6"
+            Classes="statusbar">
             <Grid ColumnDefinitions="*,Auto">
                 <TextBlock
                     VerticalAlignment="Center"
@@ -179,11 +381,11 @@
                         MinWidth="80"
                         Classes="accent"
                         Command="{Binding SaveCommand}"
-                        Content="保存" />
+                        Content="{loc:Tr '保存'}" />
                     <Button
                         MinWidth="80"
                         Command="{Binding BackCommand}"
-                        Content="关闭" />
+                        Content="{loc:Tr '关闭'}" />
                 </StackPanel>
             </Grid>
         </Border>

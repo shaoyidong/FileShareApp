@@ -34,6 +34,46 @@ public partial class MainPageViewModel : ViewModelBase
     }
    
 
+    /// <summary>手动直连地址（ip / ip:port / 主机名）。</summary>
+    private string _manualAddress = string.Empty;
+    public string ManualAddress
+    {
+        get => _manualAddress;
+        set => SetProperty(ref _manualAddress, value);
+    }
+
+    /// <summary>网段扫描输入（CIDR）。</summary>
+    private string _subnetCidr = "192.168.1.0/24";
+    public string SubnetCidr
+    {
+        get => _subnetCidr;
+        set => SetProperty(ref _subnetCidr, value);
+    }
+
+    private bool _isSubnetScanning;
+    public bool IsSubnetScanning
+    {
+        get => _isSubnetScanning;
+        set
+        {
+            if (SetProperty(ref _isSubnetScanning, value))
+            {
+                OnPropertyChanged(nameof(IsNotSubnetScanning));
+            }
+        }
+    }
+
+    /// <summary>未在扫描（用于按钮可用状态）。</summary>
+    public bool IsNotSubnetScanning => !IsSubnetScanning;
+
+    private double _subnetScanProgress01;
+    /// <summary>扫描进度（0~1，供 ProgressBar 绑定）。</summary>
+    public double SubnetScanProgress01
+    {
+        get => _subnetScanProgress01;
+        set => SetProperty(ref _subnetScanProgress01, value);
+    }
+
     private bool _isScanning;
     public bool IsScanning
     {
@@ -67,6 +107,8 @@ public partial class MainPageViewModel : ViewModelBase
     public ICommand RefreshDevicesCommand { get; }
     public ICommand SendFileCommand { get; }
     public ICommand NavigateToAppListCommand { get; }
+    public ICommand ConnectByAddressCommand { get; }
+    public ICommand ScanSubnetCommand { get; }
 
     public ObservableCollection<FileShare.Core.Models.DeviceInfo> Devices { get; }
     public ObservableCollection<FileTransferViewModel> TransferTasks { get; }
@@ -113,6 +155,8 @@ public partial class MainPageViewModel : ViewModelBase
         RefreshDevicesCommand = new RelayCommand(async () => RefreshDevicesAsync());
         SendFileCommand = new RelayCommand(async () => SendFileAsync());
         NavigateToAppListCommand = new RelayCommand(async () => await NavigateToAppList());
+        ConnectByAddressCommand = new RelayCommand(async () => await ConnectByAddressAsync());
+        ScanSubnetCommand = new RelayCommand(async () => await ScanSubnetAsync());
         
         // 启动服务
         _ = InitializeAsync();
@@ -222,6 +266,88 @@ public partial class MainPageViewModel : ViewModelBase
         },null);
     }
     
+    /// <summary>
+    /// 手动输入 IP 直连（跨子网 / 广播被拦截时的兜底方案）。
+    /// </summary>
+    private async Task ConnectByAddressAsync()
+    {
+        var input = ManualAddress?.Trim();
+        if (string.IsNullOrEmpty(input))
+        {
+            StatusMessage = "请输入设备 IP，例如 192.168.1.20 或 192.168.1.20:5237";
+            return;
+        }
+
+        if (!FileShare.Core.Network.Discovery.DeviceAddress.TryParse(input, 5237, out _, out var error))
+        {
+            StatusMessage = error ?? "地址格式不正确";
+            return;
+        }
+
+        StatusMessage = $"正在连接 {input} ...";
+        try
+        {
+            var device = await _serviceManager.ConnectByAddressAsync(input);
+            if (device is null)
+            {
+                StatusMessage = $"无法连接 {input}，请确认对端已启动";
+                return;
+            }
+
+            StatusMessage = $"已连接 {device.DeviceName} ({device.IpAddress}:{device.Port})";
+            ManualAddress = string.Empty;
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"连接失败: {ex.Message}";
+            _logger.LogError(ex, "手动连接失败");
+        }
+    }
+
+    /// <summary>
+    /// 扫描一个网段，把发现的设备加入列表。
+    /// </summary>
+    private async Task ScanSubnetAsync()
+    {
+        if (IsSubnetScanning)
+        {
+            return;
+        }
+
+        if (!FileShare.Core.Network.Discovery.SubnetScanner.TryParseCidr(SubnetCidr, out _, out _, out var error))
+        {
+            StatusMessage = error ?? "网段格式不正确";
+            return;
+        }
+
+        IsSubnetScanning = true;
+        SubnetScanProgress01 = 0;
+
+        var progress = new Progress<FileShare.Core.Network.Discovery.SubnetScanProgress>(item =>
+        {
+            SubnetScanProgress01 = item.Percent / 100d;
+            if (item.CurrentAddress is not null)
+            {
+                StatusMessage = $"正在扫描 {item.CurrentAddress} ... ({item.Scanned}/{item.Total})";
+            }
+        });
+
+        try
+        {
+            var devices = await _serviceManager.ScanSubnetAsync(SubnetCidr, progress);
+            StatusMessage = $"扫描完成，网段 {SubnetCidr} 内发现 {devices.Count} 台设备";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"扫描失败: {ex.Message}";
+            _logger.LogError(ex, "网段扫描失败");
+        }
+        finally
+        {
+            IsSubnetScanning = false;
+            SubnetScanProgress01 = 0;
+        }
+    }
     private async Task InitializeAsync()
     {
         try

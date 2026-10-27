@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Media;
 using FileShare.Core.Network.Discovery;
 using FileShare.Core.Network.Tls;
@@ -218,12 +219,10 @@ namespace FileShare.Desktop
         public static IServiceProvider BuildServiceProvider()
         {
             // 1. 准备路径
-            var appDataDir = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            var appName = Assembly.GetEntryAssembly()?.GetName().Name ?? "FileShare";
-            var fileShareDir = Path.Combine(appDataDir, appName);
+            var fileShareDir = AppPaths.GetDataDirectory();
             Directory.CreateDirectory(fileShareDir);
-            var databasePath = Path.Combine(fileShareDir, "fileshare.db");            
-            var logDir = Path.Combine(fileShareDir, "logs");
+            var databasePath = AppPaths.GetDatabaseFilePath();
+            var logDir = AppPaths.GetLogDirectory();
 
             // 2. 初始化 Serilog
             var serilogLogger = SerilogSetup.CreateLogger(logDir);
@@ -246,7 +245,21 @@ namespace FileShare.Desktop
             var settingsPath = Path.Combine(fileShareDir, "settings.json");
             services.AddSingleton<IAppSettingsService>(sp =>
                 new JsonAppSettingsService(settingsPath, sp.GetRequiredService<ILoggerFactory>()));
+            // 桌面端 UI 偏好（皮肤）单独持久化，不放进 Core 的 AppSettings
+            services.AddSingleton<IUiPreferencesService>(sp => new JsonUiPreferencesService(
+                AppPaths.GetDataDirectory(),
+                sp.GetRequiredService<ILoggerFactory>()));
             services.AddSingleton<IThemeService, ThemeService>();
+
+            // 通知卡片（懒解析 lifetime：解析发生在 App 初始化之后）
+            services.AddSingleton<IWebShareHost>(sp => new WebShareHost(
+                sp.GetRequiredService<IAppSettingsService>(),
+                sp.GetRequiredService<IPlatformDirectoryService>(),
+                sp.GetRequiredService<ILoggerFactory>(),
+                sp.GetRequiredService<IToastService>()));
+
+            services.AddSingleton<IToastService>(_ => new ToastService(() =>
+                (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow));
 
             // 数据库
             services.AddSingleton<IDatabaseService>(sp =>
@@ -260,9 +273,12 @@ namespace FileShare.Desktop
             {
                 var dirSvc = sp.GetRequiredService<IPlatformDirectoryService>();
                 var dbSvc = sp.GetRequiredService<IDatabaseService>();                
-                var discOpt = sp.GetRequiredService<IOptions<DiscoveryOptions>>().Value;
                 var fac = sp.GetRequiredService<ILoggerFactory>();
                 var settings = sp.GetRequiredService<IAppSettingsService>().Current;
+
+                // 发现方式、组播地址/端口等都来自用户设置（修改后需重启生效）
+                var discOpt = DiscoveryOptions.FromSettings(settings);
+
                 return new FileShareServiceManager(
                     dirSvc,
                     dbSvc,
@@ -271,7 +287,9 @@ namespace FileShare.Desktop
                     transferPort: settings.TransferPort,
                     discoveryOptions: discOpt,
                     tlsEnabled: settings.TlsEnabled,
-                    loggerFactory: fac);
+                    loggerFactory: fac,
+                    conflictPolicy: settings.ConflictPolicy,
+                    uploadLimitKBps: settings.UploadLimitKBps);
             });
 
             // 注册视图（以便 ViewLocator 能从 DI 解析）

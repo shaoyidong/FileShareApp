@@ -2,6 +2,7 @@
     x:Class="FileShare.Desktop.MainView"
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:loc="using:FileShare.Desktop.Localization"
     xmlns:converters="using:FileShare.Desktop.Converters"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:fonts="using:FileShare.Desktop.Assets.Fonts"
@@ -25,7 +26,7 @@
                     <Button
                         Classes="icon"
                         Command="{Binding RefreshDevicesCommand}"
-                        ToolTip.Tip="重新广播并收集设备">
+                        ToolTip.Tip="{loc:Tr '重新广播并收集设备'}">
                         <TextBlock
                             Classes="iconGlyph"
                             Text="{x:Static fonts:FluentUI.arrow_sync_24_regular}" />
@@ -33,7 +34,7 @@
 
                     <Border Classes="separator" Height="20" />
 
-                    <TextBlock Classes="label" Text="IP 直连" />
+                    <TextBlock Classes="label" Text="{loc:Tr 'IP 直连'}" />
                     <TextBox
                         Width="170"
                         Watermark="192.168.1.20:5237"
@@ -41,12 +42,12 @@
                     <Button
                         MinWidth="56"
                         Command="{Binding ConnectByAddressCommand}"
-                        Content="连接"
+                        Content="{loc:Tr '连接'}"
                         IsEnabled="{Binding !IsConnecting}" />
 
                     <Border Classes="separator" Height="20" />
 
-                    <TextBlock Classes="label" Text="网段扫描" />
+                    <TextBlock Classes="label" Text="{loc:Tr '网段扫描'}" />
                     <TextBox
                         Width="140"
                         Watermark="192.168.1.0/24"
@@ -54,12 +55,12 @@
                     <Button
                         MinWidth="56"
                         Command="{Binding ScanSubnetCommand}"
-                        Content="扫描"
+                        Content="{loc:Tr '扫描'}"
                         IsVisible="{Binding !IsSubnetScanning}" />
                     <Button
                         MinWidth="56"
                         Command="{Binding CancelSubnetScanCommand}"
-                        Content="停止"
+                        Content="{loc:Tr '停止'}"
                         IsVisible="{Binding IsSubnetScanning}" />
                 </StackPanel>
 
@@ -71,7 +72,7 @@
                     <Button
                         Classes="icon"
                         Command="{Binding ShowSettingsCommand}"
-                        ToolTip.Tip="设置（设备名 / 保存目录 / 皮肤）">
+                        ToolTip.Tip="{loc:Tr '设置（设备名 / 保存目录 / 皮肤）'}">
                         <TextBlock
                             Classes="iconGlyph"
                             Text="{x:Static fonts:FluentUI.settings_24_regular}" />
@@ -79,7 +80,7 @@
                     <Button
                         Classes="icon"
                         Command="{Binding ShowHistoryCommand}"
-                        ToolTip.Tip="接收历史">
+                        ToolTip.Tip="{loc:Tr '接收历史'}">
                         <TextBlock
                             Classes="iconGlyph"
                             Text="{x:Static fonts:FluentUI.history_24_regular}" />
@@ -98,7 +99,7 @@
                 Classes="panel">
                 <Grid RowDefinitions="Auto,*,Auto">
                     <Grid ColumnDefinitions="Auto,*,Auto">
-                        <TextBlock Classes="h1" Text="附近设备" />
+                        <TextBlock Classes="h1" Text="{loc:Tr '附近设备'}" />
                         <TextBlock
                             Grid.Column="2"
                             Classes="muted"
@@ -128,7 +129,7 @@
                                         Classes="icon"
                                         Command="{Binding $parent[UserControl].DataContext.ToggleFavoriteCommand}"
                                         CommandParameter="{Binding}"
-                                        ToolTip.Tip="收藏（可自动接收其文件）">
+                                        ToolTip.Tip="{loc:Tr '收藏（可自动接收其文件）'}">
                                         <Grid>
                                             <TextBlock
                                                 Classes="star"
@@ -154,24 +155,124 @@
                             HorizontalContentAlignment="Center"
                             Classes="accent"
                             Command="{Binding SendFilesCommand}"
-                            Content="发送文件（可多选）"
+                            Content="{loc:Tr '发送文件（可多选）'}"
                             IsEnabled="{Binding IsDeviceSelected}" />
+                        <Grid ColumnDefinitions="*,8,*">
+                            <Button
+                                Grid.Column="0"
+                                HorizontalContentAlignment="Center"
+                                Command="{Binding SendFolderCommand}"
+                                Content="{loc:Tr '发送文件夹'}"
+                                IsEnabled="{Binding IsDeviceSelected}"
+                                ToolTip.Tip="{loc:Tr '递归发送整个文件夹，并在对端保留目录结构'}" />
+                            <Button
+                                Grid.Column="2"
+                                HorizontalContentAlignment="Center"
+                                Command="{Binding SendTextCommand}"
+                                Content="{loc:Tr '发送文本'}"
+                                IsEnabled="{Binding IsDeviceSelected}"
+                                ToolTip.Tip="{loc:Tr '对端会收到一个 .txt 文件'}" />
+                        </Grid>
+                        <Grid ColumnDefinitions="*,6,*,6,*" IsVisible="{Binding IsSending}">
+                            <Button
+                                Grid.Column="0"
+                                HorizontalContentAlignment="Center"
+                                Command="{Binding PauseSendCommand}"
+                                Content="{loc:Tr '暂停'}"
+                                IsEnabled="{Binding !IsSendPaused}"
+                                ToolTip.Tip="{loc:Tr '当前文件传完后暂停'}" />
+                            <Button
+                                Grid.Column="2"
+                                HorizontalContentAlignment="Center"
+                                Command="{Binding ResumeSendCommand}"
+                                Content="{loc:Tr '继续'}"
+                                IsEnabled="{Binding IsSendPaused}" />
+                            <Button
+                                Grid.Column="4"
+                                HorizontalContentAlignment="Center"
+                                Command="{Binding CancelSendCommand}"
+                                Content="{loc:Tr '取消'}" />
+                        </Grid>
                         <TextBlock
                             Classes="muted"
                             Text="{Binding LocalDeviceSummary}"
+                            TextWrapping="Wrap" />
+                        <TextBlock
+                            Classes="muted"
+                            Text="{loc:Tr '提示：可以把文件或文件夹直接拖进窗口发送。'}"
                             TextWrapping="Wrap" />
                     </StackPanel>
                 </Grid>
             </Border>
 
             <Border Grid.Column="1" Padding="8" Classes="panel">
-                <Grid RowDefinitions="Auto,*">
+                <Grid RowDefinitions="Auto,Auto,*">
                     <Grid ColumnDefinitions="Auto,*">
-                        <TextBlock Classes="h1" Text="传输任务" />
+                        <TextBlock Classes="h1" Text="{loc:Tr '传输任务'}" />
                     </Grid>
 
-                    <ScrollViewer
+                    <!--  待发送队列（可重排）  -->
+                    <Border
                         Grid.Row="1"
+                        Margin="0,6,0,0"
+                        Padding="8"
+                        Classes="card"
+                        IsVisible="{Binding HasQueue}">
+                        <Grid RowDefinitions="Auto,Auto">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Classes="h1" Text="{loc:Tr '待发送队列'}" />
+                                <TextBlock
+                                    Grid.Column="1"
+                                    Classes="muted"
+                                    Text="{Binding QueueCountText}" />
+                            </Grid>
+                            <ScrollViewer Grid.Row="1" MaxHeight="120" Margin="0,4,0,0">
+                                <ItemsControl ItemsSource="{Binding SendQueue}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:SendQueueItemViewModel">
+                                            <Grid ColumnDefinitions="*,Auto,Auto,Auto" Margin="0,1">
+                                                <TextBlock
+                                                    VerticalAlignment="Center"
+                                                    Text="{Binding DisplayName}"
+                                                    TextTrimming="CharacterEllipsis" />
+                                                <TextBlock
+                                                    Grid.Column="0"
+                                                    Margin="0,0,60,0"
+                                                    HorizontalAlignment="Right"
+                                                    VerticalAlignment="Center"
+                                                    Classes="muted"
+                                                    Text="{Binding SizeText}" />
+                                                <Button
+                                                    Grid.Column="1"
+                                                    Classes="icon"
+                                                    Command="{Binding $parent[UserControl].DataContext.MoveQueueUpCommand}"
+                                                    CommandParameter="{Binding}"
+                                                    Content="↑"
+                                                    ToolTip.Tip="{loc:Tr '上移'}" />
+                                                <Button
+                                                    Grid.Column="2"
+                                                    Classes="icon"
+                                                    Command="{Binding $parent[UserControl].DataContext.MoveQueueDownCommand}"
+                                                    CommandParameter="{Binding}"
+                                                    Content="↓"
+                                                    ToolTip.Tip="{loc:Tr '下移'}" />
+                                                <Button
+                                                    Grid.Column="3"
+                                                    Classes="danger"
+                                                    Command="{Binding $parent[UserControl].DataContext.RemoveQueueItemCommand}"
+                                                    CommandParameter="{Binding}"
+                                                    Content="✕"
+                                                    ToolTip.Tip="{loc:Tr '从队列移除'}" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </Grid>
+                    </Border>
+
+                    <ScrollViewer
+                        Grid.Row="2"
                         Margin="0,6,0,0"
                         HorizontalScrollBarVisibility="Disabled"
                         VerticalScrollBarVisibility="Auto">
@@ -205,7 +306,7 @@
                                                     Command="{Binding $parent[UserControl].DataContext.RemoveTransferCommand}"
                                                     CommandParameter="{Binding}"
                                                     Content="✕"
-                                                    ToolTip.Tip="移除任务" />
+                                                    ToolTip.Tip="{loc:Tr '移除任务'}" />
                                             </Grid>
 
                                             <Grid
@@ -255,6 +356,21 @@
                                                     TextAlignment="Right" />
                                             </Grid>
 
+                                            <!--  发送失败：重试（接收端会续传）  -->
+                                            <StackPanel
+                                                Grid.Row="3"
+                                                Margin="0,8,0,0"
+                                                Orientation="Horizontal"
+                                                Spacing="6"
+                                                IsVisible="{Binding CanRetry}">
+                                                <Button
+                                                    MinWidth="64"
+                                                    Classes="accent"
+                                                    Command="{Binding $parent[UserControl].DataContext.RetryTransferCommand}"
+                                                    CommandParameter="{Binding}"
+                                                    Content="{loc:Tr '重试'}" />
+                                            </StackPanel>
+
                                             <!--  接收请求：接受 / 拒绝  -->
                                             <StackPanel
                                                 Grid.Row="3"
@@ -267,12 +383,12 @@
                                                     Classes="accent"
                                                     Command="{Binding $parent[UserControl].DataContext.AcceptTransferCommand}"
                                                     CommandParameter="{Binding}"
-                                                    Content="接受" />
+                                                    Content="{loc:Tr '接受'}" />
                                                 <Button
                                                     MinWidth="64"
                                                     Command="{Binding $parent[UserControl].DataContext.RejectTransferCommand}"
                                                     CommandParameter="{Binding}"
-                                                    Content="拒绝" />
+                                                    Content="{loc:Tr '拒绝'}" />
                                             </StackPanel>
                                         </Grid>
                                     </Border>
@@ -282,12 +398,12 @@
                     </ScrollViewer>
 
                     <TextBlock
-                        Grid.Row="1"
+                        Grid.Row="2"
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center"
                         Classes="muted"
                         IsVisible="{Binding !HasTransferTasks}"
-                        Text="暂无传输任务：选择左侧设备后点击「发送文件」" />
+                        Text="{loc:Tr '暂无传输任务：选择左侧设备后点击「发送文件」'}" />
                 </Grid>
             </Border>
         </Grid>

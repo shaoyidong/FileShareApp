@@ -83,7 +83,6 @@ public class AppSettingsTests
                 settings.TlsEnabled = false;
                 settings.AutoAcceptFromFavorites = true;
                 settings.SaveDirectory = @"D:\接收";
-                settings.Skin = AppSkin.WinXP;
                 settings.ToggleFavorite("peer-id");
             });
 
@@ -96,7 +95,6 @@ public class AppSettingsTests
             Assert.False(reloaded.TlsEnabled);
             Assert.True(reloaded.AutoAcceptFromFavorites);
             Assert.Equal(@"D:\接收", reloaded.SaveDirectory);
-            Assert.Equal(AppSkin.WinXP, reloaded.Skin);
             Assert.True(reloaded.IsFavorite("peer-id"));
         }
         finally

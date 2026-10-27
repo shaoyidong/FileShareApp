@@ -1,112 +1,67 @@
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Controls.ApplicationLifetimes;
-using Avalonia.Markup.Xaml;
-using FileShare.Desktop.ViewModels.Messages;
-using CommunityToolkit.Mvvm.Messaging;
+using FileShare.Core.Services;
+using FileShare.Desktop.Services;
+using Microsoft.Extensions.DependencyInjection;
 using System;
-using Avalonia.Media;
-using Avalonia.Layout;
+using System.ComponentModel;
 
-namespace FileShare.Desktop.Views
+namespace FileShare.Desktop.Views;
+
+public partial class MainWindow : Window
 {
-    public partial class MainWindow : Window
+    private readonly TrayService? _trayService;
+    private readonly IAppSettingsService? _settingsService;
+
+    public MainWindow()
     {
-        public MainWindow()
-        {
-            InitializeComponent();
+        InitializeComponent();
 
-            //// ����DataContext
-            //if (Application.Current.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime appLifetime)
-            //{
-            //    DataContext = new MainViewModel(appLifetime);
-            //}
-            
-            // 注册消息处理器
-            WeakReferenceMessenger.Default.Register<ConfirmationMessage>(this, HandleConfirmationMessage);
-        }      
+        _trayService = App.TrayService;
+        _settingsService = App.ServiceProvider?.GetService<IAppSettingsService>();
 
-        protected override void OnClosed(EventArgs e)
+        Opened += OnWindowOpened;
+        Closing += OnWindowClosing;
+    }
+
+    private void OnWindowOpened(object? sender, EventArgs e)
+    {
+        // 托盘图标只在启用了「最小化到托盘 / 关闭到托盘」时显示
+        var settings = _settingsService?.Current;
+        _trayService?.Attach(this);
+        _trayService?.SetVisible(settings is { MinimizeToTray: true } || settings is { CloseToTray: true });
+
+        PropertyChanged += OnWindowPropertyChanged;
+    }
+
+    private void OnWindowPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
+    {
+        if (e.Property != WindowStateProperty || WindowState != WindowState.Minimized)
         {
-            //if (DataContext is MainViewModel viewModel)
-            //{
-            //    viewModel.Dispose();
-            //}
-            
-            // 取消注册消息处理器
-            WeakReferenceMessenger.Default.Unregister<ConfirmationMessage>(this);
-            
-            base.OnClosed(e);            
-        }
-        
-        private async void HandleConfirmationMessage(object recipient, ConfirmationMessage message)
-        {
-            // 在Avalonia中，我们需要创建一个自定义的确认对话框
-            var dialog = new Window
-            {
-                Title = message.Title,
-                Width = 400,
-                Height = 200,
-                CanResize = false,
-                WindowStartupLocation = WindowStartupLocation.CenterOwner,                
-            };
-            
-            // 创建对话框内容
-            var panel = new StackPanel
-            {
-                Margin = new Thickness(20),
-                Spacing = 20
-            };
-            
-            // 添加消息文本
-            var messageText = new TextBlock
-            {
-                Text = message.Message,
-                TextWrapping = TextWrapping.Wrap
-            };
-            panel.Children.Add(messageText);
-            
-            // 添加按钮容器
-            var buttonPanel = new StackPanel
-            {
-                Orientation = Orientation.Horizontal,
-                HorizontalAlignment = HorizontalAlignment.Right,
-                Spacing = 10
-            };
-            
-            // 添加取消按钮
-            var cancelButton = new Button
-            {
-                Content = "否",
-                Width = 80
-            };
-            cancelButton.Click += (s, e) =>
-            {               
-                message.CompletionSource.SetResult(false);
-                dialog.Close();
-            };
-            buttonPanel.Children.Add(cancelButton);
-            
-            // 添加确认按钮
-            var confirmButton = new Button
-            {
-                Content = "是",
-                Width = 80
-            };
-            confirmButton.Click += (s, e) =>
-            {               
-                message.CompletionSource.SetResult(true);
-                dialog.Close();
-            };
-            buttonPanel.Children.Add(confirmButton);
-            
-            panel.Children.Add(buttonPanel);
-            
-            dialog.Content = panel;
-            
-            // 显示对话框
-            await dialog.ShowDialog(this);
+            return;
         }
 
+        if (_settingsService?.Current.MinimizeToTray == true && _trayService is { IsAvailable: true })
+        {
+            Hide();
+        }
+    }
+
+    private void OnWindowClosing(object? sender, WindowClosingEventArgs e)
+    {
+        if (_trayService is null || _settingsService?.Current.CloseToTray != true)
+        {
+            return;
+        }
+
+        // 托盘「退出」会先把 IsExiting 置位，此时必须真正关闭
+        if (_trayService.IsExiting)
+        {
+            return;
+        }
+
+        e.Cancel = true;
+        Hide();
+        _trayService.SetVisible(true);
     }
 }

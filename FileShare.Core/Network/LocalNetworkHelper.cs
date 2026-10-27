@@ -15,7 +15,7 @@ public static class LocalNetworkHelper
     public static IReadOnlyList<(IPAddress Address, IPAddress Mask)> GetIPv4Interfaces()
     {
         var result = new List<(IPAddress, IPAddress)>();
-
+        var resultRank = new List<(IPAddress Address, IPAddress Mask, int rank)>();
         try
         {
             foreach (var nic in NetworkInterface.GetAllNetworkInterfaces())
@@ -30,7 +30,12 @@ public static class LocalNetworkHelper
                     continue;
                 }
 
-                foreach (var unicast in nic.GetIPProperties().UnicastAddresses)
+                var props = nic.GetIPProperties();
+                // 有网关的网卡更可能是真实的、可达外网的物理网卡，优先选择
+                bool hasGateway = props.GatewayAddresses.Any(g => g.Address.AddressFamily == AddressFamily.InterNetwork);
+                int rank = hasGateway ? 0 : 1;
+
+                foreach (var unicast in props.UnicastAddresses)
                 {
                     if (unicast.Address.AddressFamily != AddressFamily.InterNetwork)
                     {
@@ -47,8 +52,8 @@ public static class LocalNetworkHelper
                     {
                         continue;
                     }
-
-                    result.Add((unicast.Address, mask));
+                   
+                    resultRank.Add((unicast.Address, mask, rank));
                 }
             }
         }
@@ -57,7 +62,10 @@ public static class LocalNetworkHelper
             // 某些受限平台（如部分 iOS/Android 版本）会抛异常，调用方按「无网卡信息」处理
         }
 
-        return result;
+        return  resultRank
+            .OrderBy(item => item.rank)
+            .Select(item => (item.Address, item.Mask))
+            .ToList();
     }
 
     /// <summary>本机所有 IPv4 地址。</summary>

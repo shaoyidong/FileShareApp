@@ -2,55 +2,62 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <!--
-        Windows XP / Luna 风格皮肤。
-        Classes 集合与 Themes/Win7.axaml 完全一致，因此可在运行时互换。
+        Windows XP / Luna Blue 皮肤（最经典的那套蓝色主题）。
+        特征：蓝色渐变工具栏 + 白色文字、米色窗口底（#ECE9D8）、Tahoma 小字号、
+              带深蓝描边的「默认按钮」、深蓝选中行、绿色进度条。
+        Classes 契约与 Themes/Win7.axaml 完全一致，可在运行时互换。
     -->
     <Styles.Resources>
+        <!--  窗口 / 面板  -->
         <SolidColorBrush x:Key="FsWindowBrush" Color="#ECE9D8" />
         <SolidColorBrush x:Key="FsSurfaceBrush" Color="#FFFFFF" />
         <SolidColorBrush x:Key="FsCardBrush" Color="#FFFFFF" />
-        <SolidColorBrush x:Key="FsBorderBrush" Color="#ACA899" />
-        <SolidColorBrush x:Key="FsSoftBorderBrush" Color="#D4D0C8" />
+        <SolidColorBrush x:Key="FsBorderBrush" Color="#7F9DB9" />
+        <SolidColorBrush x:Key="FsSoftBorderBrush" Color="#C8D4E2" />
         <SolidColorBrush x:Key="FsTextBrush" Color="#000000" />
         <SolidColorBrush x:Key="FsMutedBrush" Color="#4A4A4A" />
-        <SolidColorBrush x:Key="FsAccentBrush" Color="#316AC5" />
+        <SolidColorBrush x:Key="FsAccentBrush" Color="#1C4E9C" />
         <SolidColorBrush x:Key="FsAccentTextBrush" Color="#FFFFFF" />
         <SolidColorBrush x:Key="FsDangerBrush" Color="#B00000" />
-        <SolidColorBrush x:Key="FsRowHoverBrush" Color="#E8F0FE" />
+        <SolidColorBrush x:Key="FsRowHoverBrush" Color="#E3EEFC" />
         <SolidColorBrush x:Key="FsRowSelectedBrush" Color="#316AC5" />
         <SolidColorBrush x:Key="FsButtonBorderBrush" Color="#8E8F8F" />
         <SolidColorBrush x:Key="FsButtonBorderHoverBrush" Color="#E9A93B" />
         <SolidColorBrush x:Key="FsInputBorderBrush" Color="#7F9DB9" />
 
+        <!--  Luna 蓝色渐变（工具栏 / 默认按钮）  -->
         <LinearGradientBrush x:Key="FsToolbarBrush" StartPoint="0%,0%" EndPoint="0%,100%">
-            <GradientStop Offset="0" Color="#FAF9F5" />
-            <GradientStop Offset="1" Color="#E3E0D3" />
+            <GradientStop Offset="0" Color="#4E86C8" />
+            <GradientStop Offset="0.45" Color="#3568AE" />
+            <GradientStop Offset="1" Color="#1F4A8C" />
         </LinearGradientBrush>
 
         <LinearGradientBrush x:Key="FsButtonFaceBrush" StartPoint="0%,0%" EndPoint="0%,100%">
             <GradientStop Offset="0" Color="#FFFFFF" />
-            <GradientStop Offset="0.6" Color="#F2F0E8" />
-            <GradientStop Offset="1" Color="#E3DFD2" />
+            <GradientStop Offset="0.62" Color="#F6F4EC" />
+            <GradientStop Offset="1" Color="#E5E1D3" />
         </LinearGradientBrush>
 
         <LinearGradientBrush x:Key="FsButtonHoverBrush" StartPoint="0%,0%" EndPoint="0%,100%">
-            <GradientStop Offset="0" Color="#FFFDF5" />
+            <GradientStop Offset="0" Color="#FFFEF8" />
             <GradientStop Offset="1" Color="#FBE7B3" />
         </LinearGradientBrush>
 
         <LinearGradientBrush x:Key="FsButtonPressedBrush" StartPoint="0%,0%" EndPoint="0%,100%">
-            <GradientStop Offset="0" Color="#E4DCC6" />
-            <GradientStop Offset="1" Color="#F6F2E5" />
+            <GradientStop Offset="0" Color="#DED7C3" />
+            <GradientStop Offset="1" Color="#F4F1E5" />
         </LinearGradientBrush>
 
         <LinearGradientBrush x:Key="FsAccentButtonBrush" StartPoint="0%,0%" EndPoint="0%,100%">
-            <GradientStop Offset="0" Color="#5C9CE5" />
-            <GradientStop Offset="1" Color="#23539C" />
+            <GradientStop Offset="0" Color="#5B9BE8" />
+            <GradientStop Offset="0.5" Color="#2E6CC4" />
+            <GradientStop Offset="1" Color="#1B4C96" />
         </LinearGradientBrush>
 
         <LinearGradientBrush x:Key="FsAccentButtonHoverBrush" StartPoint="0%,0%" EndPoint="0%,100%">
-            <GradientStop Offset="0" Color="#7BB2ED" />
-            <GradientStop Offset="1" Color="#2F63B0" />
+            <GradientStop Offset="0" Color="#78B0F0" />
+            <GradientStop Offset="0.5" Color="#3E80D8" />
+            <GradientStop Offset="1" Color="#2A5CAB" />
         </LinearGradientBrush>
 
         <FontFamily x:Key="FsFontFamily">Tahoma, Microsoft YaHei</FontFamily>
@@ -75,30 +82,30 @@
         <Setter Property="Background" Value="{StaticResource FsSurfaceBrush}" />
         <Setter Property="BorderBrush" Value="{StaticResource FsBorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="3" />
+        <Setter Property="CornerRadius" Value="2" />
     </Style>
 
     <Style Selector="Border.card">
         <Setter Property="Background" Value="{StaticResource FsCardBrush}" />
         <Setter Property="BorderBrush" Value="{StaticResource FsSoftBorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="3" />
+        <Setter Property="CornerRadius" Value="2" />
     </Style>
 
     <Style Selector="Border.toolbar">
         <Setter Property="Background" Value="{StaticResource FsToolbarBrush}" />
-        <Setter Property="BorderBrush" Value="{StaticResource FsBorderBrush}" />
+        <Setter Property="BorderBrush" Value="#1B3F78" />
         <Setter Property="BorderThickness" Value="0,0,0,1" />
     </Style>
 
     <Style Selector="Border.statusbar">
-        <Setter Property="Background" Value="{StaticResource FsToolbarBrush}" />
-        <Setter Property="BorderBrush" Value="{StaticResource FsBorderBrush}" />
+        <Setter Property="Background" Value="{StaticResource FsWindowBrush}" />
+        <Setter Property="BorderBrush" Value="#ACA899" />
         <Setter Property="BorderThickness" Value="0,1,0,0" />
     </Style>
 
     <Style Selector="Border.separator">
-        <Setter Property="Background" Value="{StaticResource FsBorderBrush}" />
+        <Setter Property="Background" Value="#9DB8D8" />
         <Setter Property="Width" Value="1" />
         <Setter Property="Margin" Value="4,2" />
     </Style>
@@ -117,7 +124,7 @@
     </Style>
 
     <Style Selector="TextBlock.accent">
-        <Setter Property="Foreground" Value="{StaticResource FsAccentBrush}" />
+        <Setter Property="Foreground" Value="#1C4E9C" />
     </Style>
 
     <Style Selector="TextBlock.danger">
@@ -146,6 +153,19 @@
         <Setter Property="FontSize" Value="14" />
         <Setter Property="VerticalAlignment" Value="Center" />
         <Setter Property="Foreground" Value="#9E9E9E" />
+    </Style>
+
+    <!--  工具栏里的文字在蓝色渐变上必须是白字（XP 经典观感）  -->
+    <Style Selector="Border.toolbar TextBlock">
+        <Setter Property="Foreground" Value="#FFFFFF" />
+    </Style>
+
+    <Style Selector="Border.toolbar TextBlock.muted">
+        <Setter Property="Foreground" Value="#D6E4F7" />
+    </Style>
+
+    <Style Selector="Border.toolbar TextBlock.accent">
+        <Setter Property="Foreground" Value="#FFFFFF" />
     </Style>
 
     <!--  按钮  -->
@@ -179,14 +199,14 @@
         <Setter Property="Opacity" Value="0.55" />
     </Style>
 
-    <!--  主操作按钮（XP 的「默认按钮」= 深蓝渐变 + 深色描边）  -->
+    <!--  XP 的「默认按钮」：深蓝 2px 描边 + 蓝色渐变  -->
     <Style Selector="Button.accent">
         <Setter Property="Background" Value="{StaticResource FsAccentButtonBrush}" />
         <Setter Property="BorderBrush" Value="#003C74" />
         <Setter Property="BorderThickness" Value="2" />
         <Setter Property="Foreground" Value="{StaticResource FsAccentTextBrush}" />
         <Setter Property="FontWeight" Value="Bold" />
-        <Setter Property="Padding" Value="11,3" />
+        <Setter Property="Padding" Value="10,3" />
     </Style>
 
     <Style Selector="Button.accent /template/ ContentPresenter">
@@ -198,7 +218,7 @@
         <Setter Property="Background" Value="{StaticResource FsAccentButtonHoverBrush}" />
     </Style>
 
-    <!--  图标按钮 / 文字按钮  -->
+    <!--  图标按钮  -->
     <Style Selector="Button.icon">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
@@ -214,6 +234,15 @@
 
     <Style Selector="Button.icon:pointerover /template/ ContentPresenter">
         <Setter Property="Background" Value="{StaticResource FsRowHoverBrush}" />
+    </Style>
+
+    <!--  工具栏内的图标按钮：hover 用半透明白，避免在蓝底上出现浅蓝方块  -->
+    <Style Selector="Border.toolbar Button.icon:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="#40FFFFFF" />
+    </Style>
+
+    <Style Selector="Border.toolbar Button.icon TextBlock.iconGlyph">
+        <Setter Property="Foreground" Value="#FFFFFF" />
     </Style>
 
     <Style Selector="Button.danger">
@@ -292,7 +321,7 @@
         <Setter Property="Foreground" Value="#DCE6F7" />
     </Style>
 
-    <!--  进度条  -->
+    <!--  进度条（XP 绿色）  -->
     <Style Selector="ProgressBar">
         <Setter Property="Height" Value="12" />
         <Setter Property="Background" Value="#FFFFFF" />
