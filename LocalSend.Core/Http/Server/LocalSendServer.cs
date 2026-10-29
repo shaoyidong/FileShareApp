@@ -1,3 +1,9 @@
+using LocalSend.Core;
+using LocalSend.Core.Crypto;
+using System.Net.Security;
+using System.Security.Authentication;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Globalization;
 using System.IO;
 using System.Net;
@@ -76,7 +82,7 @@ public sealed class LocalSendServer : IDisposable
         // TcpListener 绑定 0.0.0.0，无需管理员权限，局域网内其他设备可直接访问
         _listener = new TcpListener(IPAddress.Any, _port);
         _listener.Start();
-        Console.WriteLine($"    [服务器] 监听 0.0.0.0:{_port}（局域网可访问）");
+        LsLog.Trace($"    [服务器] 监听 0.0.0.0:{_port}（局域网可访问）");
 
         try
         {
@@ -127,6 +133,46 @@ public sealed class LocalSendServer : IDisposable
     // HTTP 请求解析与响应写入（替代 HttpListener）
     // -----------------------------------------------------------------------
 
+    private SslStreamCertificateContext? _serverCertificateContext;
+    private X509Certificate2? _serverCertificate;
+
+    /// <summary>把 TCP 流包装成要求客户端证书的 TLS 流（mTLS）。</summary>
+    private async Task<Stream?> CreateTlsStreamAsync(Stream inner, CancellationToken ct)
+    {
+        try
+        {
+            if (_tls is null)
+            {
+                return inner;
+            }
+
+            if (_serverCertificateContext is null)
+            {
+                var (certificate, context) = TlsCertificateLoader.CreateServerContext(_tls.Cert, _tls.PrivateKey);
+                _serverCertificate = certificate;
+                _serverCertificateContext = context;
+            }
+
+            var ssl = new SslStream(inner, leaveInnerStreamOpen: false, userCertificateValidationCallback: static (_, _, _, _) => true);
+            await ssl.AuthenticateAsServerAsync(
+                new SslServerAuthenticationOptions
+                {
+                    ServerCertificateContext = _serverCertificateContext,
+                    ClientCertificateRequired = true,
+                    EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
+                    CertificateRevocationCheckMode = X509RevocationMode.NoCheck
+                },
+                ct).ConfigureAwait(false);
+
+            return ssl;
+        }
+        catch (Exception ex)
+        {
+            LsLog.Trace($"    [服务器] TLS 握手失败: {ex.Message}");
+            return null;
+        }
+    }
+
     /// <summary>
     /// 处理单个 TCP 连接：解析 HTTP 请求 → 路由分发 → 写 HTTP 响应。
     /// </summary>
@@ -135,7 +181,23 @@ public sealed class LocalSendServer : IDisposable
         try
         {
             client.NoDelay = true;
-            using var stream = client.GetStream();
+
+            Stream stream = client.GetStream();
+
+            // TLS（mTLS）：官方 LocalSend 默认 HTTPS，服务端需要证书并要求客户端证书
+            if (_tls is not null)
+            {
+                var ssl = await CreateTlsStreamAsync(stream, ct).ConfigureAwait(false);
+                if (ssl is null)
+                {
+                    client.Dispose();
+                    return;
+                }
+
+                stream = ssl;
+            }
+
+            await using var streamScope = stream;
 
             // 1. 读取 HTTP 请求头（直到 \r\n\r\n）
             var (headerData, headerEnd, extraBodyBytes) = await ReadHeadersAsync(stream, ct);

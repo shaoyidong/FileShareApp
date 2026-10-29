@@ -3,60 +3,61 @@ using FileShare.Core.Models.Entities;
 using System;
 using System.Globalization;
 using System.IO;
+using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using FileShare.Desktop.Assets.Fonts;
 
 namespace FileShare.Desktop.Converters
 {
+    /// <summary>
+    /// 历史记录文件类型 → 缩略图 / 图标 / 显隐。
+    /// <para>
+    /// 必须按用途区分，否则把图标字形字符串绑到 <c>Image.Source</c> 会报
+    /// “Could not convert ... (System.String) to Avalonia.Media.IImage”：
+    /// <list type="bullet">
+    /// <item><c>isImage</c> / <c>isIcon</c> → bool，用于 IsVisible</item>
+    /// <item><c>image</c> → IImage 或 null，只给 Image.Source</item>
+    /// <item><c>icon</c> → string，只给 TextBlock.Text</item>
+    /// </list>
+    /// </para>
+    /// </summary>
     public class FileTypeToImageSourceConverter : Avalonia.Data.Converters.IValueConverter
     {
+        private static readonly string FallbackIcon = FluentUI.document_48_regular;
+
         public static readonly FileTypeToImageSourceConverter Instance = new();
 
-        public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+        public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
         {
-            string param = parameter as string ?? string.Empty;
+            var param = parameter as string ?? string.Empty;
 
             if (value is ReceiveHistoryEntity history)
             {
-                string fullPath = Path.Combine(history.SavePath, history.FileName);
-                string extension = Path.GetExtension(history.FileName).ToLower();
-                bool isImageFile = FileTypeHelper.IsImageFile(extension);
-                bool fileExists = File.Exists(fullPath);
+                var fullPath = !string.IsNullOrEmpty(history.FilePath)
+                    ? history.FilePath!
+                    : Path.Combine(history.SavePath, history.FileName);
 
-                switch (param)
+                var extension = Path.GetExtension(history.FileName).ToLowerInvariant();
+                var isImageFile = FileTypeHelper.IsImageFile(extension);
+                var fileExists = !string.IsNullOrEmpty(fullPath) && File.Exists(fullPath);
+
+                return param switch
                 {
-                    case "isImage":
-                        return isImageFile && fileExists;
-                    case "isIcon":
-                        return !isImageFile || !fileExists;
-                    default:
-                        if (isImageFile && fileExists)
-                        {
-                            try
-                            {
-                                return new Bitmap(fullPath);
-                            }
-                            catch
-                            {
-                                return GetFileIconKey(extension);
-                            }
-                        }
-                        else
-                        {
-                            return GetFileIconKey(extension);
-                        }
-                }
+                    "isImage" => isImageFile && fileExists,
+                    "isIcon" => !isImageFile || !fileExists,
+                    "icon" => GetFileIcon(extension),
+                    "image" => TryLoadBitmap(isImageFile, fileExists, fullPath),
+                    _ => null,
+                };
             }
 
-            switch (param)
+            return param switch
             {
-                case "isImage":
-                    return false;
-                case "isIcon":
-                    return true;
-                default:
-                    return "document_24_regular";
-            }
+                "isImage" => false,
+                "isIcon" => true,
+                "icon" => FallbackIcon,
+                _ => null,
+            };
         }
 
         public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
@@ -64,32 +65,54 @@ namespace FileShare.Desktop.Converters
             throw new NotImplementedException();
         }
 
-        private string GetFileIconKey(string extension)
+        /// <summary>只有真正是图片且文件存在时才返回 Bitmap，其余一律 null（Image.Source 不接受字符串）。</summary>
+        private static IImage? TryLoadBitmap(bool isImageFile, bool fileExists, string fullPath)
+        {
+            if (!isImageFile || !fileExists)
+            {
+                return null;
+            }
+
+            try
+            {
+                using var stream = File.OpenRead(fullPath);
+                return new Bitmap(stream);
+            }
+            catch (Exception)
+            {
+                // 文件被占用/损坏时退回图标显示
+                return null;
+            }
+        }
+
+        private static string GetFileIcon(string extension)
         {
             if (FileTypeHelper.IsImageFile(extension))
             {
                 return FluentUI.image_48_regular;
             }
-            else if (FileTypeHelper.IsVideoFile(extension))
+
+            if (FileTypeHelper.IsVideoFile(extension))
             {
                 return FluentUI.video_48_regular;
             }
-            else if (FileTypeHelper.IsAudioFile(extension))
+
+            if (FileTypeHelper.IsAudioFile(extension))
             {
                 return FluentUI.music_note_1_24_regular;
             }
-            else if (FileTypeHelper.IsDocumentFile(extension))
+
+            if (FileTypeHelper.IsDocumentFile(extension))
             {
                 return FluentUI.document_48_regular;
             }
-            else if (FileTypeHelper.IsCompressedFile(extension))
+
+            if (FileTypeHelper.IsCompressedFile(extension))
             {
                 return FluentUI.folder_zip_24_regular;
             }
-            else
-            {
-                return FluentUI.document_48_regular;
-            }
+
+            return FluentUI.document_48_regular;
         }
     }
 }

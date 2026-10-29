@@ -113,7 +113,7 @@
                                                                 Height="40"
                                                                 IsVisible="{Binding, Converter={x:Static converters:FileTypeToImageSourceConverter.Instance},
                                                                                      ConverterParameter=isImage}"
-                                                                Source="{Binding, Converter={x:Static converters:FileTypeToImageSourceConverter.Instance}}"
+                                                                Source="{Binding, Converter={x:Static converters:FileTypeToImageSourceConverter.Instance}, ConverterParameter=image}"
                                                                 Stretch="Uniform" />
                                                             <TextBlock
                                                                 HorizontalAlignment="Center"
@@ -123,7 +123,7 @@
                                                                 Foreground="#4A7EBB"
                                                                 IsVisible="{Binding, Converter={x:Static converters:FileTypeToImageSourceConverter.Instance},
                                                                                      ConverterParameter=isIcon}"
-                                                                Text="{Binding, Converter={x:Static converters:FileTypeToImageSourceConverter.Instance}}" />
+                                                                Text="{Binding, Converter={x:Static converters:FileTypeToImageSourceConverter.Instance}, ConverterParameter=icon}" />
                                                         </Grid>
                                                     </DataTemplate>
                                                 </ContentControl.ContentTemplate>
@@ -133,9 +133,9 @@
                                         <!--  文件信息  -->
                                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                             <StackPanel Orientation="Horizontal" Spacing="6">
-                                                <TextBlock Classes="muted" Text="{Binding DirectionText}" />
-                                                <TextBlock Classes="accent" Text="{Binding StatusText}" IsVisible="{Binding IsSuccess}" />
-                                                <TextBlock Classes="danger" Text="{Binding StatusText}" IsVisible="{Binding !IsSuccess}" />
+                                                <TextBlock Classes="muted" Text="{Binding Direction, Converter={x:Static converters:TransferEnumToTextConverter.Instance}, ConverterParameter=direction}" />
+                                                <TextBlock Classes="accent" Text="{Binding Status, Converter={x:Static converters:TransferEnumToTextConverter.Instance}}" IsVisible="{Binding IsSuccess}" />
+                                                <TextBlock Classes="danger" Text="{Binding Status, Converter={x:Static converters:TransferEnumToTextConverter.Instance}}" IsVisible="{Binding !IsSuccess}" />
                                             </StackPanel>
                                             <TextBlock
                                                 FontWeight="Bold"

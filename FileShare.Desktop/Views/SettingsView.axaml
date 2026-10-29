@@ -259,6 +259,47 @@
                     </StackPanel>
                 </Border>
 
+                <!--  LocalSend 互通  -->
+                <Border Padding="12" Classes="panel">
+                    <StackPanel Spacing="8">
+                        <TextBlock Classes="h1" Text="{loc:Tr 'LocalSend 互通（官方客户端可直接发送到本机）'}" />
+
+                        <CheckBox
+                            Content="{loc:Tr '启用 LocalSend 接收服务（端口 53317）'}"
+                            IsChecked="{Binding LocalSendEnabled}" />
+
+                        <Grid ColumnDefinitions="130,*">
+                            <TextBlock Classes="label" Text="{loc:Tr '端口'}" />
+                            <TextBox Grid.Column="1"
+                                Width="90"
+                                HorizontalAlignment="Left"
+                                Text="{Binding LocalSendPortText}" />
+                        </Grid>
+
+                        <Grid ColumnDefinitions="130,*">
+                            <TextBlock Classes="label" Text="{loc:Tr 'PIN（可选）'}" />
+                            <TextBox Grid.Column="1"
+                                Width="120"
+                                HorizontalAlignment="Left"
+                                Text="{Binding LocalSendPinText}" />
+                        </Grid>
+
+                        <Grid ColumnDefinitions="130,*">
+                            <TextBlock Classes="label" Text="{loc:Tr '本机端点'}" />
+                            <TextBlock
+                                Grid.Column="1"
+                                VerticalAlignment="Center"
+                                Classes="accent"
+                                Text="{Binding LocalSendEndpointText}" />
+                        </Grid>
+
+                        <TextBlock
+                            Classes="muted"
+                            Text="{loc:Tr '启用后手机上的 LocalSend 应能看到本机；若看不到，可在官方客户端里手动填写上面的地址。'}"
+                            TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+
                 <!--  网页分享  -->
                 <Border Padding="12" Classes="panel">
                     <StackPanel Spacing="8">
@@ -270,7 +311,7 @@
 
                         <Grid ColumnDefinitions="130,*">
                             <TextBlock Classes="label" Text="{loc:Tr '端口'}" />
-                            <TextBox
+                            <TextBox Grid.Column="1"
                                 Width="90"
                                 HorizontalAlignment="Left"
                                 Text="{Binding WebSharePortText}" />
@@ -335,7 +376,7 @@
                         </Grid>
                         <TextBlock
                             Classes="muted"
-                            Text="{loc:Tr '切换后立即生效，选择会随设置保存。'}"
+                            Text="{loc:Tr '保存后立即生效，界面会按新语言刷新。'}"
                             TextWrapping="Wrap" />
                         <RadioButton
                             GroupName="SkinGroup"

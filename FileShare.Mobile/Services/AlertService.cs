@@ -24,6 +24,17 @@ namespace FileShare.Mobile.Services
             return await mainPage.DisplayAlertAsync(title, message, accept, cancel);
         }
 
+        public async Task<string?> DisplayPromptAsync(string title, string message, string accept = "OK", string cancel = "取消", string? placeholder = null, int maxLength = -1, Keyboard? keyboard = null)
+        {
+            var mainPage = Application.Current?.Windows?.FirstOrDefault()?.Page;
+            if (mainPage == null)
+            {
+                return null;
+            }
+
+            return await mainPage.DisplayPromptAsync(title, message, accept, cancel, placeholder, maxLength, keyboard ?? Keyboard.Default);
+        }
+
         public async Task DisplayToastAsync(string message,double textSize = 14)
         {
             var toast = Toast.Make(message,textSize:textSize);

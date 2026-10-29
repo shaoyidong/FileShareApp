@@ -1,4 +1,5 @@
 using Android.App;
+using Android.Content;
 using Android.Content.PM;
 using Android.OS;
 using AndroidX.Core.App;
@@ -71,6 +72,16 @@ public class MainActivity : MauiAppCompatActivity
                     NOTIFICATION_PERMISSION_REQUEST_CODE
                 );
             }
+        }
+    }
+
+    protected override void OnActivityResult(int requestCode, Result resultCode, Intent? data)
+    {
+        base.OnActivityResult(requestCode, resultCode, data);
+
+        if (requestCode == SafFolderPicker.RequestCode)
+        {
+            SafFolderPicker.HandleResult(resultCode, data);
         }
     }
 

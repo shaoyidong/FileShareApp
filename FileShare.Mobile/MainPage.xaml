@@ -347,11 +347,12 @@
                     Grid.Row="3"
                     Margin="0,16,0,0"
                     ColumnDefinitions="*,*"
-                    ColumnSpacing="10">
+                    ColumnSpacing="10"
+                    RowDefinitions="Auto,Auto,Auto"
+                    RowSpacing="10">
                     <Button
                         Grid.Column="0"
-                        Grid.ColumnSpan="{OnPlatform Android=1,
-                                                     Default=2}"
+                        Grid.ColumnSpan="1"
                         Command="{Binding SendFileCommand}"
                         HorizontalOptions="Fill"
                         IsEnabled="{Binding IsDeviceSelected}"
@@ -359,6 +360,45 @@
                         Text="发送文件" />
                     <Button
                         Grid.Column="1"
+                        Command="{Binding SendMultipleFilesCommand}"
+                        HorizontalOptions="Fill"
+                        IsEnabled="{Binding IsDeviceSelected}"
+                        Style="{StaticResource SecondaryButton}"
+                        Text="多选文件" />
+                    <Button
+                        Grid.Row="1"
+                        Grid.Column="0"
+                        Command="{Binding SendFolderCommand}"
+                        HorizontalOptions="Fill"
+                        IsEnabled="{Binding IsDeviceSelected}"
+                        Style="{StaticResource SecondaryButton}"
+                        Text="发送文件夹" />
+                    <Button
+                        Grid.Row="1"
+                        Grid.Column="1"
+                        Command="{Binding ChooseSaveDirectoryCommand}"
+                        HorizontalOptions="Fill"
+                        Style="{StaticResource SecondaryButton}"
+                        Text="保存位置" />
+                    <Button
+                        Grid.Row="2"
+                        Grid.Column="0"
+                        Command="{Binding SendTextCommand}"
+                        HorizontalOptions="Fill"
+                        IsEnabled="{Binding IsDeviceSelected}"
+                        Style="{StaticResource SecondaryButton}"
+                        Text="发送文本" />
+                    <Button
+                        Grid.Row="2"
+                        Grid.Column="1"
+                        Command="{Binding ToggleSettingsCommand}"
+                        HorizontalOptions="Fill"
+                        Style="{StaticResource SecondaryButton}"
+                        Text="设置" />
+                    <Button
+                        Grid.Row="3"
+                        Grid.Column="0"
+                        Grid.ColumnSpan="2"
                         Command="{Binding NavigateToAppListCommand}"
                         HorizontalOptions="Fill"
                         IsEnabled="{Binding IsDeviceSelected}"
@@ -494,6 +534,68 @@
                     </CollectionView.EmptyView>
                 </CollectionView>
             </Grid>
+        </Border>
+        <!--  设置  -->
+        <Border
+            Grid.Row="3"
+            Margin="16,0,16,13"
+            Padding="16"
+            IsVisible="{Binding IsSettingsVisible}"
+            StrokeShape="RoundRectangle 12"
+            StrokeThickness="0"
+            BackgroundColor="{AppThemeBinding Light={StaticResource White},
+                                              Dark={StaticResource OffBlack}}">
+            <Border.Shadow>
+                <Shadow
+                    Brush="{AppThemeBinding Light={StaticResource Gray200},
+                                            Dark={StaticResource Gray600}}"
+                    Offset="0,2" />
+            </Border.Shadow>
+            <VerticalStackLayout Spacing="10">
+                <Label Style="{StaticResource TitleLabel}" Text="设置" />
+
+                <Grid ColumnDefinitions="90,*">
+                    <Label VerticalOptions="Center" Text="设备名称" />
+                    <Entry
+                        Grid.Column="1"
+                        Placeholder="其他设备看到的名字"
+                        Text="{Binding DeviceNameText}" />
+                </Grid>
+
+                <Grid ColumnDefinitions="90,*">
+                    <Label VerticalOptions="Center" Text="加密传输" />
+                    <Switch
+                        Grid.Column="1"
+                        HorizontalOptions="Start"
+                        IsToggled="{Binding TlsEnabledSetting}" />
+                </Grid>
+
+                <Grid ColumnDefinitions="90,*,Auto" ColumnSpacing="8">
+                    <Label VerticalOptions="Center" Text="保存位置" />
+                    <Label
+                        Grid.Column="1"
+                        FontSize="13"
+                        LineBreakMode="TailTruncation"
+                        Text="{Binding SaveDirectoryText}"
+                        VerticalOptions="Center" />
+                    <Button
+                        Grid.Column="2"
+                        Command="{Binding ChooseSaveDirectoryCommand}"
+                        Style="{StaticResource SecondaryButton}"
+                        Text="选择" />
+                </Grid>
+
+                <Button
+                    Command="{Binding SaveSettingsCommand}"
+                    Style="{StaticResource PrimaryButton}"
+                    Text="保存设置" />
+
+                <Label
+                    FontSize="12"
+                    Text="{Binding SettingsStatus}"
+                    TextColor="{AppThemeBinding Light={StaticResource Gray500},
+                                                Dark={StaticResource Gray400}}" />
+            </VerticalStackLayout>
         </Border>
     </Grid>
 </ContentPage>

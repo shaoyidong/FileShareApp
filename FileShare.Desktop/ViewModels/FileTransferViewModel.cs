@@ -165,6 +165,13 @@ namespace FileShare.Desktop.ViewModels
         // 只有在接收且处于 Pending 时显示接受/拒绝
         public bool ShowAcceptReject => Direction == TransferDirection.Receive && Status == TransferStatus.Pending;
 
+        /// <summary>语言切换后重新求值依赖 Loc 的显示文本。</summary>
+        public void RefreshLocalization()
+        {
+            OnPropertyChanged(nameof(StatusText));
+            OnPropertyChanged(nameof(DirectionText));
+            OnPropertyChanged(nameof(CanRetry));
+        }
         // 格式化文件大小的辅助方法
         private string FormatFileSize(long size)
         {

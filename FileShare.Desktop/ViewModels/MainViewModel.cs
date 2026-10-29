@@ -18,6 +18,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Input;
 using FileShare.Desktop.Localization;
+using LocalSend.Core.Http.DtoV2;
 
 namespace FileShare.Desktop.ViewModels
 {
@@ -32,6 +33,8 @@ namespace FileShare.Desktop.ViewModels
         private readonly IThemeService _themeService;
         private readonly IToastService? _toastService;
         private readonly ITrayService? _trayService;
+        private readonly ILocalSendInteropHost? _localSendHost;
+        private readonly Dictionary<string, LocalSendPeer> _localSendPeers = new();
         private readonly SynchronizationContext _uiContext;
         private readonly IClassicDesktopStyleApplicationLifetime? _appLifetime;
         private readonly ILogger<MainViewModel> _logger;
@@ -174,7 +177,8 @@ namespace FileShare.Desktop.ViewModels
             IAppSettingsService? settingsService = null,
             IThemeService? themeService = null,
             IToastService? toastService = null,
-            ITrayService? trayService = null)
+            ITrayService? trayService = null,
+        ILocalSendInteropHost? localSendHost = null)
         {
             _serviceManager = serviceManager ?? throw new ArgumentNullException(nameof(serviceManager));
             _dialogService = dialogService ?? throw new ArgumentNullException(nameof(dialogService));
@@ -187,6 +191,7 @@ namespace FileShare.Desktop.ViewModels
             _themeService = themeService ?? new NoOpThemeService();
             _toastService = toastService;
             _trayService = trayService;
+            _localSendHost = localSendHost;
 
             Devices = new ObservableCollection<DeviceItemViewModel>();
             TransferTasks = new ObservableCollection<FileTransferViewModel>();
@@ -194,6 +199,15 @@ namespace FileShare.Desktop.ViewModels
             ReceivedTransferTasks = new ObservableCollection<FileTransferViewModel>();
             TransferTasks.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasTransferTasks));
             Devices.CollectionChanged += (_, _) => OnPropertyChanged(nameof(DeviceCountText));
+            if (_localSendHost is not null)
+            {
+                _localSendHost.PeerDiscovered += OnLocalSendPeerDiscovered;
+                foreach (var peer in _localSendHost.Peers)
+                {
+                    RegisterLocalSendPeer(peer);
+                }
+            }
+
             SendQueue.CollectionChanged += (_, _) =>
             {
                 OnPropertyChanged(nameof(HasQueue));
@@ -216,6 +230,7 @@ namespace FileShare.Desktop.ViewModels
             _serviceManager.OnTransferProgressUpdated += OnTransferProgressUpdated;
             _serviceManager.OnTransferCompleted += OnTransferCompleted;
             _settingsService.Changed += OnSettingsChanged;
+            Loc.LanguageChanged += OnLanguageChanged;
             _serviceManager.OnFirstUseTrusted += OnFirstUseTrusted;
             _serviceManager.OnFingerprintMismatch += OnFingerprintMismatch;
 
@@ -513,7 +528,7 @@ namespace FileShare.Desktop.ViewModels
                     bool success;
                     try
                     {
-                        success = await _serviceManager.SendSingleAsync(item.Path, target, item.RelativePath, queue);
+                        success = await SendSingleToTargetAsync(item.Path, item.RelativePath, queue, null);
                     }
                     catch (OperationCanceledException)
                     {
@@ -666,13 +681,56 @@ namespace FileShare.Desktop.ViewModels
             try
             {
                 StatusMessage = Loc.F("正在发送文本（{0} 字符）...", text.Length);
-                var success = await _serviceManager.SendTextAsync(text, target);
+                var success = SelectedLocalSendPeer is { } localSendPeer && _localSendHost is not null
+                    ? await SendTextToLocalSendAsync(localSendPeer, text)
+                    : await _serviceManager.SendTextAsync(text, target);
                 StatusMessage = success ? Loc.Get("文本已发送") : Loc.Get("文本发送失败");
             }
             catch (Exception ex)
             {
                 StatusMessage = Loc.F("发送文本失败: {0}", ex.Message);
                 _logger.LogError(ex, "发送文本失败");
+            }
+        }
+
+        /// <summary>
+        /// LocalSend 只支持文件传输：把文本写成临时文件再发（与自有协议的 .txt 行为一致）。
+        /// </summary>
+        private async Task<bool> SendTextToLocalSendAsync(LocalSendPeer peer, string text)
+        {
+            var tempDirectory = Path.Combine(Path.GetTempPath(), "FileShare.Text");
+            Directory.CreateDirectory(tempDirectory);
+            var fileName = $"文本_{DateTime.Now:yyyyMMdd_HHmmss}.txt";
+            var filePath = Path.Combine(tempDirectory, fileName);
+
+            try
+            {
+                await File.WriteAllTextAsync(filePath, text, System.Text.Encoding.UTF8);
+
+                var result = await _localSendHost!
+                    .SendFileAsync(peer, filePath, fileName, null)
+                    .ConfigureAwait(true);
+
+                if (!result.Success && !string.IsNullOrEmpty(result.Error))
+                {
+                    StatusMessage = Loc.F("发送失败: {0}", result.Error!);
+                }
+
+                return result.Success;
+            }
+            finally
+            {
+                try
+                {
+                    if (File.Exists(filePath))
+                    {
+                        File.Delete(filePath);
+                    }
+                }
+                catch (Exception)
+                {
+                    // 临时文件清理失败不影响结果
+                }
             }
         }
 
@@ -758,6 +816,17 @@ namespace FileShare.Desktop.ViewModels
                 var device = await _serviceManager.ConnectByAddressAsync(input);
                 if (device is null)
                 {
+                    // 兜底：对端可能是官方 LocalSend 客户端（HTTP v2），用 /info 探测
+                    var probed = await TryProbeLocalSendAsync(input).ConfigureAwait(true);
+                    if (probed is not null)
+                    {
+                        RegisterLocalSendPeer(probed);
+                        SelectedItem = Devices.FirstOrDefault(item => item.DeviceId == probed.DeviceId);
+                        StatusMessage = Loc.F("已连接 {0} ({1}:{2})", probed.Alias, probed.IpAddress, probed.Port);
+                        ManualAddress = string.Empty;
+                        return;
+                    }
+
                     StatusMessage = Loc.F("无法连接 {0}，请确认对端已启动、端口开放且网络可达", input);
                     _logger.LogWarning("手动连接失败: {Address}", input);
                     return;
@@ -776,6 +845,37 @@ namespace FileShare.Desktop.ViewModels
             finally
             {
                 IsConnecting = false;
+            }
+        }
+
+        /// <summary>
+        /// 探测目标是否为 LocalSend 设备（输入可带端口，默认 53317）。
+        /// </summary>
+        private async Task<LocalSendPeer?> TryProbeLocalSendAsync(string input)
+        {
+            if (_localSendHost is null)
+            {
+                return null;
+            }
+
+            var port = 53317;
+            var address = input.Trim();
+
+            var colon = address.LastIndexOf(':');
+            if (colon > 0 && int.TryParse(address[(colon + 1)..], out var explicitPort))
+            {
+                address = address[..colon];
+                port = explicitPort;
+            }
+
+            try
+            {
+                return await _localSendHost.ProbePeerAsync(address, port).ConfigureAwait(true);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "探测 LocalSend 设备失败: {Address}:{Port}", address, port);
+                return null;
             }
         }
 
@@ -1018,6 +1118,30 @@ namespace FileShare.Desktop.ViewModels
                 return;
             }
 
+            if (_localSendPeers.TryGetValue(model.TargetDeviceId, out var localSendPeer) && _localSendHost is not null)
+            {
+                try
+                {
+                    model.Status = TransferStatus.Pending;
+                    StatusMessage = Loc.F("准备发送文件: {0}", model.FileName);
+
+                    var localResult = await _localSendHost.SendFileAsync(localSendPeer, model.SourcePath, null, null);
+                    if (!localResult.Success)
+                    {
+                        model.Status = TransferStatus.Failed;
+                        StatusMessage = Loc.F("发送失败: {0}", localResult.Error ?? string.Empty);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    model.Status = TransferStatus.Failed;
+                    StatusMessage = Loc.F("发送文件失败: {0}", ex.Message);
+                    _logger.LogError(ex, "重试发送（LocalSend）失败: {Path}", model.SourcePath);
+                }
+
+                return;
+            }
+
             var target = Devices.FirstOrDefault(item => item.DeviceId == model.TargetDeviceId)?.Device;
             target ??= _serviceManager.GetLocalDeviceInfo() is { } local && local.DeviceId == model.TargetDeviceId
                 ? local
@@ -1188,6 +1312,115 @@ namespace FileShare.Desktop.ViewModels
             {
                 _logger.LogWarning(ex, "显示接收确认窗口失败，回退为内联确认");
             }
+        }
+
+        private void OnLocalSendPeerDiscovered(LocalSendPeer peer)
+        {
+            RunOnUiThread(() => RegisterLocalSendPeer(peer));
+        }
+
+        /// <summary>把 LocalSend 设备并入设备列表（已存在则忽略）。</summary>
+        private void RegisterLocalSendPeer(LocalSendPeer peer)
+        {
+            if (!_localSendPeers.TryAdd(peer.DeviceId, peer))
+            {
+                return;
+            }
+
+            if (Devices.Any(item => item.DeviceId == peer.DeviceId))
+            {
+                return;
+            }
+
+            var device = new DeviceInfo
+            {
+                DeviceId = peer.DeviceId,
+                DeviceName = peer.Alias,
+                IpAddress = peer.IpAddress,
+                Port = peer.Port,
+                DeviceType = peer.DeviceType switch
+                {
+                    LocalSend.Core.Model.DeviceType.Mobile => DeviceType.Mobile,
+                    LocalSend.Core.Model.DeviceType.Web => DeviceType.Desktop,
+                    _ => DeviceType.Desktop
+                },
+                SupportsTls = peer.Protocol == ProtocolTypeV2.Https
+            };
+
+            Devices.Add(new DeviceItemViewModel(device, isFavorite: false, isLocalSend: true));
+            _logger.LogInformation("已把 LocalSend 设备加入列表: {Name} ({Ip}:{Port}, 类型={Type})", peer.Alias, peer.IpAddress, peer.Port, device.DeviceType);
+        }
+
+        /// <summary>当前选中的设备是否是 LocalSend 设备。</summary>
+        private LocalSendPeer? SelectedLocalSendPeer =>
+            SelectedItem is { IsLocalSend: true } item && _localSendPeers.TryGetValue(item.DeviceId, out var peer)
+                ? peer
+                : null;
+
+        /// <summary>按设备类型选择发送实现（LocalSend 走 HTTP，自有协议走 TCP）。</summary>
+        private async Task<bool> SendSingleToTargetAsync(
+            string filePath,
+            string? relativePath,
+            TransferQueueControl? queue,
+            Action<ulong, ulong>? progress)
+        {
+            var peer = SelectedLocalSendPeer;
+            if (peer is not null && _localSendHost is not null)
+            {
+                var result = await _localSendHost
+                    .SendFileAsync(peer, filePath, relativePath, progress, queue?.Token ?? CancellationToken.None)
+                    .ConfigureAwait(true);
+
+                if (!result.Success && !string.IsNullOrEmpty(result.Error))
+                {
+                    StatusMessage = Loc.F("发送失败: {0}", result.Error!);
+                }
+
+                return result.Success;
+            }
+
+            var target = SelectedDevice;
+            if (target is null)
+            {
+                return false;
+            }
+
+            return await _serviceManager.SendSingleAsync(filePath, target, relativePath, queue).ConfigureAwait(true);
+        }
+
+        /// <summary>
+        /// 语言切换后立即生效：重算依赖 Loc 的属性，并重建当前视图（{loc:Tr} 在视图加载时求值）。
+        /// </summary>
+        private void OnLanguageChanged()
+        {
+            RunOnUiThread(() =>
+            {
+                foreach (var device in Devices)
+                {
+                    device.RefreshDisplay();
+                }
+
+                foreach (var task in TransferTasks)
+                {
+                    task.RefreshLocalization();
+                }
+
+                OnPropertyChanged(nameof(WindowTitle));
+                OnPropertyChanged(nameof(DeviceCountText));
+                OnPropertyChanged(nameof(QueueCountText));
+
+                if (LocalDevice is not null)
+                {
+                    LocalDeviceSummary = Loc.F("本机：{0} · {1}:{2}", LocalDevice.DeviceName, LocalDevice.IpAddress, LocalDevice.Port);
+                }
+
+                // 清空再设回，强制 ViewLocator 重新创建视图，从而重新求值所有 {loc:Tr}
+                var previous = CurrentView;
+                CurrentView = null;
+                CurrentView = previous is SettingsViewModel ? this : previous ?? this;
+
+                StatusMessage = Loc.Get("语言已切换");
+            });
         }
 
         /// <summary>
@@ -1368,6 +1601,11 @@ namespace FileShare.Desktop.ViewModels
             _serviceManager.OnTransferProgressUpdated -= OnTransferProgressUpdated;
             _serviceManager.OnTransferCompleted -= OnTransferCompleted;
             _settingsService.Changed -= OnSettingsChanged;
+            Loc.LanguageChanged -= OnLanguageChanged;
+            if (_localSendHost is not null)
+            {
+                _localSendHost.PeerDiscovered -= OnLocalSendPeerDiscovered;
+            }
             _serviceManager.OnFirstUseTrusted -= OnFirstUseTrusted;
             _serviceManager.OnFingerprintMismatch -= OnFingerprintMismatch;
             _serviceManager.Dispose();

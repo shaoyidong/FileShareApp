@@ -1,3 +1,4 @@
+using LocalSend.Core;
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.NetworkInformation;
@@ -75,7 +76,7 @@ public sealed class HttpScanDiscoveryService
     public async Task<List<MulticastPeerInfo>> ScanAllSubnetsAsync(CancellationToken ct = default)
     {
         var localIps = GetLocalIPv4Addresses();
-        Console.WriteLine($"    [HTTP扫描] 本机 IPv4 接口: {string.Join(", ", localIps)}");
+        LsLog.Trace($"    [HTTP扫描] 本机 IPv4 接口: {string.Join(", ", localIps)}");
 
         // 用指纹去重（同一设备可能从多个子网被发现）
         var allFound = new ConcurrentDictionary<string, MulticastPeerInfo>(StringComparer.OrdinalIgnoreCase);
@@ -99,7 +100,7 @@ public sealed class HttpScanDiscoveryService
         var subnetBase = GetSubnetBase(localIp);
         if (subnetBase == null)
         {
-            Console.WriteLine($"    [HTTP扫描] 无法计算 {localIp} 的 /24 子网，跳过");
+            LsLog.Trace($"    [HTTP扫描] 无法计算 {localIp} 的 /24 子网，跳过");
             return new List<MulticastPeerInfo>();
         }
 
@@ -114,7 +115,7 @@ public sealed class HttpScanDiscoveryService
             if (ip != localIpStr) targets.Add(ip);
         }
 
-        Console.WriteLine($"    [HTTP扫描] 扫描 {subnetBase}/24（{targets.Count} 个 IP，并发 {_concurrency}，单请求超时 {_perRequestTimeout.TotalMilliseconds:F0}ms，协议={_protocol.AsStr()})...");
+        LsLog.Trace($"    [HTTP扫描] 扫描 {subnetBase}/24（{targets.Count} 个 IP，并发 {_concurrency}，单请求超时 {_perRequestTimeout.TotalMilliseconds:F0}ms，协议={_protocol.AsStr()})...");
 
         var found = new ConcurrentBag<MulticastPeerInfo>();
         using var sem = new SemaphoreSlim(_concurrency, _concurrency);
@@ -130,7 +131,7 @@ public sealed class HttpScanDiscoveryService
                 {
                     found.Add(device);
                     DeviceDiscovered?.Invoke(this, device);
-                    Console.WriteLine($"    [HTTP扫描]   ✓ 发现 {device}");
+                    LsLog.Trace($"    [HTTP扫描]   ✓ 发现 {device}");
                 }
             }
             catch
@@ -144,7 +145,7 @@ public sealed class HttpScanDiscoveryService
         }).ToList();
 
         await Task.WhenAll(tasks).ConfigureAwait(false);
-        Console.WriteLine($"    [HTTP扫描] {subnetBase}/24 扫描完成，本子网发现 {found.Count} 台设备");
+        LsLog.Trace($"    [HTTP扫描] {subnetBase}/24 扫描完成，本子网发现 {found.Count} 台设备");
         return found.ToList();
     }
 

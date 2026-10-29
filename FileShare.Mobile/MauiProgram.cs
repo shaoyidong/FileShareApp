@@ -71,6 +71,12 @@ public static class MauiProgram
         builder.Services.AddSingleton<IPermissionService, DefaultPermissionService>();
         builder.Services.AddSingleton<IFileTransferForegroundService, DefaultFileTransferForegroundService>();
 #endif
+        builder.Services.AddSingleton<IAppSettingsService>((serviceProvider) =>
+        {
+            var settingsPath = Path.Combine(FileSystem.AppDataDirectory, "settings.json");
+            return new JsonAppSettingsService(settingsPath, serviceProvider.GetService<ILoggerFactory>());
+        });
+
         builder.Services.AddSingleton<IDatabaseService>((serviceProvider) =>
         {
             // 获取应用数据目录
@@ -92,13 +98,36 @@ public static class MauiProgram
             // 从 DI 容器获取日志工厂（DEBUG 下已注册 AddDebug），未注册时返回 null（使用 NullLogger）
             var loggerFactory = serviceProvider.GetService<ILoggerFactory>();
 
-            // 根据需要把 isTablet 用于不同的逻辑：例如传不同 DeviceType 或启用不同 UI/行为
-            return new FileShareServiceManager(
+            // 设置：加密默认开启、端口、同名策略、限速、发现方式、设备名
+            var settingsService = serviceProvider.GetRequiredService<IAppSettingsService>();
+            var settings = settingsService.Current;
+
+            var deviceName = string.IsNullOrWhiteSpace(settings.DeviceName)
+                ? Microsoft.Maui.Devices.DeviceInfo.Name
+                : settings.DeviceName;
+
+            var manager = new FileShareServiceManager(
                 platformDirectoryService,
                 databaseService,
-                Microsoft.Maui.Devices.DeviceInfo.Name,
+                deviceName,
                 deviceType,
-                loggerFactory: loggerFactory);
+                transferPort: settings.TransferPort,
+                discoveryOptions: Core.Network.Discovery.DiscoveryOptions.FromSettings(settings),
+                tlsEnabled: settings.TlsEnabled,
+                loggerFactory: loggerFactory,
+                conflictPolicy: settings.ConflictPolicy,
+                uploadLimitKBps: settings.UploadLimitKBps);
+
+            loggerFactory?.CreateLogger("MauiProgram").LogInformation(
+                "FileShareServiceManager 已创建: 设备名={DeviceName}, 类型={DeviceType}, 端口={Port}, 加密={Tls}, 同名策略={ConflictPolicy}, 限速={Limit}KB/s",
+                deviceName,
+                deviceType,
+                settings.TransferPort,
+                settings.TlsEnabled,
+                settings.ConflictPolicy,
+                settings.UploadLimitKBps);
+
+            return manager;
         });
 
         builder.Services.AddSingleton<INavigation>((serviceProvider) => Microsoft.Maui.Controls.Application.Current?.Windows?.FirstOrDefault()?.Navigation!);
