@@ -86,6 +86,15 @@ public sealed class AppSettings
     /// <summary>发现用的网段黑名单（优先级高于白名单）。</summary>
     public string NetworkBlacklist { get; set; } = string.Empty;
 
+    /// <summary>是否启用「与官方 LocalSend 互通」（本机作为 LocalSend 接收端）。</summary>
+    public bool LocalSendEnabled { get; set; }
+
+    /// <summary>LocalSend 服务端口（官方默认 53317）。</summary>
+    public int LocalSendPort { get; set; } = 53317;
+
+    /// <summary>LocalSend 接收 PIN（可空，对应官方客户端的 PIN 校验）。</summary>
+    public string LocalSendPin { get; set; } = string.Empty;
+
     /// <summary>是否收藏了指定设备。</summary>
     public bool IsFavorite(string? deviceId)
     {
@@ -140,7 +149,10 @@ public sealed class AppSettings
             WebSharePort = WebSharePort,
             WebSharePin = WebSharePin,
             NetworkWhitelist = NetworkWhitelist,
-            NetworkBlacklist = NetworkBlacklist
+            NetworkBlacklist = NetworkBlacklist,
+            LocalSendEnabled = LocalSendEnabled,
+            LocalSendPort = LocalSendPort,
+            LocalSendPin = LocalSendPin
         };
     }
 
@@ -231,6 +243,13 @@ public sealed class AppSettings
         {
             NetworkBlacklist = NetworkBlacklist[..512];
         }
+
+        if (LocalSendPort is < 1024 or > 65535)
+        {
+            LocalSendPort = 53317;
+        }
+
+        LocalSendPin = (LocalSendPin ?? string.Empty).Trim();
 
         if (!System.Net.IPAddress.TryParse(MulticastAddress, out var multicast) ||
             multicast.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork)

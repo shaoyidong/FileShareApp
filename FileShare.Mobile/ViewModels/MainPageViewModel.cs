@@ -23,6 +23,7 @@ public partial class MainPageViewModel : ViewModelBase
     private readonly string _localDeviceId;
     private readonly IFileTransferForegroundService _foregroundService;
     private readonly IPickerService _filePickerService;
+    private readonly IAppSettingsService _settingsService;
     private readonly IAppManagementService _appManagementService;
     private readonly ILogger<MainPageViewModel> _logger;
 
@@ -104,8 +105,36 @@ public partial class MainPageViewModel : ViewModelBase
 
     public bool IsDeviceSelected => SelectedDevice != null;
 
+    /// <summary>是否展开设置面板。</summary>
+    [ObservableProperty]
+    private bool _isSettingsVisible;
+
+    /// <summary>设备名。</summary>
+    [ObservableProperty]
+    private string _deviceNameText = string.Empty;
+
+    /// <summary>是否启用加密传输。</summary>
+    [ObservableProperty]
+    private bool _tlsEnabledSetting = true;
+
+    /// <summary>保存位置文本。</summary>
+    [ObservableProperty]
+    private string _saveDirectoryText = "按文件类型自动归类";
+
+    /// <summary>设置面板提示。</summary>
+    [ObservableProperty]
+    private string _settingsStatus = string.Empty;
+
     public ICommand RefreshDevicesCommand { get; }
     public ICommand SendFileCommand { get; }
+    public ICommand SendMultipleFilesCommand { get; }
+    public ICommand SendFolderCommand { get; }
+    public ICommand ChooseSaveDirectoryCommand { get; }
+    public ICommand SendTextCommand { get; }
+    public ICommand ToggleSettingsCommand { get; }
+    public ICommand SaveSettingsCommand { get; }
+    public ICommand CancelTransferCommand { get; }
+    public ICommand ClearTrustedDevicesCommand { get; }
     public ICommand NavigateToAppListCommand { get; }
     public ICommand ConnectByAddressCommand { get; }
     public ICommand ScanSubnetCommand { get; }
@@ -120,6 +149,7 @@ public partial class MainPageViewModel : ViewModelBase
         , IFileTransferForegroundService fileTransferService
         , IAlertService alertService
         , IPickerService filePickerService
+        , IAppSettingsService settingsService
         , IAppManagementService appManagementService
         , ILoggerFactory loggerFactory)
     {
@@ -128,12 +158,15 @@ public partial class MainPageViewModel : ViewModelBase
         _foregroundService = fileTransferService;
         _alertService = alertService;
         _filePickerService = filePickerService;
+        _settingsService = settingsService;
         _appManagementService = appManagementService;
         _logger = loggerFactory.CreateLogger<MainPageViewModel>();
         Devices = new ObservableCollection<FileShare.Core.Models.DeviceInfo>();
         TransferTasks = new ObservableCollection<FileTransferViewModel>();
         SentTransferTasks = new ObservableCollection<FileTransferViewModel>();
         ReceivedTransferTasks = new ObservableCollection<FileTransferViewModel>();
+
+        LoadSettings();
 
         // 保存本地设备ID
         _localDeviceId = _serviceManager.GetLocalDeviceInfo().DeviceId;
@@ -145,6 +178,10 @@ public partial class MainPageViewModel : ViewModelBase
         _serviceManager.OnTransferProgressUpdated += OnTransferProgressUpdated;
         _serviceManager.OnTransferCompleted += OnTransferCompleted;
 
+        // TLS/TOFU：首次信任静默记录；证书指纹变化必须提示用户（否则连接会莫名其妙失败）
+        _serviceManager.OnFirstUseTrusted += OnFirstUseTrusted;
+        _serviceManager.OnFingerprintMismatch += OnFingerprintMismatch;
+
         // 订阅WeakReferenceMessenger消息，接收从AppListPage返回的APK路径
         WeakReferenceMessenger.Default.Register<AppSelectedMessage>(this, async (recipient, message) =>
         {
@@ -154,6 +191,14 @@ public partial class MainPageViewModel : ViewModelBase
         // 初始化命令
         RefreshDevicesCommand = new RelayCommand(async () => RefreshDevicesAsync());
         SendFileCommand = new RelayCommand(async () => SendFileAsync());
+        SendMultipleFilesCommand = new RelayCommand(() => _ = SendMultipleFilesAsync());
+        SendFolderCommand = new RelayCommand(() => _ = SendFolderAsync());
+        ChooseSaveDirectoryCommand = new RelayCommand(() => _ = ChooseSaveDirectoryAsync());
+        SendTextCommand = new RelayCommand(() => _ = SendTextAsync());
+        ToggleSettingsCommand = new RelayCommand(() => IsSettingsVisible = !IsSettingsVisible);
+        SaveSettingsCommand = new RelayCommand(() => _ = SaveSettingsAsync());
+        CancelTransferCommand = new RelayCommand<FileTransferViewModel>(CancelTransfer);
+        ClearTrustedDevicesCommand = new RelayCommand(() => _ = ClearTrustedDevicesAsync());
         NavigateToAppListCommand = new RelayCommand(async () => await NavigateToAppList());
         ConnectByAddressCommand = new RelayCommand(async () => await ConnectByAddressAsync());
         ScanSubnetCommand = new RelayCommand(async () => await ScanSubnetAsync());
@@ -304,6 +349,110 @@ public partial class MainPageViewModel : ViewModelBase
         }
     }
 
+    /// <summary>一次选择多个文件发送（顺序发送）。</summary>
+    private async Task SendMultipleFilesAsync()
+    {
+        if (SelectedDevice == null)
+        {
+            await _alertService.DisplayToastAsync("请先选择目标设备").ConfigureAwait(false);
+            return;
+        }
+
+        try
+        {
+            var files = await _filePickerService.PickFilesAsync(new PickOptions
+            {
+                PickerTitle = "选择要发送的文件（可多选）"
+            }).ConfigureAwait(false);
+
+            if (files.Count == 0)
+            {
+                return;
+            }
+
+            await _foregroundService.StartServiceAsync().ConfigureAwait(false);
+
+            _uiContext.Post(_ => StatusMessage = $"正在发送 {files.Count} 个文件...", null);
+
+            var paths = files.Select(file => file.FullPath).Where(path => !string.IsNullOrEmpty(path)).ToList();
+            await _serviceManager.SendFilesAsync(paths, SelectedDevice).ConfigureAwait(false);
+
+            _uiContext.Post(_ => StatusMessage = StatusMessage, null);
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"发送文件失败: {ex.Message}";
+            await _alertService.DisplayToastAsync(ex.Message).ConfigureAwait(false);
+            _logger.LogError(ex, "批量发送文件失败");
+        }
+        finally
+        {
+            StopForegroundServiceIfNoTasksRunning();
+        }
+    }
+
+    /// <summary>选择文件夹并递归发送（保留目录结构）。</summary>
+    private async Task SendFolderAsync()
+    {
+        if (SelectedDevice == null)
+        {
+            await _alertService.DisplayToastAsync("请先选择目标设备").ConfigureAwait(false);
+            return;
+        }
+
+        try
+        {
+            var folder = await _filePickerService.PickFolderAsync("选择要发送的文件夹").ConfigureAwait(false);
+
+            if (string.IsNullOrEmpty(folder))
+            {
+                await _alertService.DisplayToastAsync("当前平台不支持直接选择文件夹，可用「发送多个文件」").ConfigureAwait(false);
+                return;
+            }
+
+            await _foregroundService.StartServiceAsync().ConfigureAwait(false);
+
+            _uiContext.Post(_ => StatusMessage = $"正在发送文件夹: {Path.GetFileName(folder)}", null);
+
+            await _serviceManager.SendFolderAsync(folder, SelectedDevice).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"发送文件夹失败: {ex.Message}";
+            await _alertService.DisplayToastAsync(ex.Message).ConfigureAwait(false);
+            _logger.LogError(ex, "发送文件夹失败");
+        }
+        finally
+        {
+            StopForegroundServiceIfNoTasksRunning();
+        }
+    }
+
+    /// <summary>
+    /// 选择接收文件的保存位置（留空则按文件类型自动归类到下载/图片等目录）。
+    /// </summary>
+    private async Task ChooseSaveDirectoryAsync()
+    {
+        try
+        {
+            var folder = await _filePickerService.PickFolderAsync("选择接收文件的保存位置", forSaving: true).ConfigureAwait(false);
+
+            if (string.IsNullOrEmpty(folder))
+            {
+                await _alertService.DisplayToastAsync("当前平台不支持直接选择文件夹").ConfigureAwait(false);
+                return;
+            }
+
+            _settingsService.Update(settings => settings.SaveDirectory = folder);
+            _uiContext.Post(_ => StatusMessage = $"保存位置：{folder}", null);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "选择保存目录失败");
+            await _alertService.DisplayToastAsync(ex.Message).ConfigureAwait(false);
+        }
+    }
+
     /// <summary>
     /// 扫描一个网段，把发现的设备加入列表。
     /// </summary>
@@ -443,6 +592,128 @@ public partial class MainPageViewModel : ViewModelBase
         }
     }
 
+    /// <summary>把当前设置载入界面（构造时调用）。</summary>
+    private void LoadSettings()
+    {
+        var settings = _settingsService.Current;
+        DeviceNameText = settings.DeviceName;
+        TlsEnabledSetting = settings.TlsEnabled;
+        SaveDirectoryText = string.IsNullOrWhiteSpace(settings.SaveDirectory)
+            ? "按文件类型自动归类"
+            : settings.SaveDirectory!;
+    }
+
+    private async Task SaveSettingsAsync()
+    {
+        var name = DeviceNameText?.Trim();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            SettingsStatus = "设备名称不能为空";
+            return;
+        }
+
+        _settingsService.Update(settings =>
+        {
+            settings.DeviceName = name;
+            settings.TlsEnabled = TlsEnabledSetting;
+            settings.SaveDirectory = SaveDirectoryText is null or "按文件类型自动归类"
+                ? null
+                : SaveDirectoryText!.Trim();
+        });
+
+        SettingsStatus = "已保存；设备名称 / 加密 / 端口需重启应用生效";
+        await _alertService.DisplayToastAsync("设置已保存（部分需重启生效）").ConfigureAwait(false);
+    }
+
+    /// <summary>发送文本（对端收到一个 .txt 文件）。</summary>
+    private async Task SendTextAsync()
+    {
+        if (SelectedDevice == null)
+        {
+            await _alertService.DisplayToastAsync("请先选择目标设备").ConfigureAwait(false);
+            return;
+        }
+
+        var text = await _alertService.DisplayPromptAsync("发送文本", "输入要发送的文本，对端会收到一个 .txt 文件", "发送", "取消").ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return;
+        }
+
+        try
+        {
+            await _foregroundService.StartServiceAsync().ConfigureAwait(false);
+            _uiContext.Post(_ => StatusMessage = $"正在发送文本（{text.Length} 字符）...", null);
+
+            var success = await _serviceManager.SendTextAsync(text, SelectedDevice).ConfigureAwait(false);
+            _uiContext.Post(_ => StatusMessage = success ? "文本已发送" : "文本发送失败", null);
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"发送文本失败: {ex.Message}";
+            await _alertService.DisplayToastAsync(ex.Message).ConfigureAwait(false);
+            _logger.LogError(ex, "发送文本失败");
+        }
+        finally
+        {
+            StopForegroundServiceIfNoTasksRunning();
+        }
+    }
+
+    /// <summary>取消一笔传输。</summary>
+    private void CancelTransfer(FileTransferViewModel? viewModel)
+    {
+        if (viewModel?.TransferId is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _serviceManager.CancelTransfer(viewModel.TransferId);
+            viewModel.Status = TransferStatus.Cancelled;
+            StatusMessage = $"已取消: {viewModel.FileName}";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "取消传输失败");
+        }
+    }
+    private void OnFirstUseTrusted(string peerId, string fingerprint)
+    {
+        _logger.LogInformation("已记录新设备的证书指纹: {Peer} {Fingerprint}", peerId, fingerprint);
+    }
+
+    private void OnFingerprintMismatch(string peerId, string knownFingerprint, string presentedFingerprint)
+    {
+        _logger.LogWarning(
+            "证书指纹不一致（疑似中间人），已拒绝: {Peer} 已知={Known} 本次={Presented}",
+            peerId, knownFingerprint, presentedFingerprint);
+
+        _ = _alertService.DisplayAlertAsync(
+            "安全警告",
+            $"设备 {peerId} 的证书指纹与之前记录的不一致，连接已被拒绝。\n\n如果确认对方重装过系统，可在「设置 → 清除信任记录」后重试。",
+            "知道了");
+    }
+
+    /// <summary>清除全部 TOFU 信任记录（设置里用）。</summary>
+    private async Task ClearTrustedDevicesAsync()
+    {
+        var confirmed = await _alertService.DisplayAlertAsync(
+            "清除信任记录",
+            "清除后，所有设备下次连接都会重新记录证书指纹。确定继续吗？",
+            "清除",
+            "取消").ConfigureAwait(false);
+
+        if (!confirmed)
+        {
+            return;
+        }
+
+        _serviceManager.ClearTrustedDevices();
+        SettingsStatus = "已清除全部信任记录";
+        await _alertService.DisplayToastAsync("已清除全部信任记录").ConfigureAwait(false);
+    }
     private void StopForegroundServiceIfNoTasksRunning()
     {
         if (!TransferTasks.Any(t => t.Status == TransferStatus.Pending || t.Status == TransferStatus.Transferring))
@@ -461,7 +732,7 @@ public partial class MainPageViewModel : ViewModelBase
                 return;
             }
 
-            _serviceManager.HandleTransferRequest(viewModel.TransferId, true);
+            _serviceManager.HandleTransferRequest(viewModel.TransferId, true, _settingsService.Current.SaveDirectory);
             StatusMessage = $"开始接收文件: {viewModel.FileName}";
             _logger.LogInformation("开始接收文件: {FileName}", viewModel.FileName);
         }

@@ -124,19 +124,20 @@ namespace FileShare.Desktop
                     provider.GetRequiredService<ILoggerFactory>(),
                     provider.GetRequiredService<IAppSettingsService>(),
                     provider.GetRequiredService<IThemeService>(),
-                    provider.GetRequiredService<IToastService>()
+                    provider.GetRequiredService<IToastService>(),
+                    TrayService,
+                    provider.GetRequiredService<ILocalSendInteropHost>()
                 );
-                // 网页分享（按设置决定是否启动；失败只记录日志，不影响主流程）
-                if (TrayService is not null)
+
+                // 网页分享 / LocalSend 互通（按设置启动，失败只记日志）
+                try
                 {
-                    try
-                    {
-                        provider.GetRequiredService<IWebShareHost>().Apply();
-                    }
-                    catch (Exception ex)
-                    {
-                        provider.GetRequiredService<ILogger<App>>().LogWarning(ex, "启动网页分享失败");
-                    }
+                    provider.GetRequiredService<IWebShareHost>().Apply();
+                    provider.GetRequiredService<ILocalSendInteropHost>().Apply();
+                }
+                catch (Exception ex)
+                {
+                    provider.GetRequiredService<ILogger<App>>().LogWarning(ex, "启动网页分享 / LocalSend 互通失败");
                 }
 
 

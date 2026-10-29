@@ -10,11 +10,15 @@ namespace FileShare.Desktop.ViewModels;
 /// </summary>
 public partial class DeviceItemViewModel : ViewModelBase
 {
-    public DeviceItemViewModel(DeviceInfo device, bool isFavorite = false)
+    public DeviceItemViewModel(DeviceInfo device, bool isFavorite = false, bool isLocalSend = false)
     {
         Device = device;
         _isFavorite = isFavorite;
+        IsLocalSend = isLocalSend;
     }
+
+    /// <summary>是否是通过 LocalSend 协议发现的第三方设备（发送走 HTTP）。</summary>
+    public bool IsLocalSend { get; }
 
     /// <summary>底层设备模型。</summary>
     public DeviceInfo Device { get; }
@@ -34,7 +38,12 @@ public partial class DeviceItemViewModel : ViewModelBase
     };
 
     /// <summary>第二行副标题：类型 · IP · 加密标记。</summary>
-    public string MetaText => $"{DeviceTypeText} · {Device.IpAddress}" + (Device.SupportsTls ? Loc.Get(" · 加密") : string.Empty);
+    public string MetaText => $"{DeviceTypeText} · {Device.IpAddress}"
+                             + (Device.SupportsTls ? Loc.Get(" · 加密") : string.Empty)
+                             + (IsLocalSend ? " · LocalSend" : string.Empty);
+
+    /// <summary>只有本项目自有协议的设备才能收藏。</summary>
+    public bool CanFavorite => !IsLocalSend;
 
     [ObservableProperty]
     private bool _isFavorite;
@@ -53,5 +62,6 @@ public partial class DeviceItemViewModel : ViewModelBase
         OnPropertyChanged(nameof(IpAddress));
         OnPropertyChanged(nameof(DeviceTypeText));
         OnPropertyChanged(nameof(MetaText));
+        OnPropertyChanged(nameof(CanFavorite));
     }
 }

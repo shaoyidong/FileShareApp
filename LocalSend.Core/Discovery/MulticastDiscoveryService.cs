@@ -1,3 +1,4 @@
+using LocalSend.Core;
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.NetworkInformation;
@@ -168,12 +169,15 @@ public sealed class MulticastDiscoveryService : IDisposable
             _udpClient = new UdpClient(AddressFamily.InterNetwork);
             _udpClient.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
             _udpClient.Client.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastTimeToLive, 255);
+
+            // 允许本机回环：否则同一台机器上的多个实例（以及本机自测）永远收不到组播
+            _udpClient.Client.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastLoopback, true);
             
             _udpClient.Client.Bind(new IPEndPoint(IPAddress.Any, _multicastPort));
 
             // 在每个 IPv4 接口上加入组播组
             // 对应 Dart 端 socket.joinMulticast(group, interface)
-            Console.WriteLine($"    [组播] 本机 IPv4 接口:");
+            LsLog.Trace($"    [组播] 本机 IPv4 接口:");
             foreach (var localAddr in _localIPv4Addresses)
             {
                 try
@@ -182,18 +186,18 @@ public sealed class MulticastDiscoveryService : IDisposable
                         SocketOptionLevel.IP,
                         SocketOptionName.AddMembership,
                         new MulticastOption(multicastAddr, localAddr));
-                    Console.WriteLine($"      + {localAddr} 已加入 {multicastAddr}");
+                    LsLog.Trace($"      + {localAddr} 已加入 {multicastAddr}");
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"      - {localAddr} 加入失败: {ex.Message}");
+                    LsLog.Trace($"      - {localAddr} 加入失败: {ex.Message}");
                 }
             }
 
             if (_localIPv4Addresses.Count == 0)
             {
                 // 没有可用接口时回退到默认
-                Console.WriteLine($"      + (默认接口) 已加入 {multicastAddr}");
+                LsLog.Trace($"      + (默认接口) 已加入 {multicastAddr}");
                 _udpClient.Client.SetSocketOption(
                     SocketOptionLevel.IP,
                     SocketOptionName.AddMembership,
@@ -238,7 +242,7 @@ public sealed class MulticastDiscoveryService : IDisposable
                     await Task.Delay(delay, ct);
                     if (ct.IsCancellationRequested) break;
 
-                    Console.WriteLine($"    [组播] 发送 announce ({delay}ms)");
+                    LsLog.Trace($"    [组播] 发送 announce ({delay}ms)");
                     await SendMulticastOnAllInterfacesAsync(data, ct);
                 }
                 await Task.Delay(1000, ct);
@@ -277,7 +281,7 @@ public sealed class MulticastDiscoveryService : IDisposable
                 var remoteIp = result.RemoteEndPoint.Address;
                 var json = Encoding.UTF8.GetString(result.Buffer, 0, result.Buffer.Length);
 
-                Console.WriteLine($"    [组播] 收到 UDP 来自 {remoteIp}: {json}");
+                LsLog.Trace($"    [组播] 收到 UDP 来自 {remoteIp}: {json}");
 
                 try
                 {
@@ -287,7 +291,7 @@ public sealed class MulticastDiscoveryService : IDisposable
                     // 过滤自身消息
                     if (msg.Fingerprint == _ownFingerprint)
                     {
-                        Console.WriteLine($"    [组播]   → 自身消息，已过滤");
+                        LsLog.Trace($"    [组播]   → 自身消息，已过滤");
                         continue;
                     }
 
@@ -319,7 +323,7 @@ public sealed class MulticastDiscoveryService : IDisposable
                 }
                 catch (JsonException)
                 {
-                    Console.WriteLine($"    [组播]   → JSON 解析失败");
+                    LsLog.Trace($"    [组播]   → JSON 解析失败");
                 }
             }
             catch (ObjectDisposedException) when (ct.IsCancellationRequested)
@@ -361,12 +365,12 @@ public sealed class MulticastDiscoveryService : IDisposable
                     port: peer.Port,
                     payload: payload,
                     ct: ct);
-                Console.WriteLine($"    [组播] TCP 响应 {peer.Alias} ({peer.IP}) 成功");
+                LsLog.Trace($"    [组播] TCP 响应 {peer.Alias} ({peer.IP}) 成功");
                 return;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"    [组播] TCP 响应 {peer.Alias} ({peer.IP}) 失败: {ex.Message} → 回退 UDP");
+                LsLog.Trace($"    [组播] TCP 响应 {peer.Alias} ({peer.IP}) 失败: {ex.Message} → 回退 UDP");
             }
         }
 

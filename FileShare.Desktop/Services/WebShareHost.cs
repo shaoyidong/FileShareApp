@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using System;
 using System.IO;
 using System.Security.Cryptography;
+using System.Threading.Tasks;
 using FileShare.Desktop.Localization;
 
 namespace FileShare.Desktop.Services;
@@ -32,6 +33,7 @@ public sealed class WebShareHost : IWebShareHost, IDisposable
     private readonly IAppSettingsService _settingsService;
     private readonly IPlatformDirectoryService _directoryService;
     private readonly IToastService? _toastService;
+    private readonly IDatabaseService? _databaseService;
     private readonly ILogger<WebShareHost> _logger;
     private readonly WebShareService _service;
 
@@ -39,10 +41,12 @@ public sealed class WebShareHost : IWebShareHost, IDisposable
         IAppSettingsService settingsService,
         IPlatformDirectoryService directoryService,
         ILoggerFactory loggerFactory,
-        IToastService? toastService = null)
+        IToastService? toastService = null,
+        IDatabaseService? databaseService = null)
     {
         _settingsService = settingsService;
         _directoryService = directoryService;
+        _databaseService = databaseService;
         _toastService = toastService;
         _logger = loggerFactory.CreateLogger<WebShareHost>();
 
@@ -108,10 +112,62 @@ public sealed class WebShareHost : IWebShareHost, IDisposable
 
     private void OnFileReceived(string path)
     {
+        var directory = Path.GetDirectoryName(path) ?? string.Empty;
+
+        // 记录到接收历史（与局域网接收一致，历史里可直接打开/定位）
+        _ = RecordHistoryAsync(path, directory);
+
         _toastService?.Show(
             Loc.Get("网页分享收到文件"),
-            Loc.F("{0}（已保存到 {1}）", Path.GetFileName(path), Path.GetDirectoryName(path)),
+            Loc.F("{0}（已保存到 {1}）", Path.GetFileName(path), directory),
             null);
+    }
+
+    /// <summary>把网页分享收到的文件写入接收历史。</summary>
+    private async Task RecordHistoryAsync(string path, string directory)
+    {
+        if (_databaseService is null)
+        {
+            return;
+        }
+
+        try
+        {
+            long size = 0;
+            try
+            {
+                var info = new FileInfo(path);
+                if (info.Exists)
+                {
+                    size = info.Length;
+                }
+            }
+            catch (Exception)
+            {
+                // 大小只用于展示
+            }
+
+            var entity = new Core.Models.Entities.ReceiveHistoryEntity
+            {
+                SenderId = "web-share",
+                SenderDeviceName = "Web Share",
+                PeerId = "web-share",
+                PeerName = "Web Share",
+                FileName = Path.GetFileName(path),
+                FileSize = size,
+                SavePath = directory,
+                FilePath = path,
+                Status = Core.Models.TransferStatus.Completed,
+                CreatedAt = DateTime.UtcNow,
+                Direction = Core.Models.TransferDirection.Receive
+            };
+
+            await _databaseService.AddSingleReceiveHistoryAsync(entity).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "写入网页分享接收历史失败: {Path}", path);
+        }
     }
 
     private static string GeneratePin() => RandomNumberGenerator.GetInt32(100000, 1000000).ToString();

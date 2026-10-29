@@ -252,11 +252,19 @@ namespace FileShare.Desktop
             services.AddSingleton<IThemeService, ThemeService>();
 
             // 通知卡片（懒解析 lifetime：解析发生在 App 初始化之后）
+            services.AddSingleton<ILocalSendInteropHost>(sp => new LocalSendInteropHost(
+                sp.GetRequiredService<IAppSettingsService>(),
+                sp.GetRequiredService<IPlatformDirectoryService>(),
+                sp.GetRequiredService<IDatabaseService>(),
+                sp.GetRequiredService<ILoggerFactory>(),
+                sp.GetRequiredService<IToastService>()));
+
             services.AddSingleton<IWebShareHost>(sp => new WebShareHost(
                 sp.GetRequiredService<IAppSettingsService>(),
                 sp.GetRequiredService<IPlatformDirectoryService>(),
                 sp.GetRequiredService<ILoggerFactory>(),
-                sp.GetRequiredService<IToastService>()));
+                sp.GetRequiredService<IToastService>(),
+                sp.GetRequiredService<IDatabaseService>()));
 
             services.AddSingleton<IToastService>(_ => new ToastService(() =>
                 (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow));

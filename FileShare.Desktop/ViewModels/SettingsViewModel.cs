@@ -86,6 +86,18 @@ public partial class SettingsViewModel : ViewModelBase
     private string _uploadLimitText = "0";
 
     [ObservableProperty]
+    private bool _localSendEnabled;
+
+    [ObservableProperty]
+    private string _localSendPortText = "53317";
+
+    [ObservableProperty]
+    private string _localSendPinText = string.Empty;
+
+    [ObservableProperty]
+    private string _localSendEndpointText = "（未启用）";
+
+    [ObservableProperty]
     private string _selectedLanguageCode = "zh-CN";
 
     /// <summary>可选语言。</summary>
@@ -220,6 +232,9 @@ public partial class SettingsViewModel : ViewModelBase
         MulticastPortText = settings.MulticastPort.ToString();
         BroadcastPortText = settings.BroadcastPort.ToString();
         NetworkWhitelistText = settings.NetworkWhitelist;
+        LocalSendEnabled = settings.LocalSendEnabled;
+        LocalSendPortText = settings.LocalSendPort.ToString();
+        LocalSendPinText = settings.LocalSendPin;
         SelectedLanguageCode = ResolveUiPreferences()?.Current.Language switch
         {
             AppLanguage.EnUS => "en-US",
@@ -230,6 +245,7 @@ public partial class SettingsViewModel : ViewModelBase
         UploadLimitText = settings.UploadLimitKBps.ToString();
         WebShareEnabled = settings.WebShareEnabled;
         WebSharePortText = settings.WebSharePort.ToString();
+        RefreshLocalSendStatus();
     }
 
     private DeviceTypeOption FindOption(DeviceType deviceType)
@@ -299,6 +315,12 @@ public partial class SettingsViewModel : ViewModelBase
             return;
         }
 
+        if (!int.TryParse(LocalSendPortText?.Trim(), out var localSendPort) || localSendPort is < 1024 or > 65535)
+        {
+            StatusMessage = Loc.Get("LocalSend 端口必须是 1024~65535 之间的整数");
+            return;
+        }
+
         if (!int.TryParse(WebSharePortText?.Trim(), out var webSharePort) || webSharePort is < 1024 or > 65535)
         {
             StatusMessage = Loc.Get("网页分享端口必须是 1024~65535 之间的整数");
@@ -342,8 +364,15 @@ public partial class SettingsViewModel : ViewModelBase
             settings.UploadLimitKBps = uploadLimit;
             settings.WebShareEnabled = WebShareEnabled;
             settings.WebSharePort = webSharePort;
+            settings.LocalSendEnabled = LocalSendEnabled;
+            settings.LocalSendPort = localSendPort;
+            settings.LocalSendPin = LocalSendPinText?.Trim() ?? string.Empty;
         });
 
+
+        // LocalSend 互通：与网页分享同一时机立即应用
+        ResolveLocalSendHost()?.Apply();
+        RefreshLocalSendStatus();
         // 托盘开关即时生效，其余（设备名/端口/加密/发现方式/同名策略）在重启后生效
         App.TrayService?.SetVisible(MinimizeToTray || CloseToTray);
         var uiPreferences = ResolveUiPreferences();
@@ -351,14 +380,15 @@ public partial class SettingsViewModel : ViewModelBase
         {
             var language = SelectedLanguageCode == "en-US" ? AppLanguage.EnUS : AppLanguage.ZhCN;
             uiPreferences.SetLanguage(language);
+
+            // 立即生效（会触发 Loc.LanguageChanged → 主界面重建）
+            Loc.SetLanguage(language);
         }
 
         ResolveWebShareHost()?.Apply();
         RefreshWebShareStatus();
 
-        StatusMessage = Loc.Get(SelectedLanguageCode == "en-US"
-            ? "设置已保存。语言切换将在重启后生效；设备名称 / 端口 / 加密 / 发现方式 / 同名策略同样需要重启。"
-            : "设置已保存。设备名称 / 端口 / 加密 / 发现方式 / 同名策略需要重启生效。");
+        StatusMessage = Loc.Get("设置已保存。设备名称 / 端口 / 加密 / 发现方式 / 同名策略需要重启生效。");
     }
 
     private async Task BrowseSaveDirectoryAsync()
@@ -378,6 +408,19 @@ public partial class SettingsViewModel : ViewModelBase
         SaveDirectory = uri.IsAbsoluteUri && uri.Scheme == Uri.UriSchemeFile ? uri.LocalPath : uri.OriginalString;
     }
 
+        /// <summary>LocalSend 互通宿主。</summary>
+        private static ILocalSendInteropHost? ResolveLocalSendHost()
+        {
+            return App.ServiceProvider?.GetService(typeof(ILocalSendInteropHost)) as ILocalSendInteropHost;
+        }
+
+        private void RefreshLocalSendStatus()
+        {
+            var host = ResolveLocalSendHost();
+            LocalSendEndpointText = host is { IsRunning: true, Endpoint: { } endpoint }
+                ? endpoint
+                : Loc.Get("（未启用）");
+        }
         /// <summary>桌面端 UI 偏好服务（皮肤 / 语言）。</summary>
         private static IUiPreferencesService? ResolveUiPreferences()
         {

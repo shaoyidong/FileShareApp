@@ -87,6 +87,7 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\FileShare.Core\FileShare.Core.csproj" />
+		<ProjectReference Include="..\LocalSend.Core\LocalSend.Core.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>

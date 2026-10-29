@@ -118,10 +118,19 @@
                                         <TextBlock
                                             FontWeight="Bold"
                                             Text="{Binding DeviceName}" />
-                                        <TextBlock
-                                            Margin="0,2,0,0"
-                                            Classes="muted"
-                                            Text="{Binding MetaText}" />
+                                        <StackPanel Margin="0,2,0,0" Orientation="Horizontal" Spacing="6">
+                                            <TextBlock Classes="muted" Text="{Binding MetaText}" />
+                                            <Border
+                                                Padding="4,0"
+                                                Background="#1F6FEB"
+                                                CornerRadius="3"
+                                                IsVisible="{Binding IsLocalSend}">
+                                                <TextBlock
+                                                    FontSize="10"
+                                                    Foreground="White"
+                                                    Text="LocalSend" />
+                                            </Border>
+                                        </StackPanel>
                                     </StackPanel>
                                     <Button
                                         Grid.Column="1"
@@ -129,6 +138,7 @@
                                         Classes="icon"
                                         Command="{Binding $parent[UserControl].DataContext.ToggleFavoriteCommand}"
                                         CommandParameter="{Binding}"
+                                        IsVisible="{Binding CanFavorite}"
                                         ToolTip.Tip="{loc:Tr '收藏（可自动接收其文件）'}">
                                         <Grid>
                                             <TextBlock
