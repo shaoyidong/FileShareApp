@@ -1,9 +1,11 @@
+using Dapper;
 using FileShare.Core.Models;
 using FileShare.Core.Models.Entities;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using System.Data;
 using System.IO;
-using Dapper;
 
 namespace FileShare.Core.Services;
 
@@ -13,14 +15,16 @@ namespace FileShare.Core.Services;
 [DapperAot]
 public class DatabaseService : IDatabaseService
 {
+    private readonly ILogger<DatabaseService> _logger;
     private readonly string _connectionString;
   
     /// <summary>
     /// 构造函数
     /// </summary>
     /// <param name="databasePath">数据库文件路径</param>
-    public DatabaseService(string databasePath)
+    public DatabaseService(string databasePath, Microsoft.Extensions.Logging.ILoggerFactory? loggerFactory = null)
     {
+        _logger = loggerFactory?.CreateLogger<DatabaseService>() ?? NullLogger<DatabaseService>.Instance;
         _connectionString = new SqliteConnectionStringBuilder
         {
             DataSource = databasePath,
@@ -83,7 +87,7 @@ public class DatabaseService : IDatabaseService
     /// <summary>
     /// 如果表缺少某列则补上（SQLite 不支持 ADD COLUMN IF NOT EXISTS，用 PRAGMA 判断）。
     /// </summary>
-    private static void EnsureColumn(SqliteConnection connection, string table, string column, string definition)
+    private void EnsureColumn(SqliteConnection connection, string table, string column, string definition)
     {
         try
         {
@@ -98,14 +102,15 @@ public class DatabaseService : IDatabaseService
 
             connection.Execute($"ALTER TABLE {table} ADD COLUMN {column} {definition};");
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            _logger.LogError(ex, "Failed to add column {Column} to table {Table}", column, table);
             // 迁移失败不应阻止应用启动：旧库仍可读写（只是缺少新字段）
         }
     }
 
     /// <summary>PRAGMA table_info 的结果行。</summary>
-    private sealed class TableColumnInfo
+    public sealed class TableColumnInfo
     {
         public string Name { get; set; } = string.Empty;
     }
@@ -205,13 +210,6 @@ public class DatabaseService : IDatabaseService
         var result = await connection.QueryAsync<ReceiveHistoryEntity>(selectSql);
         
         return result;
-    }
+    }   
     
-    /// <summary>
-    /// 释放资源
-    /// </summary>
-    public void Dispose()
-    {
-        GC.SuppressFinalize(this);
-    }
 }

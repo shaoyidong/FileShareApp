@@ -271,7 +271,7 @@ namespace FileShare.Desktop
 
             // 数据库
             services.AddSingleton<IDatabaseService>(sp =>
-                new DatabaseService(databasePath));
+                new DatabaseService(databasePath, sp.GetRequiredService<ILoggerFactory>()));
 
             // 平台服务
             services.AddSingleton<IPlatformDirectoryService, DesktopDirectoryService>();
