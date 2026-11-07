@@ -1,6 +1,6 @@
 using System.Net;
-using System.Text.Json;
 using LocalSend.Core.Http.Dto;
+using LocalSend.Core.Json;
 
 namespace LocalSend.Core.Http.Server.Common;
 
@@ -35,11 +35,6 @@ public sealed class AppError : Exception
             _ => $"Status code: {(int)Status}"
         };
         var body = new ErrorResponse { Message = message };
-        return JsonSerializer.SerializeToUtf8Bytes(body, JsonOptions.Default);
+        return LsJson.SerializeToUtf8Bytes(body);
     }
-}
-
-internal static class JsonOptions
-{
-    public static readonly JsonSerializerOptions Default = new(JsonSerializerDefaults.Web);
 }

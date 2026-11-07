@@ -1,4 +1,5 @@
 ﻿using FileShare.Core.Crypto;
+using FileShare.Crypto;
 
 namespace FileShare.Core.Tests.Network;
 

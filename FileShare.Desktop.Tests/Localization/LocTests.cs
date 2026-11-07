@@ -13,7 +13,7 @@ public class LocTests
         var previous = Loc.Language;
         try
         {
-            Loc.SetLanguage(AppLanguage.EnUS);
+            Loc.SetLanguage("en-US");
 
             Assert.Equal("Send", Loc.Get("发送"));
             Assert.Equal("Cancel", Loc.Get("取消"));
@@ -30,7 +30,7 @@ public class LocTests
         var previous = Loc.Language;
         try
         {
-            Loc.SetLanguage(AppLanguage.ZhCN);
+            Loc.SetLanguage("zh-CN");
 
             Assert.Equal("发送", Loc.Get("发送"));
         }
@@ -46,7 +46,7 @@ public class LocTests
         var previous = Loc.Language;
         try
         {
-            Loc.SetLanguage(AppLanguage.EnUS);
+            Loc.SetLanguage("en-US");
 
             Assert.Equal("这条文案没有英文", Loc.Get("这条文案没有英文"));
         }
@@ -62,10 +62,10 @@ public class LocTests
         var previous = Loc.Language;
         try
         {
-            Loc.SetLanguage(AppLanguage.ZhCN);
+            Loc.SetLanguage("zh-CN");
             Assert.Equal("正在发送 (1/3): a.txt", Loc.F("正在发送 ({0}/{1}): {2}", 1, 3, "a.txt"));
 
-            Loc.SetLanguage(AppLanguage.EnUS);
+            Loc.SetLanguage("en-US");
             Assert.Equal("Sending (1/3): a.txt", Loc.F("正在发送 ({0}/{1}): {2}", 1, 3, "a.txt"));
         }
         finally
@@ -80,7 +80,7 @@ public class LocTests
         var previous = Loc.Language;
         try
         {
-            Loc.SetLanguage(AppLanguage.EnUS);
+            Loc.SetLanguage("en-US");
 
             var text = Loc.F("正在传输: {0} ({1:F1}%)", "a.bin", 42.34);
             Assert.Equal("Transferring: a.bin (42.3%)", text);
@@ -104,7 +104,7 @@ public class LocTests
             Loc.SetLanguage(previous);
             Assert.Equal(0, count);
 
-            Loc.SetLanguage(previous == AppLanguage.ZhCN ? AppLanguage.EnUS : AppLanguage.ZhCN);
+            Loc.SetLanguage(previous == "zh-CN" ? "en-US" : "zh-CN");
             Assert.Equal(1, count);
         }
         finally
@@ -120,7 +120,7 @@ public class LocTests
         var previous = Loc.Language;
         try
         {
-            Loc.SetLanguage(AppLanguage.EnUS);
+            Loc.SetLanguage("en-US");
             var extension = new TrExtension("发送文件（可多选）");
 
             Assert.Equal("Send files (multi-select)", extension.ProvideValue(null!));

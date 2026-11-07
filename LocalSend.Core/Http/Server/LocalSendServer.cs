@@ -1,5 +1,5 @@
 using LocalSend.Core;
-using LocalSend.Core.Crypto;
+using FileShare.Crypto;
 using System.Net.Security;
 using System.Security.Authentication;
 using System.Security.Cryptography;
@@ -15,6 +15,7 @@ using LocalSend.Core.Http.Server.V2;
 using LocalSend.Core.Http.Server.V3;
 using LocalSend.Core.Http.Server.Web;
 using LocalSend.Core.Http.State;
+using LocalSend.Core.Json;
 
 namespace LocalSend.Core.Http.Server;
 
@@ -582,7 +583,7 @@ public sealed class LocalSendServer : IDisposable
         {
             return new EmptyResponse(HttpStatusCode.Forbidden);
         }
-        var bytes = JsonSerializer.SerializeToUtf8Bytes(_state.Web.I18n);
+        var bytes = LsJson.SerializeToUtf8Bytes(_state.Web.I18n);
         return new BytesResponse("application/json", bytes);
     }
 }

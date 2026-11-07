@@ -1,9 +1,11 @@
 using System.Net;
 using System.Text.Json;
 using System.Threading.Channels;
+using FileShare.Crypto;
 using LocalSend.Core.Http.DtoV2;
 using LocalSend.Core.Http.Server.Common;
 using LocalSend.Core.Http.State;
+using LocalSend.Core.Json;
 using LocalSend.Core.Model;
 using LocalSend.Core.Util;
 
@@ -18,8 +20,6 @@ namespace LocalSend.Core.Http.Server.V2;
 /// </remarks>
 public sealed class V2Routes
 {
-    private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
-
     private readonly V2State _state;
     private readonly Func<ClientInfo> _getInfo;
     private readonly Func<bool> _hasWeb;
@@ -34,7 +34,7 @@ public sealed class V2Routes
     /// <summary>
     /// 处理 <c>POST /api/localsend/v2/register</c>。
     /// </summary>
-    public async Task<JsonResponse<RegisterResponseDtoV2>> RegisterAsync(
+    public async Task<IHttpResponse> RegisterAsync(
         Stream body, RequestClientInfo clientInfo, CancellationToken ct = default)
     {
         var payload = await ReadJsonAsync<RegisterDtoV2>(body, ct).ConfigureAwait(false);
@@ -50,7 +50,7 @@ public sealed class V2Routes
         }
 
         var info = _getInfo();
-        return new JsonResponse<RegisterResponseDtoV2>(HttpStatusCode.OK, new RegisterResponseDtoV2
+        var response = new RegisterResponseDtoV2
         {
             Alias = info.Alias,
             Version = ProtocolVersionV2.Version,
@@ -58,14 +58,15 @@ public sealed class V2Routes
             DeviceType = info.DeviceType,
             Fingerprint = info.Token,
             Download = _hasWeb()
-        });
+        };
+        return new JsonResponse(HttpStatusCode.OK, LsJson.SerializeToUtf8Bytes(response));
     }
 
     /// <summary>处理 <c>GET /api/localsend/v2/info</c>。</summary>
-    public Task<JsonResponse<InfoResponseDtoV2>> InfoAsync(CancellationToken ct = default)
+    public Task<IHttpResponse> InfoAsync(CancellationToken ct = default)
     {
         var info = _getInfo();
-        return Task.FromResult(new JsonResponse<InfoResponseDtoV2>(HttpStatusCode.OK, new InfoResponseDtoV2
+        var response = new InfoResponseDtoV2
         {
             Alias = info.Alias,
             Version = ProtocolVersionV2.Version,
@@ -73,7 +74,9 @@ public sealed class V2Routes
             DeviceType = info.DeviceType,
             Fingerprint = info.Token,
             Download = _hasWeb()
-        }));
+        };
+        return Task.FromResult<IHttpResponse>(
+            new JsonResponse(HttpStatusCode.OK, LsJson.SerializeToUtf8Bytes(response)));
     }
 
     /// <summary>处理 <c>POST /api/localsend/v2/prepare-upload</c>。</summary>
@@ -165,8 +168,8 @@ public sealed class V2Routes
             }
             armed = false;
 
-            return new JsonResponse<PrepareUploadResponseDtoV2>(HttpStatusCode.OK,
-                new PrepareUploadResponseDtoV2 { SessionId = sessionId, Files = tokens });
+            var response = new PrepareUploadResponseDtoV2 { SessionId = sessionId, Files = tokens };
+            return new JsonResponse(HttpStatusCode.OK, LsJson.SerializeToUtf8Bytes(response));
         }
         finally
         {
@@ -351,11 +354,12 @@ public sealed class V2Routes
     private static AppError InvalidTokenError() =>
         AppError.WithMessage(HttpStatusCode.Forbidden, "Invalid token or IP address");
 
+    /// <summary>从请求体读取 DTO；类型信息来自源生成上下文，AOT 下无反射。</summary>
     private static async Task<T> ReadJsonAsync<T>(Stream body, CancellationToken ct)
     {
         try
         {
-            var result = await JsonSerializer.DeserializeAsync<T>(body, JsonOpts, ct).ConfigureAwait(false);
+            var result = await LsJson.DeserializeAsync<T>(body, ct).ConfigureAwait(false);
             return result ?? throw AppError.BadRequest("Invalid JSON body");
         }
         catch (JsonException)
@@ -374,44 +378,8 @@ public sealed class RequestClientInfo
 
     /// <summary>证书指纹（SHA-256 大写十六进制）；非 TLS 时为 null。</summary>
     public string? CertFingerprint =>
-        Cert == null ? null : LocalSend.Core.Crypto.CertVerifier.FingerprintFromCertDer(Cert);
+        Cert == null ? null : CertVerifier.FingerprintFromCertDer(Cert);
 }
 
-/// <summary>轻量的 HTTP 响应抽象，便于在不同的 HTTP 后端之间复用。</summary>
-public interface IHttpResponse
-{
-    HttpStatusCode Status { get; }
-    string? ContentType { get; }
-    byte[]? Body { get; }
-    /// <summary>额外的响应头（key, value）。</summary>
-    IReadOnlyList<(string Key, string Value)> ExtraHeaders { get; }
-}
-
-/// <summary>JSON 响应，对应 Rust 端 <c>JsonResponse&lt;T&gt;</c>。</summary>
-public sealed class JsonResponse<T> : IHttpResponse
-{
-    public HttpStatusCode Status { get; }
-    public T Body { get; }
-    public string? ContentType => "application/json";
-    byte[]? IHttpResponse.Body => _body ??= JsonSerializer.SerializeToUtf8Bytes(Body, JsonOpts);
-    public IReadOnlyList<(string Key, string Value)> ExtraHeaders { get; } = Array.Empty<(string, string)>();
-
-    private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
-    private byte[]? _body;
-
-    public JsonResponse(HttpStatusCode status, T body)
-    {
-        Status = status;
-        Body = body;
-    }
-}
-
-/// <summary>空响应体。</summary>
-public sealed class EmptyResponse : IHttpResponse
-{
-    public HttpStatusCode Status { get; }
-    public string? ContentType => null;
-    public byte[]? Body => null;
-    public IReadOnlyList<(string Key, string Value)> ExtraHeaders { get; } = Array.Empty<(string, string)>();
-    public EmptyResponse(HttpStatusCode status) { Status = status; }
-}
+// IHttpResponse / JsonResponse / EmptyResponse 已拆到 IHttpResponse.cs。
+// JsonResponse 构造时直接接收源生成序列化后的字节，AOT 下不再有反射序列化。

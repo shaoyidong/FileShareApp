@@ -6,6 +6,7 @@ using FileShare.Core.Network;
 using FileShare.Core.Network.Discovery;
 using FileShare.Core.Services;
 using FileShare.Desktop.Services;
+using FileShare.LocalSend;
 using FileShare.Desktop.Views;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -1340,8 +1341,8 @@ namespace FileShare.Desktop.ViewModels
                 Port = peer.Port,
                 DeviceType = peer.DeviceType switch
                 {
-                    LocalSend.Core.Model.DeviceType.Mobile => DeviceType.Mobile,
-                    LocalSend.Core.Model.DeviceType.Web => DeviceType.Desktop,
+                    global::LocalSend.Core.Model.DeviceType.Mobile => DeviceType.Mobile,
+                    global::LocalSend.Core.Model.DeviceType.Web => DeviceType.Desktop,
                     _ => DeviceType.Desktop
                 },
                 SupportsTls = peer.Protocol == ProtocolTypeV2.Https

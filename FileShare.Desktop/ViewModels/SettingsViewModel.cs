@@ -3,8 +3,10 @@ using CommunityToolkit.Mvvm.Input;
 using FileShare.Core.Models;
 using FileShare.Core.Services;
 using FileShare.Desktop.Services;
+using FileShare.LocalSend;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Input;
 using FileShare.Desktop.Localization;
@@ -100,12 +102,9 @@ public partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     private string _selectedLanguageCode = "zh-CN";
 
-    /// <summary>可选语言。</summary>
-    public IReadOnlyList<LanguageOption> LanguageOptions { get; } = new[]
-    {
-        new LanguageOption("zh-CN", "简体中文"),
-        new LanguageOption("en-US", "English"),
-    };
+    /// <summary>可选语言：从已注册的语言包动态生成（新增语言无需改这里）。</summary>
+    public IReadOnlyList<LanguageOption> LanguageOptions { get; } =
+        Loc.Packs.Select(pack => new LanguageOption(pack.Code, pack.DisplayName)).ToArray();
 
     [ObservableProperty]
     private bool _webShareEnabled;
@@ -223,8 +222,10 @@ public partial class SettingsViewModel : ViewModelBase
         SaveDirectory = settings.SaveDirectory ?? string.Empty;
         SelectedDeviceType = FindOption(settings.DeviceType);
         OverwriteExisting = settings.ConflictPolicy == FileNameConflictPolicy.Overwrite;
-        MinimizeToTray = settings.MinimizeToTray;
-        CloseToTray = settings.CloseToTray;
+        // 托盘行为属于桌面端 UI 偏好，不再从 Core 的 AppSettings 读取
+        var uiPreferences = ResolveUiPreferences()?.Current;
+        MinimizeToTray = uiPreferences?.MinimizeToTray ?? false;
+        CloseToTray = uiPreferences?.CloseToTray ?? false;
         EnableMdns = settings.EnableMdns;
         EnableMulticast = settings.EnableMulticast;
         EnableBroadcast = settings.EnableBroadcast;
@@ -235,11 +236,7 @@ public partial class SettingsViewModel : ViewModelBase
         LocalSendEnabled = settings.LocalSendEnabled;
         LocalSendPortText = settings.LocalSendPort.ToString();
         LocalSendPinText = settings.LocalSendPin;
-        SelectedLanguageCode = ResolveUiPreferences()?.Current.Language switch
-        {
-            AppLanguage.EnUS => "en-US",
-            _ => "zh-CN",
-        };
+        SelectedLanguageCode = uiPreferences?.LanguageCode ?? "zh-CN";
         NetworkBlacklistText = settings.NetworkBlacklist;
         ParallelTransfersText = settings.ParallelTransfers.ToString();
         UploadLimitText = settings.UploadLimitKBps.ToString();
@@ -350,8 +347,6 @@ public partial class SettingsViewModel : ViewModelBase
             settings.SaveDirectory = string.IsNullOrWhiteSpace(SaveDirectory) ? null : SaveDirectory.Trim();
 
             settings.ConflictPolicy = OverwriteExisting ? FileNameConflictPolicy.Overwrite : FileNameConflictPolicy.Rename;
-            settings.MinimizeToTray = MinimizeToTray;
-            settings.CloseToTray = CloseToTray;
             settings.EnableMdns = EnableMdns;
             settings.EnableMulticast = EnableMulticast;
             settings.EnableBroadcast = EnableBroadcast;
@@ -378,11 +373,11 @@ public partial class SettingsViewModel : ViewModelBase
         var uiPreferences = ResolveUiPreferences();
         if (uiPreferences is not null)
         {
-            var language = SelectedLanguageCode == "en-US" ? AppLanguage.EnUS : AppLanguage.ZhCN;
-            uiPreferences.SetLanguage(language);
+            uiPreferences.SetTrayPreferences(MinimizeToTray, CloseToTray);
+            uiPreferences.SetLanguage(SelectedLanguageCode);
 
             // 立即生效（会触发 Loc.LanguageChanged → 主界面重建）
-            Loc.SetLanguage(language);
+            Loc.SetLanguage(SelectedLanguageCode);
         }
 
         ResolveWebShareHost()?.Apply();

@@ -1,17 +1,16 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using LocalSend.Core.Http.Dto;
-using LocalSend.Core.Http.DtoV2;
+using LocalSend.Core.Json;
 
 namespace LocalSend.Core.Http.Client;
 
 /// <summary>
 /// HTTP 响应扩展方法，对应 Rust 端 <c>ResponseExt::into_error</c>。
+/// <para>所有 JSON 读写都经 <see cref="LsJson"/> 使用源生成元数据，AOT 下无反射。</para>
 /// </summary>
 internal static class HttpResponseExtensions
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
-
     /// <summary>
     /// 当响应不成功时，尝试解析错误体为 <see cref="ErrorResponse"/>，
     /// 失败则使用原始文本作为错误消息。
@@ -23,10 +22,10 @@ internal static class HttpResponseExtensions
         string? message = null;
         try
         {
-            var err = JsonSerializer.Deserialize<ErrorResponse>(body, JsonOptions);
+            var err = LsJson.Deserialize<ErrorResponse>(body);
             message = err?.Message;
         }
-        catch
+        catch (JsonException)
         {
             message = body;
         }
@@ -35,12 +34,12 @@ internal static class HttpResponseExtensions
 
     public static Task<T?> ReadAsJsonAsync<T>(this HttpResponseMessage res, CancellationToken ct = default)
     {
-        return res.Content.ReadFromJsonAsync<T>(JsonOptions, ct);
+        return res.Content.ReadFromJsonAsync(LsJson.Info<T>(), ct);
     }
 
     public static StringContent AsJsonContent<T>(T payload)
     {
-        var json = JsonSerializer.Serialize(payload, JsonOptions);
+        var json = LsJson.Serialize(payload);
         return new StringContent(json, System.Text.Encoding.UTF8, "application/json");
     }
 }

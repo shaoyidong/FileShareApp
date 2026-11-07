@@ -262,3 +262,16 @@ internal static class EnglishTranslations
         ["最小化时隐藏到系统托盘"] = "Hide to tray when minimized",
     };
 }
+
+/// <summary>
+/// 英文语言包：把上面这张静态译文表包装成 <see cref="ILanguagePack"/>，
+/// 由 <see cref="Loc"/> 按 BCP-47 code 查表。
+/// </summary>
+internal sealed class EnglishLanguagePack : ILanguagePack
+{
+    public string Code => "en-US";
+
+    public string DisplayName => "English";
+
+    public IReadOnlyDictionary<string, string> Map => EnglishTranslations.Map;
+}

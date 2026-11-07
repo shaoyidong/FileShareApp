@@ -17,12 +17,16 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="BouncyCastle.Cryptography" Version="2.7.0" />
     <PackageReference Include="Dapper.AOT" Version="1.1.0" />
     <PackageReference Include="Microsoft.Data.Sqlite.Core" Version="10.0.12" />
     <PackageReference Include="Dapper" Version="2.1.86" />
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.5" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 加密实现统一在 FileShare.Crypto（BouncyCastle 经其传递引用） -->
+    <ProjectReference Include="..\FileShare.Crypto\FileShare.Crypto.csproj" />
   </ItemGroup>
 
 </Project>

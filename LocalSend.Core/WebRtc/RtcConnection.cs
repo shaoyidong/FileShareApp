@@ -1,6 +1,7 @@
-using System.Text.Json;
 using System.Threading.Channels;
+using FileShare.Crypto;
 using LocalSend.Core.Crypto;
+using LocalSend.Core.Json;
 using LocalSend.Core.Model;
 using LocalSend.Core.WebRtc.Signaling;
 using LocalSend.Core.Util;
@@ -185,7 +186,7 @@ public static class RtcConnection
                         _ => throw new InvalidOperationException()
                     };
                     await RtcProtocol.SendStringInChunksAsync(dataChannel,
-                        JsonSerializer.Serialize(resp), ct);
+                        LsJson.SerializeRuntime(resp), ct);
                     await RtcProtocol.SendDelimiterAsync(dataChannel, ct);
                 },
                 ct: ct);
@@ -196,7 +197,7 @@ public static class RtcConnection
         // 7. 发送文件列表（用 RtcPinSendingResponse.Ok 包装）。
         var fileListMsg = new RtcPinSendingResponse.Ok { Files = files };
         await RtcProtocol.SendStringInChunksAsync(
-            dataChannel, JsonSerializer.Serialize(fileListMsg), ct);
+            dataChannel, LsJson.SerializeRuntime(fileListMsg), ct);
         await RtcProtocol.SendDelimiterAsync(dataChannel, ct);
 
         // 8. 接收对端的 file list 响应。
@@ -275,7 +276,7 @@ public static class RtcConnection
         while (true)
         {
             var (bytes, _) = await RtcProtocol.ReceiveBinaryUntilTextAsync(dataChannel.Messages, ct);
-            var resp = JsonSerializer.Deserialize<RtcFileListResponse>(bytes)
+            var resp = LsJson.Deserialize<RtcFileListResponse>(bytes)
                 ?? throw new InvalidOperationException("Failed to deserialize file list response");
 
             switch (resp)
@@ -490,7 +491,7 @@ public static class RtcConnection
         {
             // 用户拒绝
             await RtcProtocol.SendStringInChunksAsync(dataChannel,
-                JsonSerializer.Serialize(new RtcFileListResponse.Declined()), ct);
+                LsJson.SerializeRuntime(new RtcFileListResponse.Declined()), ct);
             await RtcProtocol.SendDelimiterAsync(dataChannel, ct);
             return;
         }
@@ -498,7 +499,7 @@ public static class RtcConnection
         // 为每个选中的文件分配 token。
         var fileTokens = selected.ToDictionary(id => id, _ => Guid.NewGuid().ToString());
         await RtcProtocol.SendStringInChunksAsync(dataChannel,
-            JsonSerializer.Serialize(new RtcFileListResponse.Ok { Files = fileTokens }), ct);
+            LsJson.SerializeRuntime(new RtcFileListResponse.Ok { Files = fileTokens }), ct);
         await RtcProtocol.SendDelimiterAsync(dataChannel, ct);
 
         // 主接收循环：交替处理"文本消息（文件头 / 结束标记）"与"二进制块（文件内容）"。
@@ -549,7 +550,7 @@ public static class RtcConnection
                 }
 
                 // 解析下一个文件头。
-                var header = JsonSerializer.Deserialize<RtcSendFileHeaderRequest>(msg.Data)
+                var header = LsJson.Deserialize<RtcSendFileHeaderRequest>(msg.Data)
                     ?? throw new InvalidOperationException("Failed to deserialize file header");
 
                 if (!fileTokens.TryGetValue(header.Id, out var expected))
@@ -641,7 +642,7 @@ public static class RtcConnection
         CancellationToken ct)
     {
         var (bytes, _) = await RtcProtocol.ReceiveBinaryUntilTextAsync(dataChannel.Messages, ct);
-        var resp = JsonSerializer.Deserialize<RtcPinSendingResponse>(bytes)
+        var resp = LsJson.Deserialize<RtcPinSendingResponse>(bytes)
             ?? throw new InvalidOperationException("Failed to deserialize pin sending response");
 
         switch (resp)
@@ -683,7 +684,7 @@ public static class RtcConnection
             throw new InvalidOperationException("Expected string message (nonce)");
         }
 
-        var nonceMsg = JsonSerializer.Deserialize<RtcNonceMessage>(msg.AsText())
+        var nonceMsg = LsJson.Deserialize<RtcNonceMessage>(msg.AsText())
             ?? throw new InvalidOperationException("Failed to deserialize nonce message");
         byte[] nonce = nonceMsg.DecodeNonce();
         if (!Nonce.ValidateNonce(nonce))
@@ -707,7 +708,7 @@ public static class RtcConnection
             throw new InvalidOperationException("Expected string message");
         }
 
-        return JsonSerializer.Deserialize<T>(msg.AsText())
+        return LsJson.Deserialize<T>(msg.AsText())
             ?? throw new InvalidOperationException($"Failed to deserialize {typeof(T).Name}");
     }
 
@@ -743,7 +744,7 @@ public static class RtcConnection
 
             // 接收响应（分块拼接）。
             var (bytes, _) = await RtcProtocol.ReceiveBinaryUntilTextAsync(dataChannel.Messages, ct);
-            var resp = JsonSerializer.Deserialize<RtcPinSendingResponse>(bytes)
+            var resp = LsJson.Deserialize<RtcPinSendingResponse>(bytes)
                 ?? throw new InvalidOperationException("Failed to parse pin response");
 
             switch (resp)
@@ -800,7 +801,7 @@ public static class RtcConnection
                 }
             }
 
-            var resp = JsonSerializer.Deserialize<RtcPinReceivingResponse>(respMsg.AsText())
+            var resp = LsJson.Deserialize<RtcPinReceivingResponse>(respMsg.AsText())
                 ?? throw new InvalidOperationException("Failed to parse pin response");
 
             switch (resp)
@@ -873,7 +874,7 @@ public static class RtcConnection
             }
 
             var msg = await dataChannel.Messages.ReadAsync(ct);
-            var pinReq = JsonSerializer.Deserialize<RtcPinMessage>(msg.AsText())
+            var pinReq = LsJson.Deserialize<RtcPinMessage>(msg.AsText())
                 ?? throw new InvalidOperationException("Failed to parse pin message");
             remotePin = pinReq.Pin;
             pinTry++;

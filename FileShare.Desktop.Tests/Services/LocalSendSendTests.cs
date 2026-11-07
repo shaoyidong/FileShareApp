@@ -1,6 +1,7 @@
 using FileShare.Core.Services;
 using FileShare.Desktop.Services;
-using LocalSend.Core.Crypto;
+using FileShare.LocalSend;
+using FileShare.Crypto;
 using LocalSend.Core.Http.DtoV2;
 using LocalSend.Core.Http.Server;
 using LocalSend.Core.Http.Server.Common;
@@ -142,7 +143,7 @@ public class LocalSendSendTests
             {
                 Alias = "Receiver",
                 Version = "2.3",
-                DeviceType = LocalSend.Core.Model.DeviceType.Desktop,
+                DeviceType = global::LocalSend.Core.Model.DeviceType.Desktop,
                 Token = tls is null ? "http-fingerprint" : fingerprint
             },
             internalConfig: null,
@@ -210,7 +211,7 @@ public class LocalSendSendTests
             {
                 Alias = "ProbeTarget",
                 Version = "2.3",
-                DeviceType = LocalSend.Core.Model.DeviceType.Mobile,
+                DeviceType = global::LocalSend.Core.Model.DeviceType.Mobile,
                 Token = fingerprint
             },
             internalConfig: null,

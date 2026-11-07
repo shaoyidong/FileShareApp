@@ -1,8 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
-using FileShare.Core.Services;
 using FileShare.Desktop.Services;
-using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.ComponentModel;
 
@@ -11,14 +9,20 @@ namespace FileShare.Desktop.Views;
 public partial class MainWindow : Window
 {
     private readonly TrayService? _trayService;
-    private readonly IAppSettingsService? _settingsService;
+    private readonly IUiPreferencesService? _uiPreferences;
 
-    public MainWindow()
+    /// <summary>设计器 / XAML 预览使用的无参构造。</summary>
+    public MainWindow() : this(null)
+    {
+    }
+
+    /// <summary>运行时构造：托盘偏好由 DI 注入（属于桌面端 UI 设置，不再来自 Core）。</summary>
+    public MainWindow(IUiPreferencesService? uiPreferences)
     {
         InitializeComponent();
 
         _trayService = App.TrayService;
-        _settingsService = App.ServiceProvider?.GetService<IAppSettingsService>();
+        _uiPreferences = uiPreferences;
 
         Opened += OnWindowOpened;
         Closing += OnWindowClosing;
@@ -27,9 +31,9 @@ public partial class MainWindow : Window
     private void OnWindowOpened(object? sender, EventArgs e)
     {
         // 托盘图标只在启用了「最小化到托盘 / 关闭到托盘」时显示
-        var settings = _settingsService?.Current;
+        var preferences = _uiPreferences?.Current;
         _trayService?.Attach(this);
-        _trayService?.SetVisible(settings is { MinimizeToTray: true } || settings is { CloseToTray: true });
+        _trayService?.SetVisible(preferences is { MinimizeToTray: true } || preferences is { CloseToTray: true });
 
         PropertyChanged += OnWindowPropertyChanged;
     }
@@ -41,7 +45,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (_settingsService?.Current.MinimizeToTray == true && _trayService is { IsAvailable: true })
+        if (_uiPreferences?.Current.MinimizeToTray == true && _trayService is { IsAvailable: true })
         {
             Hide();
         }
@@ -49,7 +53,7 @@ public partial class MainWindow : Window
 
     private void OnWindowClosing(object? sender, WindowClosingEventArgs e)
     {
-        if (_trayService is null || _settingsService?.Current.CloseToTray != true)
+        if (_trayService is null || _uiPreferences?.Current.CloseToTray != true)
         {
             return;
         }

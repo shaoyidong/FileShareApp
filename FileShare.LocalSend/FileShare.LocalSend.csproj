@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    FileShare.LocalSend - LocalSend 协议适配层（原误放在 FileShare.Desktop 下）
+
+    这一层只做「协议 <-> 应用」的粘合：
+      - LocalSendInteropHost : 启动 LocalSend 服务端 / 组播宣告 / 事件循环 / 发送入口
+      - LocalSendSender      : v2 prepare-upload + upload 客户端（含 mTLS TOFU）
+      - LocalSendIdentity    : 证书身份与持久化
+      - LocalSendTrustStore  : 对端证书指纹 TOFU 信任库
+
+    刻意不引用 Avalonia / Desktop：UI 交互通过 ILocalSendUiBridge 反向注入，
+    因此移动端未来也能直接复用本适配层。
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>FileShare.LocalSend</RootNamespace>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\FileShare.Core\FileShare.Core.csproj" />
+    <ProjectReference Include="..\FileShare.Crypto\FileShare.Crypto.csproj" />
+    <ProjectReference Include="..\LocalSend.Core\LocalSend.Core.csproj" />
+  </ItemGroup>
+
+</Project>

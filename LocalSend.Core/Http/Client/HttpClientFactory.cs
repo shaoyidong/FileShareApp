@@ -1,8 +1,7 @@
-using System.Net.Http;
-using System.Security.Cryptography;
-using System.Security.Cryptography.X509Certificates;
-using LocalSend.Core.Crypto;
+using FileShare.Crypto;
 using LocalSend.Core.Model;
+using System.Net.Http;
+using System.Security.Cryptography.X509Certificates;
 
 namespace LocalSend.Core.Http.Client;
 
@@ -14,35 +13,25 @@ internal static class HttpClientFactory
 {
     /// <summary>
     /// 创建带客户端证书的 <see cref="HttpClient"/>，对应 Rust 的 <c>create_reqwest_client</c>。
+    /// 证书加载走 FileShare.Crypto 的统一加载器（BouncyCastle 组装 PFX → 密钥容器导入），
+    /// 与 FileShare 自身传输共用一套路径，NativeAOT 安全。
     /// </summary>
     /// <param name="privateKeyPem">PEM 私钥（用于客户端 mTLS 证书）。</param>
     /// <param name="certPem">PEM 证书。</param>
     /// <param name="timeout">请求超时；<c>null</c> 表示使用默认值。</param>
     public static HttpClient Create(string privateKeyPem, string certPem, TimeSpan? timeout)
     {
-        // 将 cert + 私钥合并成 X509Certificate2（带私钥），用于 mTLS 客户端认证。
-        // 使用 CopyWithPrivateKey 确保私钥与证书关联。
-        X509Certificate2 certWithKey;
-        using (var cert = X509Certificate2.CreateFromPem(certPem))
-        {
-            using var rsa = RSA.Create();
-            rsa.ImportFromPem(privateKeyPem);
-            certWithKey = cert.CopyWithPrivateKey(rsa);
-        }
+        var certWithKey = TlsCertificateLoader.LoadWithPrivateKey(certPem, privateKeyPem, trace: LsLog.Trace);
 
         var handler = new HttpClientHandler
         {
-            // LocalSend 的对端证书是自签名且指纹由设备指纹标识，
-            // 因此我们手动校验（详见 VerifyRemoteCert），这里跳过框架的证书校验。
-            ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator,
+            ServerCertificateCustomValidationCallback =
+                HttpClientHandler.DangerousAcceptAnyServerCertificateValidator,
             ClientCertificates = { certWithKey }
         };
 
         var client = new HttpClient(handler);
-        if (timeout.HasValue)
-        {
-            client.Timeout = timeout.Value;
-        }
+        if (timeout.HasValue) client.Timeout = timeout.Value;
         return client;
     }
 

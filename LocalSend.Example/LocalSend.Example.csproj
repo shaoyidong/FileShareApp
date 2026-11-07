@@ -5,7 +5,8 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <!--<PublishAot>true</PublishAot>-->
+    <!-- 作为 LocalSend.Core 的 AOT 验证载体：确认 JSON 全链路已无反射序列化 -->
+    <PublishAot>true</PublishAot>
     <InvariantGlobalization>true</InvariantGlobalization>
   </PropertyGroup>
 

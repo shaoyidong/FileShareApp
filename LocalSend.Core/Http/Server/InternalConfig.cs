@@ -1,8 +1,10 @@
 using System.Net;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading.Channels;
 using LocalSend.Core.Http.Server.Common;
 using LocalSend.Core.Http.Server.V2;
+using LocalSend.Core.Json;
 
 namespace LocalSend.Core.Http.Server;
 
@@ -48,7 +50,6 @@ public sealed class InternalState
 /// </summary>
 internal sealed class InternalRoutes
 {
-    private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
     private readonly InternalState _state;
 
     public InternalRoutes(InternalState state) { _state = state; }
@@ -67,7 +68,7 @@ internal sealed class InternalRoutes
         {
             try
             {
-                var req = await JsonSerializer.DeserializeAsync<ShowRequest>(body, JsonOpts, ct).ConfigureAwait(false);
+                var req = await LsJson.DeserializeAsync<ShowRequest>(body, ct).ConfigureAwait(false);
                 if (req?.Args != null) args.AddRange(req.Args);
             }
             catch (JsonException)
@@ -79,9 +80,14 @@ internal sealed class InternalRoutes
         await _state.EventTx.Writer.WriteAsync(new InternalEvent.Show { Args = args }, ct).ConfigureAwait(false);
         return new EmptyResponse(HttpStatusCode.OK);
     }
+}
 
-    private sealed class ShowRequest
-    {
-        public List<string> Args { get; set; } = new();
-    }
+/// <summary>
+/// <c>POST /api/localsend/v2/show</c> 的请求体。
+/// 提到顶层是为了能在 <see cref="LocalSendJsonContext"/> 中注册（AOT 下源生成要求类型可访问）。
+/// </summary>
+public sealed class ShowRequest
+{
+    [JsonPropertyName("args")]
+    public List<string> Args { get; set; } = new();
 }

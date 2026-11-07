@@ -38,14 +38,8 @@ public sealed class AppSettings
     /// <summary>接收同名文件时的处理策略（默认自动重命名，绝不静默覆盖）。</summary>
     public FileNameConflictPolicy ConflictPolicy { get; set; } = FileNameConflictPolicy.Rename;
 
-    /// <summary>界面语言：<c>zh-CN</c> / <c>en-US</c>（需要重启生效）。</summary>
-    public string Language { get; set; } = "zh-CN";
-
-    /// <summary>最小化窗口时隐藏到系统托盘。</summary>
-    public bool MinimizeToTray { get; set; }
-
-    /// <summary>关闭主窗口时隐藏到托盘（而不是退出）。</summary>
-    public bool CloseToTray { get; set; }
+    // 纯 UI 设置（Language / MinimizeToTray / CloseToTray）已移到 Desktop 的
+    // DesktopUiPreferences（desktop-ui.json），Core 只保留与传输/发现相关的跨平台配置。
 
     /// <summary>是否启用 mDNS 发现。</summary>
     public bool EnableMdns { get; set; } = true;
@@ -134,9 +128,6 @@ public sealed class AppSettings
             SaveDirectory = SaveDirectory,
             FavoriteDeviceIds = new List<string>(FavoriteDeviceIds),
             ConflictPolicy = ConflictPolicy,
-            Language = Language,
-            MinimizeToTray = MinimizeToTray,
-            CloseToTray = CloseToTray,
             EnableMdns = EnableMdns,
             EnableMulticast = EnableMulticast,
             EnableBroadcast = EnableBroadcast,
@@ -198,11 +189,6 @@ public sealed class AppSettings
         if (!Enum.IsDefined(ConflictPolicy))
         {
             ConflictPolicy = FileNameConflictPolicy.Rename;
-        }
-
-        if (Language is not ("zh-CN" or "en-US"))
-        {
-            Language = "zh-CN";
         }
 
         if (MulticastPort is < 1024 or > 65535)

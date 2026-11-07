@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using FileShare.Core.Services;
@@ -9,55 +10,19 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace FileShare.Desktop.Services;
 
-/// <summary>
-/// 桌面端皮肤。**只属于 Desktop**：移动端有自己的视觉体系，不应该被 Win7/XP 皮肤污染，
-/// 因此皮肤选择不再放在 Core 的 AppSettings 里，而是由桌面项目单独持久化。
-/// </summary>
-public enum AppSkin
-{
-    /// <summary>Windows 7 / Aero（默认）。</summary>
-    Win7 = 0,
-
-    /// <summary>Windows XP / Luna Blue（经典蓝）。</summary>
-    WinXP = 1,
-
-    /// <summary>Windows XP / Luna Olive（橄榄绿）。</summary>
-    WinXPOlive = 2,
-}
-
-/// <summary>
-/// 桌面端 UI 偏好（目前只有皮肤，后续可扩展字号/密度等纯 UI 配置）。
-/// </summary>
-public sealed class DesktopUiPreferences
-{
-    /// <summary>选中皮肤。</summary>
-    public AppSkin Skin { get; set; } = AppSkin.Win7;
-
-    /// <summary>界面语言。</summary>
-    public AppLanguage Language { get; set; } = AppLanguage.ZhCN;
-}
-
-/// <summary>
-/// 桌面端 UI 偏好存取。
-/// </summary>
-public interface IUiPreferencesService
-{
-    /// <summary>当前偏好。</summary>
-    DesktopUiPreferences Current { get; }
-
-    /// <summary>更新皮肤并立即保存。</summary>
-    void SetSkin(AppSkin skin);
-
-    /// <summary>更新语言并立即保存。</summary>
-    void SetLanguage(AppLanguage language);
-}
+// AppSkin / DesktopUiPreferences / IUiPreferencesService 已各拆到独立文件。
 
 /// <summary>
 /// 基于 <c>desktop-ui.json</c> 的 UI 偏好服务（与 Core 的 settings.json 分离）。
+/// <para>
+/// 兼容旧配置：早期版本把语言保存为 <c>"Language": 0|1</c> 枚举值，
+/// 首次读取时映射为 BCP-47 字符串（0→zh-CN、1→en-US）并立即写回新格式。
+/// </para>
 /// </summary>
 public sealed class JsonUiPreferencesService : IUiPreferencesService
 {
     private const string FileName = "desktop-ui.json";
+    private const string DefaultLanguageCode = "zh-CN";
 
     private readonly object _gate = new();
     private readonly string _filePath;
@@ -100,14 +65,38 @@ public sealed class JsonUiPreferencesService : IUiPreferencesService
     }
 
     /// <inheritdoc />
-    public void SetLanguage(AppLanguage language)
+    public void SetLanguage(string languageCode)
     {
         lock (_gate)
         {
-            _current.Language = language;
+            _current.LanguageCode = NormalizeCode(languageCode);
         }
 
         Save();
+    }
+
+    /// <inheritdoc />
+    public void SetTrayPreferences(bool minimizeToTray, bool closeToTray)
+    {
+        lock (_gate)
+        {
+            _current.MinimizeToTray = minimizeToTray;
+            _current.CloseToTray = closeToTray;
+        }
+
+        Save();
+    }
+
+    private static string NormalizeCode(string? code)
+    {
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            return DefaultLanguageCode;
+        }
+
+        return Loc.Packs.Any(p => string.Equals(p.Code, code, StringComparison.OrdinalIgnoreCase))
+            ? code
+            : DefaultLanguageCode;
     }
 
     private void Reload()
@@ -133,6 +122,36 @@ public sealed class JsonUiPreferencesService : IUiPreferencesService
             {
                 _current.Skin = AppSkin.Win7;
             }
+
+            // 旧格式的 Language 是枚举数字（0=zh-CN / 1=en-US）；source-gen 会忽略该未知字段，
+            // 这里用 JsonDocument 单独读出并一次性迁移为 LanguageCode。
+            bool migrated = false;
+            using (var document = JsonDocument.Parse(json))
+            {
+                if (document.RootElement.TryGetProperty("Language", out var legacy))
+                {
+                    string? code = legacy.ValueKind switch
+                    {
+                        JsonValueKind.Number when legacy.TryGetInt32(out var n) => n == 1 ? "en-US" : "zh-CN",
+                        JsonValueKind.String => legacy.GetString(),
+                        _ => null
+                    };
+
+                    if (!string.IsNullOrWhiteSpace(code) &&
+                        Loc.Packs.Any(p => string.Equals(p.Code, code, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        _current.LanguageCode = code!;
+                        migrated = true;
+                    }
+                }
+            }
+
+            _current.LanguageCode = NormalizeCode(_current.LanguageCode);
+
+            if (migrated)
+            {
+                Save(); // 写回新格式（旧 Language 字段随之消失）
+            }
         }
         catch (Exception ex)
         {
@@ -154,7 +173,13 @@ public sealed class JsonUiPreferencesService : IUiPreferencesService
             DesktopUiPreferences snapshot;
             lock (_gate)
             {
-                snapshot = new DesktopUiPreferences { Skin = _current.Skin, Language = _current.Language };
+                snapshot = new DesktopUiPreferences
+                {
+                    Skin = _current.Skin,
+                    LanguageCode = _current.LanguageCode,
+                    MinimizeToTray = _current.MinimizeToTray,
+                    CloseToTray = _current.CloseToTray
+                };
             }
 
             var json = JsonSerializer.Serialize(snapshot, DesktopJsonContext.Default.DesktopUiPreferences);

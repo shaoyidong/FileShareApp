@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using LocalSend.Core.Json;
 
 namespace LocalSend.Core.WebRtc.Signaling;
 
@@ -131,15 +132,16 @@ internal sealed class WsServerMessageConverter : JsonConverter<WsServerMessage>
         // 读取时把 "type" 字段去掉再反序列化为具体子类，
         // 否则子类没有该字段会报错。
         var obj = root.Clone();
+        var raw = obj.GetRawText();
         return type?.ToUpperInvariant() switch
         {
-            "HELLO" => obj.Deserialize<WsServerMessage.Hello>(options),
-            "JOIN" => obj.Deserialize<WsServerMessage.Join>(options),
-            "UPDATE" => obj.Deserialize<WsServerMessage.Update>(options),
-            "LEFT" => obj.Deserialize<WsServerMessage.Left>(options),
-            "OFFER" => obj.Deserialize<WsServerMessage.Offer>(options),
-            "ANSWER" => obj.Deserialize<WsServerMessage.Answer>(options),
-            "ERROR" => obj.Deserialize<WsServerMessage.Error>(options),
+            "HELLO" => LsJson.Deserialize<WsServerMessage.Hello>(raw),
+            "JOIN" => LsJson.Deserialize<WsServerMessage.Join>(raw),
+            "UPDATE" => LsJson.Deserialize<WsServerMessage.Update>(raw),
+            "LEFT" => LsJson.Deserialize<WsServerMessage.Left>(raw),
+            "OFFER" => LsJson.Deserialize<WsServerMessage.Offer>(raw),
+            "ANSWER" => LsJson.Deserialize<WsServerMessage.Answer>(raw),
+            "ERROR" => LsJson.Deserialize<WsServerMessage.Error>(raw),
             _ => throw new JsonException($"Unknown WsServerMessage type: {type}")
         };
     }
@@ -158,10 +160,8 @@ internal sealed class WsServerMessageConverter : JsonConverter<WsServerMessage>
             WsServerMessage.Error => "ERROR",
             _ => throw new JsonException("Unknown WsServerMessage subtype")
         });
-        // 把子类字段写入。这里直接序列化子类，但跳过它本身没有的 type。
-        var subOptions = new JsonSerializerOptions(options);
-        // 使用源生成会更优雅；此处简单序列化每个子类并合并字段。
-        var bytes = JsonSerializer.SerializeToUtf8Bytes(value, value.GetType(), subOptions);
+        // 把子类字段写入。按运行时类型取源生成元数据（AOT 安全），跳过 type 字段。
+        var bytes = LsJson.SerializeToUtf8BytesVariant(value);
         using var sub = JsonDocument.Parse(bytes);
         foreach (var prop in sub.RootElement.EnumerateObject())
         {
@@ -182,12 +182,12 @@ internal sealed class WsClientMessageConverter : JsonConverter<WsClientMessage>
             throw new JsonException("Missing 'type' tag");
         }
         var type = typeEl.GetString();
-        var obj = root.Clone();
+        var raw = root.GetRawText();
         return type?.ToUpperInvariant() switch
         {
-            "UPDATE" => obj.Deserialize<WsClientMessage.Update>(options),
-            "OFFER" => obj.Deserialize<WsClientMessage.Offer>(options),
-            "ANSWER" => obj.Deserialize<WsClientMessage.Answer>(options),
+            "UPDATE" => LsJson.Deserialize<WsClientMessage.Update>(raw),
+            "OFFER" => LsJson.Deserialize<WsClientMessage.Offer>(raw),
+            "ANSWER" => LsJson.Deserialize<WsClientMessage.Answer>(raw),
             _ => throw new JsonException($"Unknown WsClientMessage type: {type}")
         };
     }
@@ -202,7 +202,7 @@ internal sealed class WsClientMessageConverter : JsonConverter<WsClientMessage>
             WsClientMessage.Answer => "ANSWER",
             _ => throw new JsonException("Unknown WsClientMessage subtype")
         });
-        var bytes = JsonSerializer.SerializeToUtf8Bytes(value, value.GetType(), options);
+        var bytes = LsJson.SerializeToUtf8BytesVariant(value);
         using var sub = JsonDocument.Parse(bytes);
         foreach (var prop in sub.RootElement.EnumerateObject())
         {

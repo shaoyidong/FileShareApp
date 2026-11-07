@@ -1,4 +1,5 @@
 using FileShare.Desktop.Services;
+using FileShare.LocalSend;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace FileShare.Desktop.Tests.Services;

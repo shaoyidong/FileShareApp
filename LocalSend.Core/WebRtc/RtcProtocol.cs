@@ -1,8 +1,8 @@
 using System.IO.Compression;
 using System.Text;
-using System.Text.Json;
 using System.Threading.Channels;
-using LocalSend.Core.Util;
+using FileShare.Crypto;
+using LocalSend.Core.Json;
 
 namespace LocalSend.Core.WebRtc;
 
@@ -32,7 +32,7 @@ public static class RtcProtocol
             zlib.Write(bytes, 0, bytes.Length);
         }
 
-        return Base64Url.Encode(output.ToArray());
+        return Base64UrlUtil.Encode(output.ToArray());
     }
 
     /// <summary>
@@ -41,7 +41,7 @@ public static class RtcProtocol
     /// </summary>
     public static string DecodeSdp(string encoded)
     {
-        byte[] compressed = Base64Url.Decode(encoded);
+        byte[] compressed = Base64UrlUtil.Decode(encoded);
         using var input = new MemoryStream(compressed);
         using var zlib = new ZLibStream(input, CompressionMode.Decompress);
         using var output = new MemoryStream();
@@ -170,7 +170,9 @@ public static class RtcProtocol
         T value,
         CancellationToken ct = default)
     {
-        string json = JsonSerializer.Serialize(value);
+        // 按运行时类型取源生成元数据：多态报文（内部标签 union）需要分发到具体子类，
+        // 否则会落到基类转换器并递归。
+        string json = LsJson.SerializeRuntime(value!);
         return channel.SendTextAsync(json, ct);
     }
 }

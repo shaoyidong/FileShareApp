@@ -1,5 +1,6 @@
 using System.Net.Http;
 using System.Threading.Channels;
+using FileShare.Crypto;
 using LocalSend.Core.Crypto;
 using LocalSend.Core.Http.Dto;
 using LocalSend.Core.Model;
@@ -58,7 +59,7 @@ public sealed class LsHttpClientV3 : IDisposable
         ProtocolType protocol, string ip, ushort port, CancellationToken ct = default)
     {
         var generatedNonce = Nonce.GenerateNonce();
-        var generatedNonceBase64 = Base64Url.Encode(generatedNonce);
+        var generatedNonceBase64 = Base64UrlUtil.Encode(generatedNonce);
 
         var requestBody = new NonceRequest { Nonce = generatedNonceBase64 };
         var url = new TargetUrl(ApiVersion.V3, protocol.AsStr(), ip, port, "/nonce").ToString();
@@ -77,7 +78,7 @@ public sealed class LsHttpClientV3 : IDisposable
         var remoteKey = await ToIdentifierAsync(res, protocol == ProtocolType.Https).ConfigureAwait(false);
         var body = await res.ReadAsJsonAsync<NonceResponse>(ct).ConfigureAwait(false)
             ?? throw new ClientError("Empty nonce response");
-        var responseNonce = Base64Url.Decode(body.Nonce);
+        var responseNonce = Base64UrlUtil.Decode(body.Nonce);
 
         await _receivedLock.WaitAsync(ct).ConfigureAwait(false);
         try { _receivedNonceMap.Put(remoteKey, responseNonce); }

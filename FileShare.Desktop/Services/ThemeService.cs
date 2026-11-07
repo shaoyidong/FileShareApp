@@ -1,41 +1,29 @@
 using Avalonia;
 using Avalonia.Markup.Xaml.Styling;
-using FileShare.Core.Services;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace FileShare.Desktop.Services;
 
-/// <summary>
-/// 皮肤管理：运行时在 Windows 7 / Windows XP（蓝）/ Windows XP（橄榄绿）之间切换。
-/// </summary>
-public interface IThemeService
-{
-    /// <summary>当前皮肤。</summary>
-    AppSkin Current { get; }
-
-    /// <summary>所有可用皮肤（按展示顺序）。</summary>
-    IReadOnlyList<AppSkin> AvailableSkins { get; }
-
-    /// <summary>应用皮肤（会替换 <see cref="Application.Styles"/> 中的皮肤 StyleInclude）。</summary>
-    void Apply(AppSkin skin);
-}
-
 /// <inheritdoc cref="IThemeService"/>
+/// <remarks>
+/// AOT 安全实现：三套皮肤的 <see cref="StyleInclude"/> 实例全部由 App.axaml 在编译期静态创建
+/// （XAML 编译器强类型加载，不会被 TrimMode=full 裁掉）。
+/// 切换时只把缓存的实例从 <c>Application.Styles</c> 移除再回填，
+/// 不再在运行时 <c>new StyleInclude(new Uri(...))</c>。
+/// </remarks>
 public sealed class ThemeService : IThemeService
 {
-    private const string AssemblyRoot = "avares://FileShare.Desktop/";
-
-    /// <summary>皮肤枚举 → 样式文件。新增皮肤只需在这里加一行 + 新增 axaml。</summary>
-    private static readonly Dictionary<AppSkin, string> SkinFiles = new()
+    /// <summary>皮肤枚举 → 样式文件（用于按 Source 识别静态声明的实例）。</summary>
+    private static readonly (AppSkin Skin, string RelativePath)[] SkinFiles =
     {
-        [AppSkin.Win7] = "Themes/Win7.axaml",
-        [AppSkin.WinXP] = "Themes/WinXP.axaml",
-        [AppSkin.WinXPOlive] = "Themes/WinXPOlive.axaml",
+        (AppSkin.Win7, "Themes/Win7.axaml"),
+        (AppSkin.WinXP, "Themes/WinXP.axaml"),
+        (AppSkin.WinXPOlive, "Themes/WinXPOlive.axaml"),
     };
 
     private readonly IUiPreferencesService _uiPreferences;
+    private readonly Dictionary<AppSkin, StyleInclude> _skinStyles = new();
 
     public ThemeService(IUiPreferencesService uiPreferences)
     {
@@ -49,17 +37,55 @@ public sealed class ThemeService : IThemeService
     /// <inheritdoc />
     public IReadOnlyList<AppSkin> AvailableSkins { get; } = new[] { AppSkin.Win7, AppSkin.WinXP, AppSkin.WinXPOlive };
 
+    /// <summary>
+    /// 在 <c>App.Initialize</c> 中、窗口创建之前调用：缓存 App.axaml 静态声明的皮肤实例，
+    /// 并摘除除默认 Win7 之外的皮肤，保证首帧只有一套皮肤生效（无叠加、无闪烁）。
+    /// </summary>
+    public void InitializeFromApplication(Application application)
+    {
+        if (application is null)
+        {
+            return;
+        }
+
+        _skinStyles.Clear();
+        foreach (var style in application.Styles)
+        {
+            if (style is not StyleInclude include || include.Source is not { } source)
+            {
+                continue;
+            }
+
+            foreach (var (skin, relativePath) in SkinFiles)
+            {
+                if (source.AbsolutePath.EndsWith(relativePath, StringComparison.OrdinalIgnoreCase))
+                {
+                    _skinStyles[skin] = include;
+                    break;
+                }
+            }
+        }
+
+        // 静态默认只保留 Win7；随后 Apply(Current) 会按用户偏好回填目标实例。
+        foreach (var (skin, _) in SkinFiles)
+        {
+            if (skin != AppSkin.Win7 && _skinStyles.TryGetValue(skin, out var extra))
+            {
+                application.Styles.Remove(extra);
+            }
+        }
+    }
+
     /// <inheritdoc />
     public void Apply(AppSkin skin)
     {
-        if (!SkinFiles.TryGetValue(skin, out var relativePath))
+        if (!Enum.IsDefined(skin))
         {
-            relativePath = SkinFiles[AppSkin.Win7];
             skin = AppSkin.Win7;
         }
 
         var application = Application.Current;
-        if (application is null)
+        if (application is null || _skinStyles.Count == 0)
         {
             // 设计器 / 单元测试环境：只记录状态，不做实际切换
             Current = skin;
@@ -67,20 +93,22 @@ public sealed class ThemeService : IThemeService
             return;
         }
 
-        for (var index = application.Styles.Count - 1; index >= 0; index--)
+        // 移除全部皮肤实例，再回填目标实例；不使用运行时 URI 加载。
+        foreach (var include in _skinStyles.Values)
         {
-            if (application.Styles[index] is StyleInclude include &&
-                include.Source is { } source &&
-                SkinFiles.Values.Any(path => source.AbsolutePath.EndsWith(path, StringComparison.OrdinalIgnoreCase)))
-            {
-                application.Styles.RemoveAt(index);
-            }
+            application.Styles.Remove(include);
         }
 
-        application.Styles.Add(new StyleInclude(new Uri(AssemblyRoot, UriKind.Absolute))
+        if (!_skinStyles.TryGetValue(skin, out var target))
         {
-            Source = new Uri(AssemblyRoot + relativePath, UriKind.Absolute)
-        });
+            skin = AppSkin.Win7;
+            _skinStyles.TryGetValue(skin, out target);
+        }
+
+        if (target is not null)
+        {
+            application.Styles.Add(target);
+        }
 
         Current = skin;
 

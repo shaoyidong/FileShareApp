@@ -369,3 +369,5 @@ FodyWeavers.xsd
 #output
 /output
 /.build
+/.workbuddy/memory
+/.zcode/plans

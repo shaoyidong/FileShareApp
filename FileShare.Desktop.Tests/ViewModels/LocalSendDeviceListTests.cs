@@ -1,6 +1,7 @@
 using FileShare.Core.Models;
 using FileShare.Core.Services;
 using FileShare.Desktop.Services;
+using FileShare.LocalSend;
 using FileShare.Desktop.ViewModels;
 using LocalSend.Core.Http.DtoV2;
 using Microsoft.Extensions.Logging.Abstractions;
