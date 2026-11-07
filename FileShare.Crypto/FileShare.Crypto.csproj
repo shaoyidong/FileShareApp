@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    FileShare.Crypto - 共享加密库
+
+    FileShare 自身传输与 LocalSend 兼容协议共用的加密实现（一套逻辑）：
+      - TlsCertificate / TlsCertificateGenerator : RSA 自签名 TLS 证书的生成与 PEM/PFX 编解码（BouncyCastle 纯托管，AOT 安全）
+      - TlsCertificateLoader                     : PEM+私钥 → X509Certificate2 的统一加载（密钥容器 fallback 链）
+      - CertVerifier / Token / SigningTokenKey   : 证书校验、token 签发与验签（Ed25519 / RSA-PSS）
+    依赖刻意保持最少：BouncyCastle + Microsoft.Extensions.Logging.Abstractions。
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>FileShare.Crypto</RootNamespace>
+    <PublishAot>true</PublishAot>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)'=='Debug'">
+    <IsAotCompatible>True</IsAotCompatible>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)'=='Release'">
+    <IsAotCompatible>True</IsAotCompatible>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BouncyCastle.Cryptography" Version="2.7.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
+  </ItemGroup>
+
+</Project>

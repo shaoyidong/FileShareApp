@@ -1,7 +1,8 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using LocalSend.Core.Json;
 using LocalSend.Core.Model;
-using LocalSend.Core.Util;
+using FileShare.Crypto;
 
 namespace LocalSend.Core.WebRtc;
 
@@ -30,11 +31,11 @@ public sealed class RtcNonceMessage
     /// <summary>从字节数组构造，自动做 base64-url 编码。</summary>
     public static RtcNonceMessage FromBytes(byte[] nonce) => new()
     {
-        Nonce = Base64Url.Encode(nonce)
+        Nonce = Base64UrlUtil.Encode(nonce)
     };
 
     /// <summary>解码为字节数组。</summary>
-    public byte[] DecodeNonce() => Base64Url.Decode(Nonce);
+    public byte[] DecodeNonce() => Base64UrlUtil.Decode(Nonce);
 }
 
 /// <summary>
@@ -281,8 +282,8 @@ internal abstract class TaggedUnionConverter<T> : JsonConverter<T> where T : cla
             throw new JsonException($"Unknown {_tagField} tag: {tag}");
         }
 
-        // 反序列化到具体子类。
-        return (T?)root.Deserialize(factory().GetType(), options);
+        // 反序列化到具体子类（按运行时类型取源生成元数据，AOT 安全）。
+        return (T?)LsJson.Deserialize(root.GetRawText(), factory().GetType());
     }
 
     public override void Write(Utf8JsonWriter writer, T value, JsonSerializerOptions options)
@@ -306,7 +307,7 @@ internal abstract class TaggedUnionConverter<T> : JsonConverter<T> where T : cla
         writer.WriteStartObject();
         writer.WriteString(_tagField, tag);
         // 把子类字段写入（排除 _tagField 本身）。
-        var bytes = JsonSerializer.SerializeToUtf8Bytes(value, value.GetType(), options);
+        var bytes = LsJson.SerializeToUtf8BytesVariant(value);
         using var sub = JsonDocument.Parse(bytes);
         foreach (var prop in sub.RootElement.EnumerateObject())
         {

@@ -1,4 +1,4 @@
-using LocalSend.Core.Crypto;
+using FileShare.Crypto;
 using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;

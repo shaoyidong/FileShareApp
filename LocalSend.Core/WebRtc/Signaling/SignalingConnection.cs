@@ -2,7 +2,8 @@ using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Channels;
-using LocalSend.Core.Util;
+using FileShare.Crypto;
+using LocalSend.Core.Json;
 
 namespace LocalSend.Core.WebRtc.Signaling;
 
@@ -92,8 +93,8 @@ public sealed class SignalingConnection : IAsyncDisposable
         // 作为查询参数 d= 附加到 URL。对应 Rust 端：
         //   let encoded_info = base64::encode(&serde_json::to_string(info)?);
         //   let uri = format!("{}?d={}", uri.into(), encoded_info);
-        string json = JsonSerializer.Serialize(info);
-        string encoded = Base64Url.Encode(Encoding.UTF8.GetBytes(json));
+        string json = LsJson.Serialize(info);
+        string encoded = Base64UrlUtil.Encode(Encoding.UTF8.GetBytes(json));
         string fullUri = $"{uri}?d={encoded}";
 
         var ws = new ClientWebSocket();
@@ -195,7 +196,7 @@ public sealed class SignalingConnection : IAsyncDisposable
 
             while (reader.TryRead(out var message))
             {
-                string json = JsonSerializer.Serialize(message);
+                string json = LsJson.SerializeRuntime(message);
                 byte[] bytes = Encoding.UTF8.GetBytes(json);
                 try
                 {
@@ -255,7 +256,7 @@ public sealed class SignalingConnection : IAsyncDisposable
                 WsServerMessage? message;
                 try
                 {
-                    message = JsonSerializer.Deserialize<WsServerMessage>(textBuilder.ToString());
+                    message = LsJson.Deserialize<WsServerMessage>(textBuilder.ToString());
                 }
                 catch (JsonException)
                 {

@@ -11,6 +11,7 @@ using LocalSend.Core.Http.DtoV2;
 using LocalSend.Core.Http.State;
 using LocalSend.Core.Model;
 using ProtocolType = LocalSend.Core.Http.Dto.ProtocolType;
+using LocalSend.Core.Json;
 
 namespace LocalSend.Core.Discovery;
 
@@ -228,7 +229,7 @@ public sealed class MulticastDiscoveryService : IDisposable
     public async Task SendAnnouncementAsync(CancellationToken ct = default)
     {
         var msg = BuildMulticastMessage(announce: true);
-        var json = JsonSerializer.Serialize(msg);
+        var json = JsonSerializer.Serialize(msg, LocalSendJsonContext.Default.MulticastMessageV2);
         var data = Encoding.UTF8.GetBytes(json);
 
         try
@@ -260,7 +261,7 @@ public sealed class MulticastDiscoveryService : IDisposable
     public async Task TriggerAnnouncementAsync(CancellationToken ct = default)
     {
         var msg = BuildMulticastMessage(announce: true);
-        var json = JsonSerializer.Serialize(msg);
+        var json = JsonSerializer.Serialize(msg, LocalSendJsonContext.Default.MulticastMessageV2);
         var data = Encoding.UTF8.GetBytes(json);
 
         await SendMulticastOnAllInterfacesAsync(data, ct);
@@ -285,7 +286,7 @@ public sealed class MulticastDiscoveryService : IDisposable
 
                 try
                 {
-                    var msg = JsonSerializer.Deserialize<MulticastMessageV2>(json);
+                    var msg = JsonSerializer.Deserialize<MulticastMessageV2>(json, LocalSendJsonContext.Default.MulticastMessageV2);
                     if (msg == null) continue;
 
                     // 过滤自身消息
@@ -378,7 +379,7 @@ public sealed class MulticastDiscoveryService : IDisposable
         try
         {
             var msg = BuildMulticastMessage(announce: false);
-            var json = JsonSerializer.Serialize(msg);
+            var json = JsonSerializer.Serialize(msg, LocalSendJsonContext.Default.MulticastMessageV2);
             var data = Encoding.UTF8.GetBytes(json);
 
             await SendMulticastOnAllInterfacesAsync(data, ct);

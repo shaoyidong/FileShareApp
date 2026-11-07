@@ -7,6 +7,7 @@ using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
 using FileShare.Core.Services;
 using FileShare.Desktop.Services;
+using FileShare.LocalSend;
 using FileShare.Desktop.ViewModels;
 using FileShare.Desktop.Views;
 using Microsoft.Extensions.DependencyInjection;
@@ -47,12 +48,14 @@ namespace FileShare.Desktop
                 var uiPreferences = ServiceProvider?.GetService<IUiPreferencesService>();
 
                 // 语言必须在任何视图加载之前设置
-                FileShare.Desktop.Localization.Loc.SetLanguage(uiPreferences?.Current.Language ?? FileShare.Desktop.Localization.AppLanguage.ZhCN);
+                FileShare.Desktop.Localization.Loc.SetLanguage(uiPreferences?.Current.LanguageCode ?? "zh-CN");
                 var themeService = ServiceProvider?.GetService<IThemeService>();
-                if (themeService is not null)
+                // 缓存 App.axaml 静态声明的三套皮肤实例并摘除多余皮肤（窗口创建前完成）
+                if (themeService is ThemeService concreteTheme)
                 {
-                    themeService.Apply(uiPreferences?.Current.Skin ?? AppSkin.Win7);
+                    concreteTheme.InitializeFromApplication(this);
                 }
+                themeService?.Apply(uiPreferences?.Current.Skin ?? AppSkin.Win7);
             }
             catch (Exception ex)
             {
@@ -187,10 +190,13 @@ namespace FileShare.Desktop
         }
 
         /// <summary>
-        /// 逐页渲染自检：主界面 → 历史 → 设置 → 回到主界面，然后以 0 退出。
+        /// 自检：主界面 → 历史 → 设置 → 皮肤切换（Win7 → WinXP → 回到原皮肤）→ 回到主界面，
+        /// 然后以 0 退出。皮肤切换用于验证 AOT / TrimMode=full 下静态声明的皮肤实例能被正常回填。
         /// </summary>
         private static void RunSmokeTest(IClassicDesktopStyleApplicationLifetime desktop, MainViewModel viewModel)
         {
+            var themeService = App.ServiceProvider?.GetService<IThemeService>();
+            var originalSkin = themeService?.Current ?? AppSkin.Win7;
             var step = 0;
             var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1200) };
             timer.Tick += (_, _) =>
@@ -205,6 +211,14 @@ namespace FileShare.Desktop
                         viewModel.ShowSettingsCommand.Execute(null);
                         break;
                     case 3:
+                        themeService?.Apply(AppSkin.WinXP);
+                        break;
+                    case 4:
+                        themeService?.Apply(AppSkin.Win7);
+                        break;
+                    case 5:
+                        // 恢复用户原本的皮肤，避免冒烟自检改写偏好
+                        themeService?.Apply(originalSkin);
                         viewModel.CurrentView = viewModel;
                         break;
                     default:

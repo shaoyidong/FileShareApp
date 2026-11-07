@@ -6,8 +6,10 @@
     x:CompileBindings="True"
     RequestedThemeVariant="Light">
     <!--
-        皮肤（Win7 / WinXP 蓝 / WinXP 米色）由 ThemeService 在运行时替换：
-        这里先加载默认皮肤，App.Initialize 里会按用户保存的设置重新应用一次。
+        皮肤（Win7 / WinXP 蓝 / WinXP 橄榄绿）全部在编译期静态声明：
+        AOT / TrimMode=full 会裁掉仅靠运行时 URI 反射加载的 axaml，
+        所以 ThemeService 只做「移除全部皮肤实例 → 回填目标实例」，不再 new StyleInclude(uri)。
+        App.Initialize 会在窗口创建前按用户偏好摘除多余皮肤（无闪烁）。
 
         基础主题使用 SimpleTheme（而不是 FluentTheme）：
         Simple 的控件模板几乎不带圆角、阴影、Reveal 高亮和主题色硬编码，
@@ -35,6 +37,9 @@
 
     <Application.Styles>
         <SimpleTheme />
+        <!-- StyleInclude 不支持 x:Name，ThemeService 按 Source 路径识别并缓存这三个编译期实例 -->
         <StyleInclude Source="avares://FileShare.Desktop/Themes/Win7.axaml" />
+        <StyleInclude Source="avares://FileShare.Desktop/Themes/WinXP.axaml" />
+        <StyleInclude Source="avares://FileShare.Desktop/Themes/WinXPOlive.axaml" />
     </Application.Styles>
 </Application>

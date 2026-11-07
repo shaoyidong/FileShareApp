@@ -1,4 +1,4 @@
-﻿﻿﻿using LocalSend.Core.Crypto;
+﻿﻿﻿using FileShare.Crypto;
 using LocalSend.Core.Discovery;
 using LocalSend.Core.Http.Client;
 using LocalSend.Core.Http.Dto;

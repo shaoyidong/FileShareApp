@@ -1,10 +1,10 @@
 using System.Net;
-using System.Text.Json;
 using System.Threading.Channels;
 using LocalSend.Core.Http.DtoV2;
 using LocalSend.Core.Http.Server.Common;
 using LocalSend.Core.Http.Server.V2;
 using LocalSend.Core.Http.State;
+using LocalSend.Core.Json;
 using LocalSend.Core.Model;
 
 namespace LocalSend.Core.Http.Server.Web;
@@ -14,8 +14,6 @@ namespace LocalSend.Core.Http.Server.Web;
 /// </summary>
 public sealed class WebRoutes
 {
-    private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
-
     private readonly WebPageState _state;
     private readonly Func<ClientInfo> _getInfo;
 
@@ -173,7 +171,7 @@ public sealed class WebRoutes
             Files = _state.Files
         };
         await Task.CompletedTask;
-        return new JsonResponse<PrepareDownloadResponseDtoV2>(HttpStatusCode.OK, body);
+        return new JsonResponse(HttpStatusCode.OK, LsJson.SerializeToUtf8Bytes(body));
     }
 
     private async Task ClearPendingSessionAsync(string sessionId)

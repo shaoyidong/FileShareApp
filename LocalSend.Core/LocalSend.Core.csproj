@@ -36,6 +36,8 @@
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591;CS1574;CS1734</NoWarn>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <!-- 启用 AOT/trim 分析器：确保反射式 JSON 序列化不再混入本程序集 -->
+    <IsAotCompatible>true</IsAotCompatible>
   </PropertyGroup>
 
   <ItemGroup>
@@ -43,7 +45,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="BouncyCastle.Cryptography" Version="2.7.0" />
+    <!-- 加密实现统一在 FileShare.Crypto（与 FileShare 自身传输共用一套，BouncyCastle 经其传递引用） -->
+    <ProjectReference Include="..\FileShare.Crypto\FileShare.Crypto.csproj" />
   </ItemGroup>
 
 </Project>

@@ -1,10 +1,12 @@
 using System.Net;
 using System.Text.Json;
+using FileShare.Crypto;
 using LocalSend.Core.Crypto;
 using LocalSend.Core.Http.Dto;
 using LocalSend.Core.Http.Server.Common;
 using LocalSend.Core.Http.Server.V2;
 using LocalSend.Core.Http.State;
+using LocalSend.Core.Json;
 using LocalSend.Core.Util;
 using LruCache = LocalSend.Core.Util.LruCache<string, byte[]>;
 
@@ -19,8 +21,6 @@ namespace LocalSend.Core.Http.Server.V3;
 /// </remarks>
 public sealed class V3Routes
 {
-    private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
-
     private readonly Func<ClientInfo> _getInfo;
     private readonly Func<bool> _hasWeb;
 
@@ -40,7 +40,7 @@ public sealed class V3Routes
     }
 
     /// <summary>处理 <c>POST /api/localsend/v3/nonce</c>。</summary>
-    public async Task<JsonResponse<NonceResponse>> NonceExchangeAsync(
+    public async Task<IHttpResponse> NonceExchangeAsync(
         Stream body, RequestClientInfo clientInfo, CancellationToken ct = default)
     {
         var payload = await ReadJsonAsync<NonceRequest>(body, ct).ConfigureAwait(false);
@@ -48,7 +48,7 @@ public sealed class V3Routes
         byte[] nonce;
         try
         {
-            nonce = Base64Url.Decode(payload.Nonce);
+            nonce = Base64UrlUtil.Decode(payload.Nonce);
         }
         catch
         {
@@ -67,22 +67,23 @@ public sealed class V3Routes
 
         // 为对端生成新的 nonce。
         var newNonce = Nonce.GenerateNonce();
-        var newNonceBase64 = Base64Url.Encode(newNonce);
+        var newNonceBase64 = Base64UrlUtil.Encode(newNonce);
         await GeneratedLock.WaitAsync(ct).ConfigureAwait(false);
         try { GeneratedNonceMap.Put(remoteKey, newNonce); }
         finally { GeneratedLock.Release(); }
 
-        return new JsonResponse<NonceResponse>(HttpStatusCode.OK, new NonceResponse { Nonce = newNonceBase64 });
+        var response = new NonceResponse { Nonce = newNonceBase64 };
+        return new JsonResponse(HttpStatusCode.OK, LsJson.SerializeToUtf8Bytes(response));
     }
 
     /// <summary>处理 <c>POST /api/localsend/v3/register</c>。</summary>
-    public async Task<JsonResponse<RegisterResponseDto>> RegisterAsync(
+    public async Task<IHttpResponse> RegisterAsync(
         Stream body, RequestClientInfo clientInfo, CancellationToken ct = default)
     {
         var payload = await ReadJsonAsync<RegisterDto>(body, ct).ConfigureAwait(false);
         var info = _getInfo();
 
-        return new JsonResponse<RegisterResponseDto>(HttpStatusCode.OK, new RegisterResponseDto
+        var response = new RegisterResponseDto
         {
             Alias = info.Alias,
             Version = info.Version,
@@ -90,14 +91,16 @@ public sealed class V3Routes
             DeviceType = info.DeviceType,
             Token = info.Token,
             HasWebInterface = _hasWeb()
-        });
+        };
+        return new JsonResponse(HttpStatusCode.OK, LsJson.SerializeToUtf8Bytes(response));
     }
 
+    /// <summary>从请求体读取 DTO；类型信息来自源生成上下文，AOT 下无反射。</summary>
     private static async Task<T> ReadJsonAsync<T>(Stream body, CancellationToken ct)
     {
         try
         {
-            var result = await JsonSerializer.DeserializeAsync<T>(body, JsonOpts, ct).ConfigureAwait(false);
+            var result = await LsJson.DeserializeAsync<T>(body, ct).ConfigureAwait(false);
             return result ?? throw AppError.BadRequest("Invalid JSON body");
         }
         catch (JsonException)

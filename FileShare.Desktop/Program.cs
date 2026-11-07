@@ -6,6 +6,7 @@ using FileShare.Core.Network.Tls;
 using FileShare.Core.Services;
 using FileShare.Desktop.Helpers;
 using FileShare.Desktop.Services;
+using FileShare.LocalSend;
 using FileShare.Desktop.ViewModels;
 using FileShare.Desktop.Views;
 using Microsoft.Extensions.DependencyInjection;
@@ -251,13 +252,17 @@ namespace FileShare.Desktop
                 sp.GetRequiredService<ILoggerFactory>()));
             services.AddSingleton<IThemeService, ThemeService>();
 
+            // LocalSend 适配层通过 UI 桥反向注入通知 / 文案，适配层本身不依赖 Avalonia
+            services.AddSingleton<ILocalSendUiBridge>(sp =>
+                new LocalSendUiBridge(sp.GetRequiredService<IToastService>()));
+
             // 通知卡片（懒解析 lifetime：解析发生在 App 初始化之后）
             services.AddSingleton<ILocalSendInteropHost>(sp => new LocalSendInteropHost(
                 sp.GetRequiredService<IAppSettingsService>(),
                 sp.GetRequiredService<IPlatformDirectoryService>(),
                 sp.GetRequiredService<IDatabaseService>(),
                 sp.GetRequiredService<ILoggerFactory>(),
-                sp.GetRequiredService<IToastService>()));
+                sp.GetRequiredService<ILocalSendUiBridge>()));
 
             services.AddSingleton<IWebShareHost>(sp => new WebShareHost(
                 sp.GetRequiredService<IAppSettingsService>(),
@@ -301,7 +306,8 @@ namespace FileShare.Desktop
             });
 
             // 注册视图（以便 ViewLocator 能从 DI 解析）
-            services.AddTransient<MainWindow>();
+            services.AddTransient<MainWindow>(sp =>
+                new MainWindow(sp.GetRequiredService<IUiPreferencesService>()));
             services.AddTransient<MainView>();
             services.AddTransient<HistoryView>(); 
             services.AddTransient<SettingsView>();

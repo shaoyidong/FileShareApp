@@ -5,6 +5,7 @@ using FileShare.Core.Services;
 using FileShare.Core.Models;
 using FileShare.Mobile.Services;
 using Microsoft.Maui.Storage;
+using Microsoft.Extensions.Logging.Abstractions;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -19,6 +20,7 @@ namespace FileShare.Mobile.Tests.ViewModels
     private readonly Mock<IPlatformDirectoryService> _mockDirectoryService;
     private readonly Mock<IPickerService> _mockFilePickerService;
     private readonly Mock<IAppManagementService> _mockAppManagementService;
+    private readonly Mock<IAppSettingsService> _mockSettingsService;
     private readonly MainPageViewModel _viewModel;
     private readonly SynchronizationContext _testSynchronizationContext;
 
@@ -35,6 +37,8 @@ namespace FileShare.Mobile.Tests.ViewModels
             _mockDirectoryService = new Mock<IPlatformDirectoryService>();
             _mockFilePickerService = new Mock<IPickerService>();
             _mockAppManagementService = new Mock<IAppManagementService>();
+            _mockSettingsService = new Mock<IAppSettingsService>();
+            _mockSettingsService.SetupGet(s => s.Current).Returns(new AppSettings());
 
             // 设置模拟对象的行为
             _mockServiceManager.Setup(m => m.GetLocalDeviceInfo())
@@ -64,7 +68,9 @@ namespace FileShare.Mobile.Tests.ViewModels
                 _mockForegroundService.Object,
                 _mockAlertService.Object,
                 _mockFilePickerService.Object,
-                _mockAppManagementService.Object);
+                _mockSettingsService.Object,
+                _mockAppManagementService.Object,
+                NullLoggerFactory.Instance);
         }
 
         [Fact]
