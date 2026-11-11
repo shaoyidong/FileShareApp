@@ -1,4 +1,4 @@
-namespace FileShare.Desktop.Services;
+namespace FileShare.Desktop.Themes;
 
 /// <summary>
 /// 桌面端皮肤。**只属于 Desktop**：移动端有自己的视觉体系，不应该被 Win7/XP 皮肤污染，

@@ -94,23 +94,14 @@ public class FileTransferInfo
     }
 
     public byte[]? ReceivedHash { get; set; }
+
+    /// <summary>
+    /// 是否为原生文本消息（不落盘、免确认）。为 true 时 <see cref="FileName"/> 只是摘要，
+    /// 真正内容在 <see cref="MessageText"/>。
+    /// </summary>
+    public bool IsMessage { get; set; }
+
+    /// <summary>文本消息全文（非消息为 null）。</summary>
+    public string? MessageText { get; set; }
 }
 
-/// <summary>
-/// 传输状态枚举
-/// </summary>
-public enum TransferStatus
-{
-    Pending,    // 等待中
-    Transferring, // 传输中
-    Completed,  // 完成
-    Failed,     // 失败
-    Cancelled,   // 取消
-    WaitingChecksum,  // 数据已收完，等待校验和
-}
-
-public enum TransferDirection
-{
-    Send,     // 发送
-    Receive   // 接收
-}

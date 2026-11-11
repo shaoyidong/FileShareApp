@@ -70,7 +70,8 @@ public class DatabaseService : IDatabaseService
                 PeerName TEXT,
                 FilePath TEXT,
                 Status INTEGER NOT NULL DEFAULT 2,
-                ErrorMessage TEXT
+                ErrorMessage TEXT,
+                Message TEXT
             );";
         
         connection.Execute(createTableSql);
@@ -82,6 +83,8 @@ public class DatabaseService : IDatabaseService
         EnsureColumn(connection, "ReceiveHistory", "FilePath", "TEXT");
         EnsureColumn(connection, "ReceiveHistory", "Status", "INTEGER NOT NULL DEFAULT 2");
         EnsureColumn(connection, "ReceiveHistory", "ErrorMessage", "TEXT");
+        // 文本消息记录：完整内容直接入库（不落盘），旧库自动补列
+        EnsureColumn(connection, "ReceiveHistory", "Message", "TEXT");
     }
 
     /// <summary>
@@ -156,8 +159,8 @@ public class DatabaseService : IDatabaseService
         using var connection = new SqliteConnection(_connectionString);
         await connection.OpenAsync();
         
-        const string insertSql = @"INSERT INTO ReceiveHistory (SenderId, SenderDeviceName, FileName, FileSize, SavePath, CreatedAt, Direction, PeerId, PeerName, FilePath, Status, ErrorMessage)
-                                   VALUES (@SenderId, @SenderDeviceName, @FileName, @FileSize, @SavePath, @CreatedAt, @Direction, @PeerId, @PeerName, @FilePath, @Status, @ErrorMessage);";
+        const string insertSql = @"INSERT INTO ReceiveHistory (SenderId, SenderDeviceName, FileName, FileSize, SavePath, CreatedAt, Direction, PeerId, PeerName, FilePath, Status, ErrorMessage, Message)
+                                   VALUES (@SenderId, @SenderDeviceName, @FileName, @FileSize, @SavePath, @CreatedAt, @Direction, @PeerId, @PeerName, @FilePath, @Status, @ErrorMessage, @Message);";
         receiveHistory.PeerId ??= receiveHistory.SenderId;
         receiveHistory.PeerName ??= receiveHistory.SenderDeviceName;
         var result = await connection.ExecuteAsync(insertSql, receiveHistory);

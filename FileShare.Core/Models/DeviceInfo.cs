@@ -40,13 +40,3 @@ public class DeviceInfo
     /// </summary>
     public bool SupportsTls { get; set; }
 }
-
-/// <summary>
-/// 设备类型枚举
-/// </summary>
-public enum DeviceType
-{
-    Desktop,
-    Mobile,
-    Tablet
-}

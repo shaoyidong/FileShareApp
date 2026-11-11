@@ -159,20 +159,29 @@ public class FileShareServiceManager : IFileShareServiceManager
             var peerName = _discoveryService.GetDiscoveredDevices()?
                 .FirstOrDefault(device => device.DeviceId == peerId)?.DeviceName;
 
-            // 接收记录用实际落盘的文件名（可能被重命名为 "xxx (1).ext"）
-            var fileName = isReceive
-                ? info.SavedFileName ?? info.FileName
-                : info.FileName;
+            // 接收记录用实际落盘的文件名（可能被重命名为 "xxx (1).ext"）；
+            // 文本消息没有文件，FileName 只是摘要
+            var fileName = info.IsMessage
+                ? info.FileName
+                : isReceive ? info.SavedFileName ?? info.FileName : info.FileName;
 
-            // 只有成功的传输才留下可打开的文件：
-            // 发送 = 源文件；接收 = 落盘文件（失败/取消时临时文件已删除）
+            // 「文件」传输才记录可打开的路径：
+            // 成功：发送 = 源文件；接收 = 落盘文件（失败/取消时临时文件已删除，路径无意义）
+            // 失败/取消的发送：源文件仍在本地，保留路径让历史页能出缩略图预览、事后重发
             string? filePath = null;
-            if (info.Status == TransferStatus.Completed)
+            if (!info.IsMessage)
             {
-                filePath = info.FilePath;
-                if (string.IsNullOrEmpty(filePath) && !string.IsNullOrEmpty(info.SavePath))
+                if (info.Status == TransferStatus.Completed)
                 {
-                    filePath = Path.Combine(info.SavePath, fileName);
+                    filePath = info.FilePath;
+                    if (string.IsNullOrEmpty(filePath) && !string.IsNullOrEmpty(info.SavePath))
+                    {
+                        filePath = Path.Combine(info.SavePath, fileName);
+                    }
+                }
+                else if (!isReceive && !string.IsNullOrEmpty(info.FilePath))
+                {
+                    filePath = info.FilePath;
                 }
             }
 
@@ -184,15 +193,24 @@ public class FileShareServiceManager : IFileShareServiceManager
                 PeerName = peerName,
                 FileName = fileName,
                 FileSize = info.FileSize,
-                SavePath = info.SavePath ?? string.Empty,
+                SavePath = info.IsMessage ? string.Empty : info.SavePath ?? string.Empty,
                 FilePath = filePath,
                 Status = info.Status,
                 ErrorMessage = message,
                 CreatedAt = DateTime.UtcNow,
-                Direction = info.Direction
+                Direction = info.Direction,
+                Message = info.IsMessage ? info.MessageText : null
             };
 
-            _ = _databaseService.AddSingleReceiveHistoryAsync(entity);
+            // 这是事件回调（void），不能改成 await，但必须显式观察写库异常：
+            // 直接 `_ = asyncMethod()` 会让失败变成 UnobservedTaskException，
+            // 表现就是「传输明明结束了，历史里却没有记录且日志无痕迹」。
+            _ = _databaseService.AddSingleReceiveHistoryAsync(entity)
+                .ContinueWith(
+                    task => _logger.LogWarning(task.Exception, "写入传输历史失败: {File}", info.FileName),
+                    CancellationToken.None,
+                    TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                    TaskScheduler.Default);
         }
         catch (Exception ex)
         {
@@ -494,64 +512,27 @@ public class FileShareServiceManager : IFileShareServiceManager
     }
 
     /// <summary>
-    /// 发送一段文本：写成本地临时 .txt 后走正常文件传输。
-    /// <para>这样无需改动协议即可让对端收到可保存/可打开的文本文件，并且与旧版本客户端兼容。</para>
+    /// 发送一条原生文本消息：内容随协议请求直接送达，对端免确认、不落盘，
+    /// 显示为可复制的消息气泡。两端需同时升级（旧版客户端不认识该请求类型）。
     /// </summary>
     /// <param name="text">文本内容。</param>
     /// <param name="targetDevice">目标设备。</param>
-    /// <param name="fileName">可选文件名（默认「文本消息_时间戳.txt」）。</param>
-    /// <param name="progress">进度。</param>
-    /// <param name="cancellationToken">取消令牌。</param>
-    public async Task<bool> SendTextAsync(
+    /// <param name="cancellationToken">取消令牌（保留以兼容既有调用点）。</param>
+    public async Task<bool> SendTextMessageAsync(
         string text,
         DeviceInfo targetDevice,
-        string? fileName = null,
-        IProgress<FileSendProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
-        if (text is null)
+        if (text is null || targetDevice is null)
         {
             return false;
         }
 
-        var tempDirectory = Path.Combine(Path.GetTempPath(), "FileShare", "outgoing");
-        Directory.CreateDirectory(tempDirectory);
+        cancellationToken.ThrowIfCancellationRequested();
 
-        var safeName = FileNameHelper.SanitizeFileName(
-            fileName ?? $"文本消息_{DateTime.Now:yyyyMMdd_HHmmss}.txt",
-            "text.txt");
-
-        if (!safeName.EndsWith(".txt", StringComparison.OrdinalIgnoreCase))
-        {
-            safeName += ".txt";
-        }
-
-        var tempPath = Path.Combine(tempDirectory, $"{Guid.NewGuid():N}_{safeName}");
-
-        try
-        {
-            await File.WriteAllTextAsync(tempPath, text, cancellationToken).ConfigureAwait(false);
-
-            // 发送时用干净的文件名（临时路径前缀只用于本地去重）
-            var stagingPath = Path.Combine(tempDirectory, $"{Guid.NewGuid():N}.send");
-            File.Move(tempPath, stagingPath, overwrite: true);
-
-            var success = await _fileTransferService
-                .SendFileAsync(stagingPath, targetDevice, _localDevice.DeviceId, null, safeName)
-                .ConfigureAwait(false);
-
-            progress?.Report(new FileSendProgress(1, 1, safeName, success));
-            return success;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "发送文本失败");
-            return false;
-        }
-        finally
-        {
-            TryDeleteFile(tempPath);
-        }
+        return await _fileTransferService
+            .SendTextMessageAsync(text, targetDevice, _localDevice.DeviceId)
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -597,7 +578,8 @@ public class FileShareServiceManager : IFileShareServiceManager
                     effectiveToken.ThrowIfCancellationRequested();
 
                     success = await _fileTransferService
-                        .SendFileAsync(item.FilePath, targetDevice, _localDevice.DeviceId, item.RelativePath, null)
+                        .SendFileAsync(item.FilePath, targetDevice, _localDevice.DeviceId,
+                            item.RelativePath, null, effectiveToken)
                         .ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
@@ -677,7 +659,7 @@ public class FileShareServiceManager : IFileShareServiceManager
         linkedCts.Token.ThrowIfCancellationRequested();
 
         return await _fileTransferService
-            .SendFileAsync(filePath, targetDevice, _localDevice.DeviceId, relativePath, null)
+            .SendFileAsync(filePath, targetDevice, _localDevice.DeviceId, relativePath, null, linkedCts.Token)
             .ConfigureAwait(false);
     }
 

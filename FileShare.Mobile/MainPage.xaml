@@ -479,7 +479,23 @@
                                             Text="✕"
                                             VerticalOptions="Start" />
                                     </Grid>
-                                    <Grid ColumnDefinitions="*,Auto">
+                                    <!--  文本消息：显示全文 + 复制  -->
+                                    <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsMessage}">
+                                        <Label
+                                            FontSize="15"
+                                            Text="{Binding MessageText}"
+                                            TextColor="{AppThemeBinding Light={StaticResource DarkOnLightBackground},
+                                                                        Dark={StaticResource LightOnDarkBackground}}" />
+                                        <Button
+                                            Grid.Column="1"
+                                            Command="{Binding Path=CopyMessageCommand, Source={RelativeSource AncestorType={x:Type vm:MainPageViewModel}}, x:DataType='vm:MainPageViewModel'}"
+                                            CommandParameter="{Binding}"
+                                            Style="{StaticResource SecondaryButton}"
+                                            Text="复制"
+                                            VerticalOptions="Start" />
+                                    </Grid>
+
+                                    <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsFileTransfer}">
                                         <StackLayout Grid.Column="1" Orientation="Horizontal">
                                             <Label
                                                 FontSize="14"
@@ -501,7 +517,7 @@
                                             TextColor="{Binding Status, Converter={StaticResource StatusToColorConverter}}" />
                                     </Grid>
 
-                                    <Grid ColumnDefinitions="*,Auto">
+                                    <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsFileTransfer}">
                                         <ProgressBar
                                             BackgroundColor="{AppThemeBinding Light={StaticResource Gray200},
                                                                               Dark={StaticResource Gray600}}"

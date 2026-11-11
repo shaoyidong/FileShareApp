@@ -1,10 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Controls.ApplicationLifetimes;
-using Avalonia.Media;
 using Avalonia.Threading;
 using System;
-using System.Collections.Generic;
 
 namespace FileShare.Desktop.Services;
 
@@ -34,15 +31,22 @@ public sealed class ToastService : IToastService, IDisposable
             return;
         }
 
+        var owner = _ownerProvider();
+
+        // 前台不弹通知：主窗口正活跃时用户本来就能看到界面，弹卡片只会打断操作
+        if (owner is { IsActive: true })
+        {
+            return;
+        }
+
         CloseCurrent();
 
-        var owner = _ownerProvider();
         var toast = new Views.ToastWindow(title, message, onClick);
         _current = toast;
 
-        // 位置：主屏工作区右下角
-        var screen = owner?.Screens.ScreenFromWindow(owner) ?? owner?.Screens.Primary;
-        var workArea = screen?.WorkingArea ?? new PixelRect(0, 0, 1280, 720);
+        // 位置：主屏工作区右下角。主窗口隐藏到托盘时 PlatformImpl 可能已释放，
+        // 因此不能无条件调用 ScreenFromWindow(owner)，统一走容错解析。
+        var workArea = ResolveWorkArea(owner);
 
         toast.Position = new PixelPoint(
             workArea.X + workArea.Width - (int)toast.Width - (int)Margin,
@@ -72,6 +76,44 @@ public sealed class ToastService : IToastService, IDisposable
             CloseCurrent();
         };
         _timer.Start();
+    }
+
+    /// <summary>
+    /// 解析通知所在屏幕的工作区。
+    /// <para>窗口隐藏 / 正在关闭时访问 Screens 会触发 Avalonia 的 "PlatformImpl is null" 警告，
+    /// 这里先只在窗口可见时查询，并对所有平台调用做兜底，避免日志噪音与异常。</para>
+    /// </summary>
+    private static PixelRect ResolveWorkArea(Window? owner)
+    {
+        try
+        {
+            if (owner is { IsVisible: true })
+            {
+                var screen = owner.Screens.ScreenFromWindow(owner) ?? owner.Screens.Primary;
+                if (screen is not null)
+                {
+                    return screen.WorkingArea;
+                }
+            }
+        }
+        catch (Exception)
+        {
+            // 平台实现已释放，落回下面的主屏 / 默认工作区
+        }
+
+        try
+        {
+            if (owner is not null && owner.Screens.Primary is { } primary)
+            {
+                return primary.WorkingArea;
+            }
+        }
+        catch (Exception)
+        {
+            // 同上
+        }
+
+        return new PixelRect(0, 0, 1280, 720);
     }
 
     private void CloseCurrent()

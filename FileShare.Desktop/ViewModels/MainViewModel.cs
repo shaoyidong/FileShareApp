@@ -1,4 +1,9 @@
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Input;
+using Avalonia.Input.Platform;
+using Avalonia.Media.Imaging;
+using Avalonia.Platform.Storage;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using FileShare.Core.Models;
@@ -6,6 +11,7 @@ using FileShare.Core.Network;
 using FileShare.Core.Network.Discovery;
 using FileShare.Core.Services;
 using FileShare.Desktop.Services;
+using FileShare.Desktop.Theming;
 using FileShare.LocalSend;
 using FileShare.Desktop.Views;
 using Microsoft.Extensions.Logging;
@@ -20,6 +26,7 @@ using System.Threading.Tasks;
 using System.Windows.Input;
 using FileShare.Desktop.Localization;
 using LocalSend.Core.Http.DtoV2;
+using FileShare.Desktop.Helpers;
 
 namespace FileShare.Desktop.ViewModels
 {
@@ -151,6 +158,7 @@ namespace FileShare.Desktop.ViewModels
         public ICommand SendFilesCommand { get; }
         public ICommand SendFolderCommand { get; }
         public ICommand SendTextCommand { get; }
+        public ICommand SendClipboardCommand { get; }
         public ICommand ConnectByAddressCommand { get; }
         public ICommand ScanSubnetCommand { get; }
         public ICommand CancelSubnetScanCommand { get; }
@@ -159,6 +167,7 @@ namespace FileShare.Desktop.ViewModels
         public ICommand RejectTransferCommand { get; }
         public ICommand RemoveTransferCommand { get; }
         public ICommand RetryTransferCommand { get; }
+        public ICommand CopyMessageCommand { get; }
         public ICommand ShowHistoryCommand { get; }
         public ICommand ShowSettingsCommand { get; }
         public ICommand PauseSendCommand { get; }
@@ -240,6 +249,7 @@ namespace FileShare.Desktop.ViewModels
             SendFilesCommand = new RelayCommand(async () => await SendFilesAsync());
             SendFolderCommand = new RelayCommand(async () => await SendFolderAsync());
             SendTextCommand = new RelayCommand(async () => await SendTextAsync());
+            SendClipboardCommand = new RelayCommand(async () => await SendClipboardAsync());
             ConnectByAddressCommand = new RelayCommand(async () => await ConnectByAddressAsync());
             ScanSubnetCommand = new RelayCommand(async () => await ScanSubnetAsync());
             CancelSubnetScanCommand = new RelayCommand(CancelSubnetScan);
@@ -248,6 +258,7 @@ namespace FileShare.Desktop.ViewModels
             RejectTransferCommand = new RelayCommand<FileTransferViewModel>(RejectTransfer);
             RemoveTransferCommand = new RelayCommand<FileTransferViewModel>(RemoveTransfer);
             RetryTransferCommand = new RelayCommand<FileTransferViewModel>(RetryTransfer);
+            CopyMessageCommand = new RelayCommand<FileTransferViewModel>(async item => await CopyMessageAsync(item));
             ShowHistoryCommand = new RelayCommand(ShowHistory);
             ShowSettingsCommand = new RelayCommand(ShowSettings);
             PauseSendCommand = new RelayCommand(PauseSending);
@@ -653,7 +664,7 @@ namespace FileShare.Desktop.ViewModels
         }
 
         /// <summary>
-        /// 发送文本（对端收到一个 .txt 文件）。
+        /// 发送文本（对端收到一条可复制的文本消息，不落盘）。
         /// </summary>
         private async Task SendTextAsync()
         {
@@ -679,59 +690,248 @@ namespace FileShare.Desktop.ViewModels
                 return;
             }
 
+            await SendTextCoreAsync(text);
+        }
+
+        /// <summary>
+        /// 发送系统剪贴板：优先文件 → 图片（截图转 PNG）→ 文本兜底（作为文本消息）。
+        /// </summary>
+        private async Task SendClipboardAsync()
+        {
+            if (SelectedDevice is null)
+            {
+                StatusMessage = Loc.Get("请先选择目标设备");
+                return;
+            }
+
+            var clipboard = _appLifetime?.MainWindow?.Clipboard;
+            if (clipboard is null)
+            {
+                StatusMessage = Loc.Get("剪贴板不可用");
+                return;
+            }
+
+            try
+            {
+                // ① 文件（或文件夹）：走现有批量发送队列
+                var paths = await ReadClipboardFilePathsAsync(clipboard).ConfigureAwait(true);
+                if (paths.Count > 0)
+                {
+                    StatusMessage = Loc.F("剪贴板中有 {0} 个文件，正在发送...", paths.Count);
+                    await SendPathsAsync(paths);
+                    return;
+                }
+
+                // ② 图片：截图通常在剪贴板里是位图，另存为 PNG 再发送
+                var imagePath = await SaveClipboardImageAsync(clipboard).ConfigureAwait(true);
+                if (imagePath is not null)
+                {
+                    try
+                    {
+                        StatusMessage = Loc.Get("正在发送剪贴板图片...");
+                        await SendPathsAsync(new[] { imagePath });
+                    }
+                    finally
+                    {
+                        TryDeleteQuietly(imagePath);
+                    }
+                    return;
+                }
+
+                // ③ 文本兜底：作为原生文本消息发送
+                var text = await clipboard.TryGetTextAsync().ConfigureAwait(true);
+                if (string.IsNullOrWhiteSpace(text))
+                {
+                    StatusMessage = Loc.Get("剪贴板中没有可发送的内容");
+                    return;
+                }
+
+                await SendTextCoreAsync(text);
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = Loc.F("读取剪贴板失败: {0}", ex.Message);
+                _logger.LogWarning(ex, "读取剪贴板失败");
+            }
+        }
+
+        /// <summary>读取剪贴板里的文件 / 文件夹路径（新 API 优先，旧 DataFormats 兜底）。</summary>
+        private static async Task<IReadOnlyList<string>> ReadClipboardFilePathsAsync(IClipboard clipboard)
+        {
+            var paths = new List<string>();
+
+            void AddPath(string? path)
+            {
+                if (string.IsNullOrWhiteSpace(path))
+                {
+                    return;
+                }
+
+                if (File.Exists(path))
+                {
+                    paths.Add(path);
+                }
+                else if (Directory.Exists(path))
+                {
+                    paths.AddRange(Directory.GetFiles(path, "*", SearchOption.AllDirectories));
+                }
+            }
+
+            try
+            {
+                var items = await clipboard.TryGetFilesAsync();
+                if (items is { Length: > 0 })
+                {
+                    foreach (var item in items)
+                    {
+                        AddPath(item.Path.IsAbsoluteUri ? item.Path.LocalPath : item.Path.OriginalString);
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                // 平台未实现该格式时走下面的兜底
+            }
+
+            if (paths.Count == 0)
+            {
+                try
+                {
+                    // 注：Avalonia 11.3 标记该重载过时，但替代 API 是无参 TryGetDataAsync()
+                    // + IAsyncDataTransfer，读取模型完全不同；此处保留旧重载，
+                    // 仅作为 TryGetFilesAsync 失败后的兜底（多数平台不会走到）。
+                    var data = await clipboard.GetDataAsync(DataFormats.Files);
+                    switch (data)
+                    {
+                        case IEnumerable<IStorageItem> storageItems:
+                            foreach (var item in storageItems)
+                            {
+                                AddPath(item.Path.IsAbsoluteUri ? item.Path.LocalPath : item.Path.OriginalString);
+                            }
+                            break;
+                        case IEnumerable<string> fileNames:
+                            foreach (var fileName in fileNames)
+                            {
+                                AddPath(fileName);
+                            }
+                            break;
+                        case string singlePath:
+                            AddPath(singlePath);
+                            break;
+                    }
+                }
+                catch (Exception)
+                {
+                    // 忽略：剪贴板里可能只有文本 / 图片
+                }
+            }
+
+            return paths.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        }
+
+        /// <summary>把剪贴板里的位图（截图）另存为临时 PNG；没有图片时返回 null。</summary>
+        private static async Task<string?> SaveClipboardImageAsync(IClipboard clipboard)
+        {
+            Bitmap? bitmap = null;
+            try
+            {
+                bitmap = await clipboard.TryGetBitmapAsync();
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+
+            if (bitmap is null)
+            {
+                return null;
+            }
+
+            try
+            {
+                var directory = Path.Combine(Path.GetTempPath(), "FileShare.Clipboard");
+                Directory.CreateDirectory(directory);
+                var filePath = Path.Combine(directory,
+                    $"剪贴板_{DateTime.Now:yyyyMMdd_HHmmss}_{Guid.NewGuid():N[..6]}.png");
+                bitmap.Save(filePath);
+                return filePath;
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+            finally
+            {
+                bitmap.Dispose();
+            }
+        }
+
+        private static void TryDeleteQuietly(string path)
+        {
+            try
+            {
+                if (File.Exists(path))
+                {
+                    File.Delete(path);
+                }
+            }
+            catch (Exception)
+            {
+                // 临时文件清理失败不影响结果
+            }
+        }
+
+        /// <summary>把一批本地路径加入发送队列并等待发送完成。</summary>
+        private async Task SendPathsAsync(IReadOnlyList<string> paths)
+        {
+            var existing = paths.Where(File.Exists).ToList();
+            if (existing.Count == 0)
+            {
+                StatusMessage = Loc.Get("没有可发送的文件");
+                return;
+            }
+
+            EnqueueFiles(existing);
+            await StartQueueIfIdleAsync();
+        }
+
+        /// <summary>
+        /// 把文本发给当前选中的设备：LocalSend 走 Preview 信号，自有协议走原生文本消息类型。
+        /// </summary>
+        private async Task SendTextCoreAsync(string text)
+        {
+            var target = SelectedDevice;
+            if (target is null)
+            {
+                return;
+            }
+
             try
             {
                 StatusMessage = Loc.F("正在发送文本（{0} 字符）...", text.Length);
-                var success = SelectedLocalSendPeer is { } localSendPeer && _localSendHost is not null
-                    ? await SendTextToLocalSendAsync(localSendPeer, text)
-                    : await _serviceManager.SendTextAsync(text, target);
-                StatusMessage = success ? Loc.Get("文本已发送") : Loc.Get("文本发送失败");
+                bool success;
+                string? error = null;
+                if (SelectedLocalSendPeer is { } localSendPeer && _localSendHost is not null)
+                {
+                    var result = await _localSendHost.SendMessageAsync(localSendPeer, text);
+                    success = result.Success;
+                    error = result.Error;
+                }
+                else
+                {
+                    success = await _serviceManager.SendTextMessageAsync(text, target);
+                }
+
+                StatusMessage = success
+                    ? Loc.Get("文本已发送")
+                    : string.IsNullOrEmpty(error)
+                        ? Loc.Get("文本发送失败")
+                        : Loc.F("发送失败: {0}", error!);
             }
             catch (Exception ex)
             {
                 StatusMessage = Loc.F("发送文本失败: {0}", ex.Message);
                 _logger.LogError(ex, "发送文本失败");
-            }
-        }
-
-        /// <summary>
-        /// LocalSend 只支持文件传输：把文本写成临时文件再发（与自有协议的 .txt 行为一致）。
-        /// </summary>
-        private async Task<bool> SendTextToLocalSendAsync(LocalSendPeer peer, string text)
-        {
-            var tempDirectory = Path.Combine(Path.GetTempPath(), "FileShare.Text");
-            Directory.CreateDirectory(tempDirectory);
-            var fileName = $"文本_{DateTime.Now:yyyyMMdd_HHmmss}.txt";
-            var filePath = Path.Combine(tempDirectory, fileName);
-
-            try
-            {
-                await File.WriteAllTextAsync(filePath, text, System.Text.Encoding.UTF8);
-
-                var result = await _localSendHost!
-                    .SendFileAsync(peer, filePath, fileName, null)
-                    .ConfigureAwait(true);
-
-                if (!result.Success && !string.IsNullOrEmpty(result.Error))
-                {
-                    StatusMessage = Loc.F("发送失败: {0}", result.Error!);
-                }
-
-                return result.Success;
-            }
-            finally
-            {
-                try
-                {
-                    if (File.Exists(filePath))
-                    {
-                        File.Delete(filePath);
-                    }
-                }
-                catch (Exception)
-                {
-                    // 临时文件清理失败不影响结果
-                }
             }
         }
 
@@ -900,19 +1100,25 @@ namespace FileShare.Desktop.ViewModels
             SubnetScanProgress = 0;
             _scanCts = new CancellationTokenSource();
 
-            var progress = new Progress<SubnetScanProgress>(item =>
-            {
-                SubnetScanProgress = item.Percent;
-                if (item.FoundDevice is not null)
+            // 节流放在 UI 侧：服务层只管如实上报，刷新频率是「服务 → UI」的适配细节。
+            // 自定义 IProgress 而非 Progress<T>：Progress<T> 每次 Report 都会 Post 一个回调到
+            // UI 队列，即便在回调里过滤，4096 个地址仍会塞满队列、打断渲染。
+            // 这里在后台线程的 Report 里先过滤，被丢弃的事件根本不进 UI 队列。
+            var progress = new ThrottledScanProgress(
+                item =>
                 {
-                    AddOrUpdateDevice(item.FoundDevice);
-                }
+                    SubnetScanProgress = item.Percent;
+                    if (item.FoundDevice is not null)
+                    {
+                        AddOrUpdateDevice(item.FoundDevice);
+                    }
 
-                if (item.CurrentAddress is not null)
-                {
-                    StatusMessage = Loc.F("正在扫描 {0} ... ({1}/{2})", item.CurrentAddress, item.Scanned, item.Total);
-                }
-            });
+                    if (item.CurrentAddress is not null)
+                    {
+                        StatusMessage = Loc.F("正在扫描 {0} ... ({1}/{2})", item.CurrentAddress, item.Scanned, item.Total);
+                    }
+                },
+                RunOnUiThread);
 
             try
             {
@@ -936,6 +1142,7 @@ namespace FileShare.Desktop.ViewModels
                 _scanCts = null;
             }
         }
+
 
         private void CancelSubnetScan()
         {
@@ -1216,6 +1423,93 @@ namespace FileShare.Desktop.ViewModels
             ReceivedTransferTasks.Remove(model);
         }
 
+        /// <summary>
+        /// 把 LocalSend / 网页分享等外部协议的传输同步到主界面传输列表（新建或更新）。
+        /// 由 <see cref="FileShare.LocalSend.IAppUiBridge.ReportTransfer"/> 调用，可能来自后台线程。
+        /// </summary>
+        public void ReportExternalTransfer(ExternalTransferUpdate update)
+        {
+            RunOnUiThread(() =>
+            {
+                var vm = TransferTasks.FirstOrDefault(task => task.TransferId == update.TransferId);
+                if (vm is null)
+                {
+                    vm = new FileTransferViewModel
+                    {
+                        TransferId = update.TransferId,
+                        FileName = update.FileName,
+                        FileSize = update.FileSize,
+                        TransferredSize = update.TransferredSize,
+                        Direction = update.Direction,
+                        Status = update.Status,
+                        SenderId = update.SenderId,
+                        SavePath = update.SavePath,
+                        IsMessage = update.IsMessage,
+                        MessageText = update.MessageText
+                    };
+
+                    TransferTasks.Insert(0, vm);
+                    if (update.Direction == TransferDirection.Send)
+                    {
+                        SentTransferTasks.Insert(0, vm);
+                    }
+                    else
+                    {
+                        ReceivedTransferTasks.Insert(0, vm);
+                    }
+                }
+                else
+                {
+                    if (update.FileSize > 0)
+                    {
+                        vm.FileSize = update.FileSize;
+                    }
+                    vm.TransferredSize = update.TransferredSize;
+                    vm.Status = update.Status;
+                    if (update.SavePath is not null)
+                    {
+                        vm.SavePath = update.SavePath;
+                    }
+                    if (update.IsMessage)
+                    {
+                        vm.IsMessage = true;
+                        vm.MessageText = update.MessageText;
+                    }
+                }
+
+                if (vm.FileSize > 0)
+                {
+                    vm.ProgressPercentage = Math.Min(100d, (double)vm.TransferredSize / vm.FileSize * 100d);
+                }
+            });
+        }
+
+        /// <summary>把消息全文复制到系统剪贴板。</summary>
+        private async Task CopyMessageAsync(FileTransferViewModel? item)
+        {
+            if (item is null || string.IsNullOrEmpty(item.MessageText))
+            {
+                return;
+            }
+
+            var clipboard = _appLifetime?.MainWindow?.Clipboard;
+            if (clipboard is null)
+            {
+                StatusMessage = Loc.Get("剪贴板不可用");
+                return;
+            }
+
+            try
+            {
+                await clipboard.SetTextAsync(item.MessageText);
+                StatusMessage = Loc.Get("已复制文本消息");
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = Loc.F("复制失败: {0}", ex.Message);
+            }
+        }
+
         private void OnTransferRequestSendAndReceive(FileTransferInfo info)
         {
             var transferViewModel = FileTransferViewModel.FromModel(info);
@@ -1238,6 +1532,28 @@ namespace FileShare.Desktop.ViewModels
                 }
             });
 
+            // 文本消息在协议层已免确认直接完成：显示气泡 + 接收时弹窗，不弹确认窗、不走 Quick Save
+            if (info.IsMessage)
+            {
+                RunOnUiThread(() =>
+                {
+                    (info.Direction == TransferDirection.Send
+                        ? SentTransferTasks
+                        : ReceivedTransferTasks).Insert(0, transferViewModel);
+
+                    StatusMessage = info.Direction == TransferDirection.Send
+                        ? Loc.Get("正在发送文本消息...")
+                        : Loc.Get("收到文本消息");
+
+                    if (info.Direction == TransferDirection.Receive &&
+                        !string.IsNullOrEmpty(info.MessageText))
+                    {
+                        ShowReceivedMessageWindow(info.SenderId, info.MessageText!);
+                    }
+                });
+                return;
+            }
+
             // Quick Save：收藏设备发来的文件自动接收
             if (info.Direction == TransferDirection.Receive &&
                 info.SenderId != _localDeviceId &&
@@ -1258,35 +1574,79 @@ namespace FileShare.Desktop.ViewModels
         }
 
         /// <summary>
+        /// 收到原生文本消息时弹出展示窗口（全文 + 复制全文），不阻塞、不抢焦点。
+        /// 主窗口在托盘时补一条通知，点击通知才把消息窗口唤到前面。
+        /// </summary>
+        private void ShowReceivedMessageWindow(string senderId, string message)
+        {
+            var senderName = Devices.FirstOrDefault(item => item.DeviceId == senderId)?.DeviceName
+                             ?? senderId;
+            var owner = _appLifetime?.MainWindow;
+            var window = new Views.MessageReceivedWindow(senderName, message);
+
+            // 主窗口隐藏到托盘时不能作为 owner（Avalonia 要求 owner 已显示）
+            if (owner is { IsVisible: true })
+            {
+                window.Show(owner);
+            }
+            else
+            {
+                window.Show();
+            }
+
+            if (owner is null)
+            {
+                return;
+            }
+
+            _toastService?.Show(
+                Loc.Get("收到文本消息"),
+                message.Length > 60 ? message[..60] + "…" : message,
+                () => Dispatcher.UIThread.Post(() =>
+                {
+                    ActivateMainWindow();
+                    window.Activate();
+                }));
+        }
+
+        /// <summary>
         /// 显示接收确认窗口，并在用户选择后把结果回传给传输服务。
         /// </summary>
-        private async Task ShowReceiveRequestDialogAsync(FileTransferInfo info)
+        private Task ShowReceiveRequestDialogAsync(FileTransferInfo info)
         {
             var owner = _appLifetime?.MainWindow;
             if (owner is null)
             {
                 // 没有主窗口（单元测试/无界面场景）：保持内联按钮的默认行为
-                return;
+                return Task.CompletedTask;
             }
 
-            try
+            if (!owner.IsActive)
             {
-                owner.Show();
-                if (owner.WindowState == Avalonia.Controls.WindowState.Minimized)
-                {
-                    owner.WindowState = Avalonia.Controls.WindowState.Normal;
-                }
-
-                owner.Activate();
-
-                var senderName = Devices.FirstOrDefault(item => item.DeviceId == info.SenderId)?.DeviceName
-                                 ?? info.SenderId;
-
-                // 托盘/后台时用通知卡片提醒，点击回到主窗口
+                // 托盘 / 后台：只弹通知，不自动激活主窗口；点击通知才显示主窗口 + 弹确认窗
+                var name = Devices.FirstOrDefault(item => item.DeviceId == info.SenderId)?.DeviceName
+                           ?? info.SenderId;
                 _toastService?.Show(
                     Loc.Get("收到文件传输请求"),
-                    Loc.F("{0} 想发送：{1}", senderName, info.FileName),
-                    ActivateMainWindow);
+                    Loc.F("{0} 想发送：{1}", name, info.FileName),
+                    () =>
+                    {
+                        ActivateMainWindow();
+                        _ = ShowReceiveRequestDialogCoreAsync(owner, info);
+                    });
+                return Task.CompletedTask;
+            }
+
+            // 窗口活跃：直接弹确认窗，不再无条件 Show()+Activate() 抢焦点
+            return ShowReceiveRequestDialogCoreAsync(owner, info);
+        }
+
+        private async Task ShowReceiveRequestDialogCoreAsync(Avalonia.Controls.Window owner, FileTransferInfo info)
+        {
+            try
+            {
+                var senderName = Devices.FirstOrDefault(item => item.DeviceId == info.SenderId)?.DeviceName
+                                 ?? info.SenderId;
 
                 var window = new Views.ReceiveRequestWindow(info, _settingsService.Current.SaveDirectory, senderName);
                 var result = await window.ShowDialog<ReceiveRequestResult?>(owner);
@@ -1574,24 +1934,40 @@ namespace FileShare.Desktop.ViewModels
         }
 
         /// <summary>
-        /// 在 UI 线程同步执行（结构性变更：增删列表项）。
+        /// 把操作投递到 UI 线程执行（异步，不阻塞调用线程）。
+        /// <para>
+        /// 用 Post 而不是 Send：Send 会让后台线程阻塞等待，且让 UI 线程「带外」插队执行，
+        /// 事件频繁时（扫描 / 传输进度 / 设备上下线）会打断输入与渲染，表现为拖动窗口卡顿。
+        /// 回调里的异常在 UI 线程上发生，需要单独捕获，外层 try/catch 覆盖不到。
+        /// </para>
         /// </summary>
         private void RunOnUiThread(Action action)
         {
-            try
+            if (SynchronizationContext.Current == _uiContext)
             {
-                if (SynchronizationContext.Current == _uiContext)
+                try
                 {
                     action();
-                    return;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "在 UI 线程执行操作失败");
                 }
 
-                _uiContext.Send(_ => action(), null);
+                return;
             }
-            catch (Exception ex)
+
+            _uiContext.Post(_ =>
             {
-                _logger.LogWarning(ex, "在 UI 线程执行操作失败");
-            }
+                try
+                {
+                    action();
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "在 UI 线程执行操作失败");
+                }
+            }, null);
         }
 
         public void Dispose()
@@ -1645,10 +2021,12 @@ namespace FileShare.Desktop.ViewModels
     /// </summary>
     internal sealed class NoOpThemeService : IThemeService
     {
-        public AppSkin Current { get; private set; } = AppSkin.Win7;
+        public string Current { get; private set; } = ThemePack.DefaultId;
 
-        public IReadOnlyList<AppSkin> AvailableSkins { get; } = new[] { AppSkin.Win7, AppSkin.WinXP, AppSkin.WinXPOlive };
+        public IReadOnlyList<ThemePack> AvailableThemes => Array.Empty<ThemePack>();
 
-        public void Apply(AppSkin skin) => Current = skin;
+        public void Apply(string themeId) => Current = string.IsNullOrWhiteSpace(themeId) ? ThemePack.DefaultId : themeId;
+
+        public int ReloadThemes() => 0;
     }
 }

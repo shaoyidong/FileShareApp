@@ -27,7 +27,7 @@ public class WebShareServiceTests
 
         using var service = new WebShareService();
         var received = new List<string>();
-        service.FileReceived += path => received.Add(path);
+        service.FileReceived += (path, _) => received.Add(path);
 
         service.Start(new WebShareOptions
         {

@@ -23,8 +23,8 @@ public class HistoryViewModel : ViewModelBase
     private readonly INavigation _navigation;
     private readonly IPermissionService _permissionService;
     private readonly ILogger<HistoryViewModel> _logger;
-    private ObservableCollection<ReceiveHistoryEntity> _receiveHistory;
-    public ObservableCollection<ReceiveHistoryEntity> ReceiveHistory
+    private ObservableCollection<HistoryItemViewModel> _receiveHistory;
+    public ObservableCollection<HistoryItemViewModel> ReceiveHistory
     {
         get { return _receiveHistory; }
         set { SetProperty(ref _receiveHistory, value); }
@@ -49,6 +49,7 @@ public class HistoryViewModel : ViewModelBase
     public ICommand ShowFileInfoCommand { get; }
     public ICommand DeleteSingleHistoryCommand { get; }
     public ICommand ShowOperationContextMenuCommand { get; }
+    public ICommand CopyMessageCommand { get; }
 
     public HistoryViewModel(IFileShareServiceManager serviceManager, IAlertService alertService, INavigation navigation,IPermissionService permissionService, ILoggerFactory loggerFactory)
     {
@@ -57,14 +58,15 @@ public class HistoryViewModel : ViewModelBase
         _navigation = navigation;
         _permissionService = permissionService;
         _logger = loggerFactory.CreateLogger<HistoryViewModel>();
-        _receiveHistory = new ObservableCollection<ReceiveHistoryEntity>();
+        _receiveHistory = new ObservableCollection<HistoryItemViewModel>();
 
         BackCommand = new RelayCommand(Back);
         DeleteHistoryCommand = new RelayCommand(async () => await DeleteHistoryAsync());
-        OpenFileCommand = new RelayCommand<ReceiveHistoryEntity>(OpenFile);
-        ShowFileInfoCommand = new RelayCommand<ReceiveHistoryEntity>(ShowFileInfo);
-        DeleteSingleHistoryCommand = new RelayCommand<ReceiveHistoryEntity>(async (history) => await DeleteSingleHistoryAsync(history));
-        ShowOperationContextMenuCommand = new RelayCommand<ReceiveHistoryEntity>(async (history) => await ShowOperationContextMenu(history));
+        OpenFileCommand = new RelayCommand<HistoryItemViewModel>(OpenFile);
+        ShowFileInfoCommand = new RelayCommand<HistoryItemViewModel>(ShowFileInfo);
+        DeleteSingleHistoryCommand = new RelayCommand<HistoryItemViewModel>(async (history) => await DeleteSingleHistoryAsync(history));
+        ShowOperationContextMenuCommand = new RelayCommand<HistoryItemViewModel>(async (history) => await ShowOperationContextMenu(history));
+        CopyMessageCommand = new RelayCommand<HistoryItemViewModel>(async (history) => await CopyMessageAsync(history));
         //_ = LoadHistoryAsync();
     }
 
@@ -75,9 +77,9 @@ public class HistoryViewModel : ViewModelBase
         {
             var history = await _serviceManager.GetAllReceiveHistoryAsync();
             ReceiveHistory.Clear();
-            foreach (var item in history)
+            foreach (var entity in history)
             {
-                ReceiveHistory.Add(item);
+                ReceiveHistory.Add(HistoryItemViewModel.FromEntity(entity));
             }
             _logger.LogInformation("加载历史记录成功，共 {Count} 条", ReceiveHistory.Count);
         }
@@ -117,14 +119,14 @@ public class HistoryViewModel : ViewModelBase
         }
     }
 
-    private async void OpenFile(ReceiveHistoryEntity? history)
+    private async void OpenFile(HistoryItemViewModel? history)
     {
         if (history == null)
         {
             return;
         }
-        string fullname = Path.Combine(history.SavePath, history.FileName);
-        if (!File.Exists(fullname))
+        string? fullname = history.ResolveLocalFile();
+        if (fullname is null)
         {
             await _alertService.DisplayToastAsync("文件不存在或路径无效");
             return;
@@ -167,7 +169,7 @@ public class HistoryViewModel : ViewModelBase
     }
 
 
-    private async Task DeleteSingleHistoryAsync(ReceiveHistoryEntity? history)
+    private async Task DeleteSingleHistoryAsync(HistoryItemViewModel? history)
     {
         if (history == null)
             return;
@@ -185,7 +187,7 @@ public class HistoryViewModel : ViewModelBase
         }
     }
 
-    private async Task ShowOperationContextMenu(ReceiveHistoryEntity? history)
+    private async Task ShowOperationContextMenu(HistoryItemViewModel? history)
     {
         if (history == null)
             return;
@@ -205,7 +207,27 @@ public class HistoryViewModel : ViewModelBase
         }
     }
 
-    private async void ShowFileInfo(ReceiveHistoryEntity? history)
+    /// <summary>把文本消息全文复制到系统剪贴板（消息记录没有可打开的文件）。</summary>
+    private async Task CopyMessageAsync(HistoryItemViewModel? history)
+    {
+        if (history is null || string.IsNullOrEmpty(history.Message))
+        {
+            return;
+        }
+
+        try
+        {
+            await Microsoft.Maui.ApplicationModel.DataTransfer.Clipboard.Default
+                .SetTextAsync(history.Message).ConfigureAwait(false);
+            await _alertService.DisplayToastAsync("已复制文本消息").ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "复制文本消息失败");
+        }
+    }
+
+    private async void ShowFileInfo(HistoryItemViewModel? history)
     {
         if (history == null)
             return;
@@ -215,7 +237,11 @@ public class HistoryViewModel : ViewModelBase
         sb.AppendLine($"路径:\t{history.SavePath}");
         sb.AppendLine($"大小:\t{FormatFileSize(history.FileSize)}");
         sb.AppendLine($"发送者:\t{history.SenderDeviceName}");
-        sb.AppendLine($"时间:\t{history.CreatedAt.ToString("yyyy/y/d H:mm")}");
+        sb.AppendLine($"时间:\t{history.CreatedAtLocal:yyyy/MM/dd HH:mm}");
+        if (history.IsMessage)
+        {
+            sb.AppendLine($"全文:\t{history.Message}");
+        }
 
         await _alertService.DisplayAlertAsync(
             "文件信息",

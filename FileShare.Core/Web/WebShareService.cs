@@ -38,7 +38,12 @@ public sealed class WebShareService : IWebShareService
     public string Pin => _pin;
 
     /// <inheritdoc />
-    public event Action<string>? FileReceived;
+    public event Action<string, string?>? FileReceived;
+
+    /// <inheritdoc />
+    public event Action<string, string?>? FileReceiveFailed;
+
+    private Func<string, long, Task<string?>>? _receiveApproval;
 
     /// <inheritdoc />
     public void Start(WebShareOptions options)
@@ -54,6 +59,7 @@ public sealed class WebShareService : IWebShareService
 
         _saveDirectory = options.SaveDirectory;
         _pin = options.Pin ?? string.Empty;
+        _receiveApproval = options.ReceiveApprovalAsync;
         Directory.CreateDirectory(_saveDirectory);
 
         var port = options.Port is < 1 or > 65535 ? 8088 : options.Port;
@@ -243,6 +249,28 @@ public sealed class WebShareService : IWebShareService
             return;
         }
 
+        // 上传前先向宿主请求接收确认；拒绝时不落盘、把请求体读完再返回 403
+        string? transferId = null;
+        if (_receiveApproval is not null)
+        {
+            try
+            {
+                transferId = await _receiveApproval(fileName, contentLength).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "网页分享接收审批失败: {File}", fileName);
+            }
+
+            if (transferId is null)
+            {
+                await DrainAsync(stream, contentLength, cancellationToken).ConfigureAwait(false);
+                await WriteTextAsync(stream, 403, "application/json; charset=utf-8",
+                    "{\"ok\":false,\"error\":\"接收被拒绝\"}", cancellationToken).ConfigureAwait(false);
+                return;
+            }
+        }
+
         try
         {
             await using (var file = new FileStream(partPath, FileMode.Create, FileAccess.Write, System.IO.FileShare.None, 81920, useAsync: true))
@@ -251,7 +279,7 @@ public sealed class WebShareService : IWebShareService
             }
 
             File.Move(partPath, targetPath, overwrite: true);
-            FileReceived?.Invoke(targetPath);
+            FileReceived?.Invoke(targetPath, transferId);
             _logger.LogInformation("网页分享收到文件: {Path} ({Size} 字节)", targetPath, contentLength);
 
             await WriteTextAsync(stream, 200, "application/json; charset=utf-8",
@@ -260,6 +288,7 @@ public sealed class WebShareService : IWebShareService
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "网页分享保存文件失败: {Path}", targetPath);
+            FileReceiveFailed?.Invoke(targetPath, transferId);
             try { if (File.Exists(partPath)) File.Delete(partPath); } catch (Exception) { }
 
             await WriteTextAsync(stream, 500, "application/json; charset=utf-8",

@@ -1,3 +1,5 @@
+using Avalonia;
+using Avalonia.Controls.ApplicationLifetimes;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using FileShare.Core.Models.Entities;
@@ -8,6 +10,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows.Input;
@@ -20,10 +23,10 @@ namespace FileShare.Desktop.ViewModels
         private readonly IFileShareServiceManager _serviceManager;
         private readonly IDialogService _dialogService;
         private readonly Action _backAction;
-        private readonly List<ReceiveHistoryEntity> _allHistory = new();
+        private readonly List<HistoryItemViewModel> _allHistory = new();
 
         [ObservableProperty]
-        private ObservableCollection<ReceiveHistoryEntity> _receiveHistory;
+        private ObservableCollection<HistoryItemViewModel> _receiveHistory;
 
         [ObservableProperty]
         private bool _isLoading;
@@ -36,6 +39,7 @@ namespace FileShare.Desktop.ViewModels
         public ICommand OpenFileCommand { get; }
         public ICommand ShowInFileManagerCommand { get; }
         public ICommand DeleteSingleHistoryCommand { get; }
+        public ICommand CopyMessageCommand { get; }
         public ICommand ShowAllCommand { get; }
         public ICommand ShowReceivedCommand { get; }
         public ICommand ShowSentCommand { get; }
@@ -48,13 +52,14 @@ namespace FileShare.Desktop.ViewModels
             _serviceManager = serviceManager;
             _dialogService = dialogService;
             _backAction = backAction;
-            _receiveHistory = new ObservableCollection<ReceiveHistoryEntity>();
+            _receiveHistory = new ObservableCollection<HistoryItemViewModel>();
 
             BackCommand = new RelayCommand(Back);
             DeleteHistoryCommand = new RelayCommand(async () => await DeleteHistoryAsync());
-            OpenFileCommand = new RelayCommand<ReceiveHistoryEntity>(OpenFile);
-            ShowInFileManagerCommand = new RelayCommand<ReceiveHistoryEntity>(ShowInFileManager);
-            DeleteSingleHistoryCommand = new RelayCommand<ReceiveHistoryEntity>(async (history) => await DeleteSingleHistoryAsync(history));
+            OpenFileCommand = new RelayCommand<HistoryItemViewModel>(OpenFile);
+            ShowInFileManagerCommand = new RelayCommand<HistoryItemViewModel>(ShowInFileManager);
+            DeleteSingleHistoryCommand = new RelayCommand<HistoryItemViewModel>(async (history) => await DeleteSingleHistoryAsync(history));
+            CopyMessageCommand = new RelayCommand<HistoryItemViewModel>(async (history) => await CopyMessageAsync(history));
             ShowAllCommand = new RelayCommand(() => ApplyFilter(null, Loc.Get("全部")));
             ShowReceivedCommand = new RelayCommand(() => ApplyFilter(FileShare.Core.Models.TransferDirection.Receive, Loc.Get("仅接收")));
             ShowSentCommand = new RelayCommand(() => ApplyFilter(FileShare.Core.Models.TransferDirection.Send, Loc.Get("仅发送")));
@@ -97,7 +102,7 @@ namespace FileShare.Desktop.ViewModels
             {
                 var history = await _serviceManager.GetAllReceiveHistoryAsync();
                 _allHistory.Clear();
-                _allHistory.AddRange(history);
+                _allHistory.AddRange(history.Select(HistoryItemViewModel.FromEntity));
                 RefreshView();
             }
             catch (Exception ex)
@@ -132,35 +137,40 @@ namespace FileShare.Desktop.ViewModels
             }
         }
 
-        /// <summary>
-        /// 解析历史记录对应的本机文件路径。
-        /// <para>优先用绝对路径 <see cref="ReceiveHistoryEntity.FilePath"/>：
-        /// 接收记录指向落盘位置，发送记录指向源文件位置（旧版本发送记录没有该字段，退回 SavePath + FileName）。</para>
-        /// </summary>
-        private static string? ResolveFilePath(ReceiveHistoryEntity history)
+        /// <summary>把文本消息全文复制到系统剪贴板（消息记录没有可打开的文件）。</summary>
+        private async Task CopyMessageAsync(HistoryItemViewModel? history)
         {
-            if (!string.IsNullOrWhiteSpace(history.FilePath))
+            if (history is null || string.IsNullOrEmpty(history.Message))
             {
-                return File.Exists(history.FilePath) ? history.FilePath : null;
+                return;
             }
 
-            if (string.IsNullOrWhiteSpace(history.SavePath))
+            var clipboard = (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)
+                ?.MainWindow?.Clipboard;
+            if (clipboard is null)
             {
-                return null;
+                return;
             }
 
-            var legacy = Path.Combine(history.SavePath, history.FileName);
-            return File.Exists(legacy) ? legacy : null;
+            try
+            {
+                await clipboard.SetTextAsync(history.Message);
+            }
+            catch (Exception ex)
+            {
+                _ = _dialogService.ShowInfomationDialogAsync(
+                    Loc.Get("错误"), Loc.F("复制失败: {0}", ex.Message));
+            }
         }
 
-        private void OpenFile(ReceiveHistoryEntity? history)
+        private void OpenFile(HistoryItemViewModel? history)
         {
             if (history == null)
             {
                 return;
             }
 
-            var fullname = ResolveFilePath(history);
+            var fullname = history.ResolveLocalFile();
             if (fullname is null)
             {
                 _ = _dialogService.ShowInfomationDialogAsync(
@@ -185,11 +195,11 @@ namespace FileShare.Desktop.ViewModels
             }
         }
 
-        private void ShowInFileManager(ReceiveHistoryEntity? history)
+        private void ShowInFileManager(HistoryItemViewModel? history)
         {           
             if (history == null) return;
 
-            var fullname = ResolveFilePath(history);
+            var fullname = history.ResolveLocalFile();
             if (fullname is null)
             {
                 _ = _dialogService.ShowInfomationDialogAsync(
@@ -238,7 +248,7 @@ namespace FileShare.Desktop.ViewModels
             }
         }
 
-        private async Task DeleteSingleHistoryAsync(ReceiveHistoryEntity? history)
+        private async Task DeleteSingleHistoryAsync(HistoryItemViewModel? history)
         {
             if (history == null)
                 return;

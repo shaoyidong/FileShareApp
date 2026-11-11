@@ -138,6 +138,7 @@ public partial class MainPageViewModel : ViewModelBase
     public ICommand NavigateToAppListCommand { get; }
     public ICommand ConnectByAddressCommand { get; }
     public ICommand ScanSubnetCommand { get; }
+    public ICommand CopyMessageCommand { get; }
 
     public ObservableCollection<FileShare.Core.Models.DeviceInfo> Devices { get; }
     public ObservableCollection<FileTransferViewModel> TransferTasks { get; }
@@ -202,6 +203,7 @@ public partial class MainPageViewModel : ViewModelBase
         NavigateToAppListCommand = new RelayCommand(async () => await NavigateToAppList());
         ConnectByAddressCommand = new RelayCommand(async () => await ConnectByAddressAsync());
         ScanSubnetCommand = new RelayCommand(async () => await ScanSubnetAsync());
+        CopyMessageCommand = new RelayCommand<FileTransferViewModel>(async item => await CopyMessageAsync(item));
         
         // 启动服务
         _ = InitializeAsync();
@@ -625,7 +627,7 @@ public partial class MainPageViewModel : ViewModelBase
         await _alertService.DisplayToastAsync("设置已保存（部分需重启生效）").ConfigureAwait(false);
     }
 
-    /// <summary>发送文本（对端收到一个 .txt 文件）。</summary>
+    /// <summary>发送文本（对端收到一条可复制的文本消息，不落盘）。</summary>
     private async Task SendTextAsync()
     {
         if (SelectedDevice == null)
@@ -634,7 +636,7 @@ public partial class MainPageViewModel : ViewModelBase
             return;
         }
 
-        var text = await _alertService.DisplayPromptAsync("发送文本", "输入要发送的文本，对端会收到一个 .txt 文件", "发送", "取消").ConfigureAwait(false);
+        var text = await _alertService.DisplayPromptAsync("发送文本", "输入要发送的文本，将以文本消息发送", "发送", "取消").ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(text))
         {
             return;
@@ -645,7 +647,7 @@ public partial class MainPageViewModel : ViewModelBase
             await _foregroundService.StartServiceAsync().ConfigureAwait(false);
             _uiContext.Post(_ => StatusMessage = $"正在发送文本（{text.Length} 字符）...", null);
 
-            var success = await _serviceManager.SendTextAsync(text, SelectedDevice).ConfigureAwait(false);
+            var success = await _serviceManager.SendTextMessageAsync(text, SelectedDevice).ConfigureAwait(false);
             _uiContext.Post(_ => StatusMessage = success ? "文本已发送" : "文本发送失败", null);
         }
         catch (Exception ex)
@@ -853,6 +855,26 @@ public partial class MainPageViewModel : ViewModelBase
         },null);
     }
     
+    /// <summary>把文本消息全文复制到系统剪贴板。</summary>
+    private async Task CopyMessageAsync(FileTransferViewModel? item)
+    {
+        if (item is null || string.IsNullOrEmpty(item.MessageText))
+        {
+            return;
+        }
+
+        try
+        {
+            await Microsoft.Maui.ApplicationModel.DataTransfer.Clipboard.Default
+                .SetTextAsync(item.MessageText).ConfigureAwait(false);
+            await _alertService.DisplayToastAsync("已复制文本消息").ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "复制文本消息失败");
+        }
+    }
+
     private async void OnTransferRequestSendAndReceive(FileTransferInfo info)
     {
         await _foregroundService.StartServiceAsync().ConfigureAwait(false);
@@ -863,7 +885,30 @@ public partial class MainPageViewModel : ViewModelBase
             
             // 添加到总任务列表
             TransferTasks.Insert(0, transferViewModel);
-            
+
+            // 文本消息在协议层已免确认完成：显示气泡 + 接收时弹窗，不弹接收确认
+            if (info.IsMessage)
+            {
+                (info.Direction == Core.Models.TransferDirection.Send
+                    ? SentTransferTasks : ReceivedTransferTasks).Insert(0, transferViewModel);
+                StatusMessage = info.Direction == Core.Models.TransferDirection.Send
+                    ? "正在发送文本消息..." : "收到文本消息";
+
+                if (info.Direction == Core.Models.TransferDirection.Receive &&
+                    !string.IsNullOrEmpty(info.MessageText))
+                {
+                    var copy = await _alertService.DisplayAlertAsync(
+                        "收到文本消息", info.MessageText!, "复制", "关闭");
+                    if (copy)
+                    {
+                        await Microsoft.Maui.ApplicationModel.DataTransfer.Clipboard.Default
+                            .SetTextAsync(info.MessageText!);
+                        await _alertService.DisplayToastAsync("已复制文本消息");
+                    }
+                }
+                return;
+            }
+
             // 根据发送者ID判断是发送任务还是接收任务
             if (info.SenderId == _localDeviceId)
             {

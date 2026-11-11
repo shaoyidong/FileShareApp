@@ -12,6 +12,25 @@ namespace FileShare.Desktop.ViewModels
         [ObservableProperty]
         private string? _transferId;
 
+        /// <summary>是否为原生文本消息（气泡显示全文 + 复制，隐藏进度/大小/重试）。</summary>
+        [ObservableProperty]
+        private bool _isMessage;
+
+        /// <summary>文本消息全文。</summary>
+        [ObservableProperty]
+        private string? _messageText;
+
+        /// <summary>消息分支切换后刷新依赖 IsMessage 的可见性属性。</summary>
+        partial void OnIsMessageChanged(bool value)
+        {
+            OnPropertyChanged(nameof(IsFileTransfer));
+            OnPropertyChanged(nameof(CanRetry));
+            OnPropertyChanged(nameof(ShowAcceptReject));
+        }
+
+        /// <summary>是否走普通文件分支（消息分支隐藏进度 / 大小 / 重试）。</summary>
+        public bool IsFileTransfer => !IsMessage;
+
         /// <summary>
         /// 文件名
         /// </summary>
@@ -110,7 +129,8 @@ namespace FileShare.Desktop.ViewModels
         public string? TargetDeviceId { get; set; }
 
         /// <summary>是否允许「重试」（发送失败且知道源文件时）。</summary>
-        public bool CanRetry => Direction == TransferDirection.Send
+        public bool CanRetry => !IsMessage
+                                && Direction == TransferDirection.Send
                                 && Status == TransferStatus.Failed
                                 && !string.IsNullOrEmpty(SourcePath)
                                 && !string.IsNullOrEmpty(TargetDeviceId);
@@ -163,7 +183,9 @@ namespace FileShare.Desktop.ViewModels
         };
 
         // 只有在接收且处于 Pending 时显示接受/拒绝
-        public bool ShowAcceptReject => Direction == TransferDirection.Receive && Status == TransferStatus.Pending;
+        public bool ShowAcceptReject => !IsMessage
+                                       && Direction == TransferDirection.Receive
+                                       && Status == TransferStatus.Pending;
 
         /// <summary>语言切换后重新求值依赖 Loc 的显示文本。</summary>
         public void RefreshLocalization()
@@ -204,7 +226,9 @@ namespace FileShare.Desktop.ViewModels
                 Direction = model.Direction,
                 SpeedBytesPerSecond = model.TransferRateBytesPerSec,
                 SourcePath = model.Direction == TransferDirection.Send ? model.FilePath : null,
-                TargetDeviceId = model.Direction == TransferDirection.Send ? model.ReceiverId : null
+                TargetDeviceId = model.Direction == TransferDirection.Send ? model.ReceiverId : null,
+                IsMessage = model.IsMessage,
+                MessageText = model.MessageText
             };
         }
     }

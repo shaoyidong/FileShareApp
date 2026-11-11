@@ -32,7 +32,7 @@
             AcceptsReturn="True"
             TextWrapping="Wrap"
             VerticalContentAlignment="Top"
-            Watermark="{loc:Tr '在这里输入要发送的文本，对端会收到一个 .txt 文件'}" />
+            Watermark="{loc:Tr '在这里输入要发送的文本，将以文本消息发送，对端可直接复制全文'}" />
 
         <Border
             Grid.Row="2"

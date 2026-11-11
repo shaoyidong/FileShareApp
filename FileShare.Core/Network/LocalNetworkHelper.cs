@@ -9,12 +9,51 @@ namespace FileShare.Core.Network;
 /// </summary>
 public static class LocalNetworkHelper
 {
+    // GetAllNetworkInterfaces 在 Windows 上单次可达几十到几百毫秒（还要逐网卡查 IP 属性）。
+    // 网段扫描会对每个地址调 IsLocalAddress，逐次枚举网卡会把 UI 线程卡死数秒。
+    // 这里做短 TTL 缓存：网卡变化在秒级感知完全够用。
+    private static readonly object CacheLock = new();
+    private static IReadOnlyList<(IPAddress Address, IPAddress Mask)>? _cachedInterfaces;
+    private static long _cachedAtTicks;
+    private static readonly TimeSpan CacheLifetime = TimeSpan.FromSeconds(3);
+
     /// <summary>
-    /// 枚举所有「已启用、非回环、非隧道」网卡上的 IPv4 地址与子网掩码。
+    /// 枚举所有「已启用、非回环、非隧道」网卡上的 IPv4 地址与子网掩码（3 秒 TTL 缓存）。
     /// </summary>
     public static IReadOnlyList<(IPAddress Address, IPAddress Mask)> GetIPv4Interfaces()
     {
-        var result = new List<(IPAddress, IPAddress)>();
+        lock (CacheLock)
+        {
+            var now = Environment.TickCount64;
+            if (_cachedInterfaces is not null && now - _cachedAtTicks <= CacheLifetime.TotalMilliseconds)
+            {
+                return _cachedInterfaces;
+            }
+        }
+
+        var fresh = EnumerateIPv4Interfaces();
+
+        lock (CacheLock)
+        {
+            _cachedInterfaces = fresh;
+            _cachedAtTicks = Environment.TickCount64;
+        }
+
+        return fresh;
+    }
+
+    /// <summary>强制失效缓存（需要立即感知网卡变化的场景调用）。</summary>
+    public static void InvalidateCache()
+    {
+        lock (CacheLock)
+        {
+            _cachedInterfaces = null;
+            _cachedAtTicks = 0;
+        }
+    }
+
+    private static IReadOnlyList<(IPAddress Address, IPAddress Mask)> EnumerateIPv4Interfaces()
+    {
         var resultRank = new List<(IPAddress Address, IPAddress Mask, int rank)>();
         try
         {
@@ -52,7 +91,7 @@ public static class LocalNetworkHelper
                     {
                         continue;
                     }
-                   
+
                     resultRank.Add((unicast.Address, mask, rank));
                 }
             }
@@ -62,7 +101,7 @@ public static class LocalNetworkHelper
             // 某些受限平台（如部分 iOS/Android 版本）会抛异常，调用方按「无网卡信息」处理
         }
 
-        return  resultRank
+        return resultRank
             .OrderBy(item => item.rank)
             .Select(item => (item.Address, item.Mask))
             .ToList();

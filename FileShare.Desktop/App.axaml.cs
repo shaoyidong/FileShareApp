@@ -26,6 +26,9 @@ namespace FileShare.Desktop
     {
         public static IServiceProvider? ServiceProvider { get; internal set; }
 
+        /// <summary>主界面视图模型（外部协议通过 UI 桥把传输状态同步到传输列表）。</summary>
+        public static MainViewModel? MainViewModel { get; private set; }
+
         /// <summary>系统托盘服务（在主窗口创建时初始化）。</summary>
         public static TrayService? TrayService { get; private set; }
 
@@ -42,20 +45,25 @@ namespace FileShare.Desktop
             var logger = ServiceProvider?.GetService<ILogger<App>>()
                     ?? throw new InvalidOperationException("ServiceProvider not set");
 
-            // 应用用户上次选择的皮肤（Win7 / WinXP）。必须在窗口创建前完成，避免首帧闪烁。
+            // 应用用户上次选择的主题。必须在窗口创建前完成，避免首帧闪烁。
             try
             {
+                var dataDirectory = FileShare.Core.Services.AppPaths.GetDataDirectory();
                 var uiPreferences = ServiceProvider?.GetService<IUiPreferencesService>();
 
-                // 语言必须在任何视图加载之前设置
+                // 语言包 / 主题包都来自外部 JSON 文件（发布后可直接编辑 / 新增），
+                // 必须在任何视图加载之前初始化
+                FileShare.Desktop.Localization.Loc.Initialize(dataDirectory);
                 FileShare.Desktop.Localization.Loc.SetLanguage(uiPreferences?.Current.LanguageCode ?? "zh-CN");
+                FileShare.Desktop.Theming.ThemePackLoader.Initialize(dataDirectory);
+
                 var themeService = ServiceProvider?.GetService<IThemeService>();
-                // 缓存 App.axaml 静态声明的三套皮肤实例并摘除多余皮肤（窗口创建前完成）
+                // 摘除旧版静态声明残留的皮肤实例（窗口创建前完成）
                 if (themeService is ThemeService concreteTheme)
                 {
                     concreteTheme.InitializeFromApplication(this);
                 }
-                themeService?.Apply(uiPreferences?.Current.Skin ?? AppSkin.Win7);
+                themeService?.Apply(uiPreferences?.Current.SkinId ?? "win7");
             }
             catch (Exception ex)
             {
@@ -131,6 +139,7 @@ namespace FileShare.Desktop
                     TrayService,
                     provider.GetRequiredService<ILocalSendInteropHost>()
                 );
+                MainViewModel = viewModel;
 
                 // 网页分享 / LocalSend 互通（按设置启动，失败只记日志）
                 try
@@ -190,13 +199,14 @@ namespace FileShare.Desktop
         }
 
         /// <summary>
-        /// 自检：主界面 → 历史 → 设置 → 皮肤切换（Win7 → WinXP → 回到原皮肤）→ 回到主界面，
-        /// 然后以 0 退出。皮肤切换用于验证 AOT / TrimMode=full 下静态声明的皮肤实例能被正常回填。
+        /// 自检：主界面 → 历史 → 设置 → 按主题 id 切换（winxp → win7）→ 重载主题包
+        /// → 恢复原主题 → 回到主界面，然后以 0 退出。
+        /// 用于验证 AOT / TrimMode=full 下编译期皮肤实例与 JSON 配色包都能正常工作。
         /// </summary>
         private static void RunSmokeTest(IClassicDesktopStyleApplicationLifetime desktop, MainViewModel viewModel)
         {
             var themeService = App.ServiceProvider?.GetService<IThemeService>();
-            var originalSkin = themeService?.Current ?? AppSkin.Win7;
+            var originalTheme = themeService?.Current ?? "win7";
             var step = 0;
             var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1200) };
             timer.Tick += (_, _) =>
@@ -211,14 +221,21 @@ namespace FileShare.Desktop
                         viewModel.ShowSettingsCommand.Execute(null);
                         break;
                     case 3:
-                        themeService?.Apply(AppSkin.WinXP);
+                        themeService?.Apply("winxp");
+                        LogSkinState("winxp");
                         break;
                     case 4:
-                        themeService?.Apply(AppSkin.Win7);
+                        themeService?.Apply("win7");
+                        LogSkinState("win7");
                         break;
                     case 5:
-                        // 恢复用户原本的皮肤，避免冒烟自检改写偏好
-                        themeService?.Apply(originalSkin);
+                        var loaded = themeService?.ReloadThemes() ?? 0;
+                        LogSkinState($"reload({loaded})");
+                        break;
+                    case 6:
+                        // 恢复用户原本的主题，避免冒烟自检改写偏好
+                        themeService?.Apply(originalTheme);
+                        LogSkinState("Restored");
                         viewModel.CurrentView = viewModel;
                         break;
                     default:
@@ -228,6 +245,31 @@ namespace FileShare.Desktop
                 }
             };
             timer.Start();
+        }
+
+        /// <summary>冒烟自检用：记录当前生效的皮肤数量与主背景色，便于验证切换是否真的生效。</summary>
+        private static void LogSkinState(string step)
+        {
+            try
+            {
+                var app = Application.Current;
+                if (app is null) return;
+
+                var skinCount = app.Styles.Count(s =>
+                    s is FileShare.Desktop.Themes.Win7Skin
+                        or FileShare.Desktop.Themes.WinXPSkin
+                        or FileShare.Desktop.Themes.WinXPOliveSkin
+                    || s.GetType() == typeof(Avalonia.Styling.Styles));
+                var color = app.TryGetResource("FsWindowBrush", null, out var value) &&
+                            value is Avalonia.Media.ISolidColorBrush brush
+                    ? brush.Color.ToString()
+                    : "none";
+
+                System.IO.File.AppendAllText(
+                    System.IO.Path.Combine(System.IO.Path.GetTempPath(), "fs-skin-smoke.txt"),
+                    $"{step}: skins={skinCount} brush={color}\n");
+            }
+            catch { /* 自检日志失败不影响运行 */ }
         }
     }
 }

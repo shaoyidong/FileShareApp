@@ -1,45 +1,45 @@
 using Avalonia;
-using Avalonia.Markup.Xaml.Styling;
+using Avalonia.Controls;
+using Avalonia.Styling;
+using FileShare.Desktop.Themes;
+using FileShare.Desktop.Theming;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace FileShare.Desktop.Services;
 
 /// <inheritdoc cref="IThemeService"/>
 /// <remarks>
-/// AOT 安全实现：三套皮肤的 <see cref="StyleInclude"/> 实例全部由 App.axaml 在编译期静态创建
-/// （XAML 编译器强类型加载，不会被 TrimMode=full 裁掉）。
-/// 切换时只把缓存的实例从 <c>Application.Styles</c> 移除再回填，
-/// 不再在运行时 <c>new StyleInclude(new Uri(...))</c>。
+/// AOT 修复要点：三套皮肤 axaml 都带 <c>x:Class</c>，编译期会生成
+/// <see cref="Win7Skin"/> / <see cref="WinXPSkin"/> / <see cref="WinXPOliveSkin"/> 类，
+/// 这里直接 <c>new</c> 这些编译产物，完全不走 <c>StyleInclude</c> 的运行时 XAML URI 加载
+/// （该路径在 NativeAOT / TrimMode=full 下会报 "No precompiled XAML found"）。
+/// <para>
+/// 配色由 JSON 主题包覆盖：把值同时写进皮肤自身的 Resources 与 Application.Resources，
+/// 保证无论 DynamicResource 从哪一层解析都能拿到新值；未覆盖的键沿用 axaml 基座默认值。
+/// </para>
 /// </remarks>
 public sealed class ThemeService : IThemeService
 {
-    /// <summary>皮肤枚举 → 样式文件（用于按 Source 识别静态声明的实例）。</summary>
-    private static readonly (AppSkin Skin, string RelativePath)[] SkinFiles =
-    {
-        (AppSkin.Win7, "Themes/Win7.axaml"),
-        (AppSkin.WinXP, "Themes/WinXP.axaml"),
-        (AppSkin.WinXPOlive, "Themes/WinXPOlive.axaml"),
-    };
-
     private readonly IUiPreferencesService _uiPreferences;
-    private readonly Dictionary<AppSkin, StyleInclude> _skinStyles = new();
+    private bool _initialized;
 
     public ThemeService(IUiPreferencesService uiPreferences)
     {
         _uiPreferences = uiPreferences;
-        Current = uiPreferences.Current.Skin;
+        Current = NormalizeId(uiPreferences.Current.SkinId);
     }
 
     /// <inheritdoc />
-    public AppSkin Current { get; private set; } = AppSkin.Win7;
+    public string Current { get; private set; } = ThemePack.DefaultId;
 
     /// <inheritdoc />
-    public IReadOnlyList<AppSkin> AvailableSkins { get; } = new[] { AppSkin.Win7, AppSkin.WinXP, AppSkin.WinXPOlive };
+    public IReadOnlyList<ThemePack> AvailableThemes => ThemePackLoader.Packs;
 
     /// <summary>
-    /// 在 <c>App.Initialize</c> 中、窗口创建之前调用：缓存 App.axaml 静态声明的皮肤实例，
-    /// 并摘除除默认 Win7 之外的皮肤，保证首帧只有一套皮肤生效（无叠加、无闪烁）。
+    /// 在 <c>App.Initialize</c> 中、窗口创建之前调用：摘除静态声明残留的皮肤实例，
+    /// 随后 <see cref="Apply"/> 会添加唯一一套生效皮肤。
     /// </summary>
     public void InitializeFromApplication(Application application)
     {
@@ -48,71 +48,140 @@ public sealed class ThemeService : IThemeService
             return;
         }
 
-        _skinStyles.Clear();
-        foreach (var style in application.Styles)
-        {
-            if (style is not StyleInclude include || include.Source is not { } source)
-            {
-                continue;
-            }
+        RemoveAllSkins(application);
+        _initialized = true;
+    }
 
-            foreach (var (skin, relativePath) in SkinFiles)
-            {
-                if (source.AbsolutePath.EndsWith(relativePath, StringComparison.OrdinalIgnoreCase))
-                {
-                    _skinStyles[skin] = include;
-                    break;
-                }
-            }
+    /// <inheritdoc />
+    public void Apply(string themeId)
+    {
+        var id = ResolveId(themeId);
+        var pack = ThemePackLoader.Find(id);
+
+        var application = Application.Current;
+        if (application is null || !_initialized)
+        {
+            // 设计器 / 单元测试环境：只记录状态，不做实际切换
+            Current = id;
+            _uiPreferences.SetSkinId(id);
+            return;
         }
 
-        // 静态默认只保留 Win7；随后 Apply(Current) 会按用户偏好回填目标实例。
-        foreach (var (skin, _) in SkinFiles)
+        RemoveAllSkins(application);
+
+        var skin = CreateSkin(pack?.Base ?? ThemePack.DefaultBase);
+        if (pack is not null)
         {
-            if (skin != AppSkin.Win7 && _skinStyles.TryGetValue(skin, out var extra))
+            ApplyColors(application, skin, pack);
+        }
+
+        application.Styles.Add(skin);
+
+        Current = id;
+
+        // 主题属于桌面端私有配置，单独持久化（不写进 Core 的 settings.json）
+        _uiPreferences.SetSkinId(id);
+    }
+
+    /// <inheritdoc />
+    public int ReloadThemes()
+    {
+        var loaded = ThemePackLoader.Reload();
+
+        // 当前主题可能被改过颜色或被删除，重新应用一次（ResolveId 会处理失效 id）
+        Apply(Current);
+        return loaded;
+    }
+
+    /// <summary>按基座 id 构造编译期皮肤实例（AOT 安全）。</summary>
+    private static Styles CreateSkin(string baseSkin) => baseSkin switch
+    {
+        "winxp" => new WinXPSkin(),
+        "winxp-olive" => new WinXPOliveSkin(),
+        _ => new Win7Skin()
+    };
+
+    /// <summary>
+    /// 把基座默认值 + JSON 覆盖值写入皮肤 Resources 与 Application.Resources。
+    /// 两边都写是为了兼容 Avalonia 不同层级的 DynamicResource 查找顺序。
+    /// </summary>
+    private static void ApplyColors(Application application, Styles skin, ThemePack pack)
+    {
+        IResourceDictionary? appResources = null;
+        try
+        {
+            appResources = application.Resources;
+        }
+        catch (Exception)
+        {
+            // 无 Application.Resources 的环境只写皮肤自身即可
+        }
+
+        void Write(string key, object? value)
+        {
+            if (value is null)
             {
-                application.Styles.Remove(extra);
+                return;
+            }
+
+            try { skin.Resources[key] = value; } catch (Exception) { }
+            try { if (appResources is not null) appResources[key] = value; } catch (Exception) { }
+        }
+
+        foreach (var key in ThemePack.ResourceKeys)
+        {
+            object? baseValue = null;
+            try { baseValue = skin.Resources[key]; } catch (Exception) { }
+
+            var value = pack.Colors.TryGetValue(key, out var overridden) && overridden is not null
+                ? overridden
+                : baseValue;
+            Write(key, value);
+        }
+
+        // 允许主题包引入额外的 Fs* 自定义资源键
+        foreach (var (key, value) in pack.Colors)
+        {
+            if (!ThemePack.ResourceKeys.Contains(key))
+            {
+                Write(key, value);
             }
         }
     }
 
-    /// <inheritdoc />
-    public void Apply(AppSkin skin)
+    private static string ResolveId(string? themeId)
     {
-        if (!Enum.IsDefined(skin))
+        if (!string.IsNullOrWhiteSpace(themeId) && ThemePackLoader.Find(themeId) is not null)
         {
-            skin = AppSkin.Win7;
+            return themeId!;
         }
 
-        var application = Application.Current;
-        if (application is null || _skinStyles.Count == 0)
+        if (ThemePackLoader.Find(ThemePack.DefaultId) is not null)
         {
-            // 设计器 / 单元测试环境：只记录状态，不做实际切换
-            Current = skin;
-            _uiPreferences.SetSkin(skin);
-            return;
+            return ThemePack.DefaultId;
         }
 
-        // 移除全部皮肤实例，再回填目标实例；不使用运行时 URI 加载。
-        foreach (var include in _skinStyles.Values)
+        // 内置主题全部缺失时不改写用户偏好，仍以默认基座渲染
+        return string.IsNullOrWhiteSpace(themeId) ? ThemePack.DefaultId : themeId!;
+    }
+
+    private static string NormalizeId(string? id) =>
+        string.IsNullOrWhiteSpace(id) ? ThemePack.DefaultId : id!;
+
+    /// <summary>
+    /// 移除所有皮肤样式（含旧版 App.axaml 静态 StyleInclude 展开出来的纯 Styles 实例），
+    /// 保留 SimpleTheme 基础主题。
+    /// </summary>
+    private static void RemoveAllSkins(Application application)
+    {
+        for (var i = application.Styles.Count - 1; i >= 0; i--)
         {
-            application.Styles.Remove(include);
+            var style = application.Styles[i];
+            if (style is Win7Skin or WinXPSkin or WinXPOliveSkin ||
+                style.GetType() == typeof(Styles))
+            {
+                application.Styles.RemoveAt(i);
+            }
         }
-
-        if (!_skinStyles.TryGetValue(skin, out var target))
-        {
-            skin = AppSkin.Win7;
-            _skinStyles.TryGetValue(skin, out target);
-        }
-
-        if (target is not null)
-        {
-            application.Styles.Add(target);
-        }
-
-        Current = skin;
-
-        // 皮肤属于桌面端私有配置，单独持久化（不写进 Core 的 settings.json）
-        _uiPreferences.SetSkin(skin);
     }
 }

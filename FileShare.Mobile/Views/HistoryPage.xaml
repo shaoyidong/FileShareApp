@@ -41,7 +41,8 @@
         </Style>
 
         <MenuFlyout x:Key="HistoryItemMenuFlyout" >
-            <MenuFlyoutItem Text="打开文件" Command="{Binding OpenFileCommand, Source={RelativeSource AncestorType={x:Type vm:HistoryViewModel}},x:DataType='vm:HistoryViewModel'}" CommandParameter="{Binding}" />
+            <MenuFlyoutItem Text="打开文件" IsEnabled="{Binding HasFile}" Command="{Binding OpenFileCommand, Source={RelativeSource AncestorType={x:Type vm:HistoryViewModel}},x:DataType='vm:HistoryViewModel'}" CommandParameter="{Binding}" />
+            <MenuFlyoutItem Text="复制全文" IsEnabled="{Binding IsMessage}" Command="{Binding CopyMessageCommand, Source={RelativeSource AncestorType={x:Type vm:HistoryViewModel}},x:DataType='vm:HistoryViewModel'}" CommandParameter="{Binding}" />
             <MenuFlyoutItem Text="信息" Command="{Binding ShowFileInfoCommand,Source={RelativeSource AncestorType={x:Type vm:HistoryViewModel}},x:DataType='vm:HistoryViewModel'}" CommandParameter="{Binding}" />
             <MenuFlyoutItem Text="从历史记录中删除" Command="{Binding DeleteSingleHistoryCommand,Source={RelativeSource AncestorType={x:Type vm:HistoryViewModel}},x:DataType='vm:HistoryViewModel'}" CommandParameter="{Binding}" />
         </MenuFlyout>
@@ -50,7 +51,7 @@
         <ActivityIndicator VerticalOptions="Center" HorizontalOptions="Center" IsRunning="{Binding IsLoading}" />
         <CollectionView ItemSizingStrategy="MeasureAllItems" ItemsSource="{Binding ReceiveHistory}">
             <CollectionView.ItemTemplate>
-                <DataTemplate x:DataType="coreModel:ReceiveHistoryEntity">
+                <DataTemplate x:DataType="vm:HistoryItemViewModel">
                     <!--<Border
              Padding="12"
              Background="{AppThemeBinding Light={StaticResource LightBackground},
@@ -82,17 +83,18 @@
                         <StackLayout  Padding="10,0,0,0"
                      Grid.Column="1"
                      VerticalOptions="Center">
+                                <!--  唯一主标题：文件=文件名，文本消息=正文预览  -->
                                 <Label
-                         FontAttributes="Bold"
-                         FontSize="16"
-                         LineBreakMode="TailTruncation"
-                         Text="{Binding FileName}"
-                         TextColor="{AppThemeBinding Light={StaticResource DarkOnLightBackground},
-                                                     Dark={StaticResource LightOnDarkBackground}}" />
+                                        FontAttributes="Bold"
+                                        FontSize="16"
+                                        LineBreakMode="TailTruncation"
+                                        Text="{Binding DisplayTitle}"
+                                        TextColor="{AppThemeBinding Light={StaticResource DarkOnLightBackground},
+                                                                    Dark={StaticResource LightOnDarkBackground}}" />
                                 <StackLayout Orientation="Horizontal" >
                                     <Label
                                         FontSize="14"
-                                        Text="{Binding CreatedAt, StringFormat='{0:yyyy/M/d HH:mm}-'}"
+                                        Text="{Binding CreatedAtLocal, StringFormat='{0:yyyy/M/d HH:mm}-'}"
                                         TextColor="{AppThemeBinding Light={StaticResource Gray500},
                                         Dark={StaticResource Gray400}}" />
                                     <Label
@@ -117,7 +119,8 @@
                             Text="{x:Static fonts:FluentUI.more_vertical_24_regular}" >
                             <FlyoutBase.ContextFlyout>
                                 <MenuFlyout>
-                                    <MenuFlyoutItem Text="打开文件" Command="{Binding OpenFileCommand, Source={RelativeSource AncestorType={x:Type vm:HistoryViewModel}},x:DataType='vm:HistoryViewModel'}" CommandParameter="{Binding}" />
+                                    <MenuFlyoutItem Text="打开文件" IsEnabled="{Binding HasFile}" Command="{Binding OpenFileCommand, Source={RelativeSource AncestorType={x:Type vm:HistoryViewModel}},x:DataType='vm:HistoryViewModel'}" CommandParameter="{Binding}" />
+                                    <MenuFlyoutItem Text="复制全文" IsEnabled="{Binding IsMessage}" Command="{Binding CopyMessageCommand, Source={RelativeSource AncestorType={x:Type vm:HistoryViewModel}},x:DataType='vm:HistoryViewModel'}" CommandParameter="{Binding}" />
                                     <MenuFlyoutItem Text="信息" Command="{Binding ShowFileInfoCommand,Source={RelativeSource AncestorType={x:Type vm:HistoryViewModel}},x:DataType='vm:HistoryViewModel'}" CommandParameter="{Binding}" />
                                     <MenuFlyoutItem Text="从历史记录中删除" Command="{Binding DeleteSingleHistoryCommand,Source={RelativeSource AncestorType={x:Type vm:HistoryViewModel}},x:DataType='vm:HistoryViewModel'}" CommandParameter="{Binding}" />
                                 </MenuFlyout>

@@ -1,0 +1,72 @@
+<Window
+    x:Class="FileShare.Desktop.Views.MessageReceivedWindow"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:loc="using:FileShare.Desktop.Localization"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    Title="{loc:Tr '收到文本消息'}"
+    Width="460"
+    SizeToContent="Height"
+    CanResize="False"
+    ShowInTaskbar="False"
+    ShowActivated="False"
+    WindowStartupLocation="CenterOwner"
+    d:DesignWidth="460"
+    mc:Ignorable="d">
+
+    <Grid RowDefinitions="Auto,*,Auto">
+
+        <Border Grid.Row="0" Classes="toolbar" Padding="10,7">
+            <TextBlock
+                VerticalAlignment="Center"
+                Classes="h1"
+                Text="{loc:Tr '收到文本消息'}" />
+        </Border>
+
+        <StackPanel
+            Grid.Row="1"
+            Margin="14"
+            Spacing="10">
+            <TextBlock
+                x:Name="SenderText"
+                Classes="muted"
+                TextWrapping="Wrap" />
+
+            <Border Padding="10" Classes="panel">
+                <ScrollViewer
+                    MaxHeight="320"
+                    VerticalScrollBarVisibility="Auto">
+                    <SelectableTextBlock
+                        x:Name="MessageTextBlock"
+                        TextWrapping="Wrap" />
+                </ScrollViewer>
+            </Border>
+
+            <TextBlock
+                x:Name="HintText"
+                Classes="muted"
+                IsVisible="False" />
+        </StackPanel>
+
+        <Border
+            Grid.Row="2"
+            Padding="10,8"
+            Classes="statusbar">
+            <StackPanel
+                HorizontalAlignment="Right"
+                Orientation="Horizontal"
+                Spacing="6">
+                <Button
+                    MinWidth="96"
+                    Classes="accent"
+                    Click="OnCopyClick"
+                    Content="{loc:Tr '复制全文'}" />
+                <Button
+                    MinWidth="84"
+                    Click="OnCloseClick"
+                    Content="{loc:Tr '关闭'}" />
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

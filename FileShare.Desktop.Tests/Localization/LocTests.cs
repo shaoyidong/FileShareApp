@@ -5,6 +5,7 @@ namespace FileShare.Desktop.Tests.Localization;
 /// <summary>
 /// i18n 机制测试：中英切换、缺失回退、模板格式化、XAML 标记扩展。
 /// </summary>
+[Collection("Localization")]
 public class LocTests
 {
     [Fact]

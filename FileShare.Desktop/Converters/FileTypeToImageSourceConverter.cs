@@ -1,5 +1,5 @@
 using FileShare.Core.Common;
-using FileShare.Core.Models.Entities;
+using FileShare.Desktop.ViewModels;
 using System;
 using System.Globalization;
 using System.IO;
@@ -31,22 +31,19 @@ namespace FileShare.Desktop.Converters
         {
             var param = parameter as string ?? string.Empty;
 
-            if (value is ReceiveHistoryEntity history)
+            if (value is HistoryItemViewModel item)
             {
-                var fullPath = !string.IsNullOrEmpty(history.FilePath)
-                    ? history.FilePath!
-                    : Path.Combine(history.SavePath, history.FileName);
-
-                var extension = Path.GetExtension(history.FileName).ToLowerInvariant();
+                var fullPath = item.ResolveLocalFile();
+                var extension = Path.GetExtension(item.FileName).ToLowerInvariant();
                 var isImageFile = FileTypeHelper.IsImageFile(extension);
-                var fileExists = !string.IsNullOrEmpty(fullPath) && File.Exists(fullPath);
+                var fileExists = fullPath is not null;
 
                 return param switch
                 {
                     "isImage" => isImageFile && fileExists,
                     "isIcon" => !isImageFile || !fileExists,
                     "icon" => GetFileIcon(extension),
-                    "image" => TryLoadBitmap(isImageFile, fileExists, fullPath),
+                    "image" => TryLoadBitmap(isImageFile, fullPath),
                     _ => null,
                 };
             }
@@ -66,9 +63,9 @@ namespace FileShare.Desktop.Converters
         }
 
         /// <summary>只有真正是图片且文件存在时才返回 Bitmap，其余一律 null（Image.Source 不接受字符串）。</summary>
-        private static IImage? TryLoadBitmap(bool isImageFile, bool fileExists, string fullPath)
+        private static IImage? TryLoadBitmap(bool isImageFile, string? fullPath)
         {
-            if (!isImageFile || !fileExists)
+            if (!isImageFile || fullPath is null)
             {
                 return null;
             }

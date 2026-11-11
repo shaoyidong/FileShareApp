@@ -128,64 +128,71 @@ public sealed class SubnetScanner : ISubnetScanner
             return Array.Empty<DeviceInfo>();
         }
 
-        var found = new List<DeviceInfo>();
-        var scanned = 0;
-        var total = hosts.Count;
-        var localAddresses = LocalNetworkHelper.GetLocalIPv4Addresses();
-        using var gate = new SemaphoreSlim(DefaultConcurrency, DefaultConcurrency);
-        var stopwatch = Stopwatch.StartNew();
-
-        var tasks = hosts.Select(async host =>
+        // 必须整体切到线程池：
+        // hosts.Select(...).ToList() 会在「调用线程」上同步物化每个 lambda 到第一个未完成的 await，
+        // 前 DefaultConcurrency 个探测（网卡枚举、UdpClient 构造、JSON 序列化、前几个 send）
+        // 都会在调用线程上内联执行——从 UI 线程直接调用时表现为扫描一开始界面就卡死。
+        return await Task.Run(async () =>
         {
-            await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            var found = new List<DeviceInfo>();
+            var scanned = 0;
+            var total = hosts.Count;
+            var localAddresses = new HashSet<IPAddress>(LocalNetworkHelper.GetLocalIPv4Addresses());
+            using var gate = new SemaphoreSlim(DefaultConcurrency, DefaultConcurrency);
+            var stopwatch = Stopwatch.StartNew();
 
-            DeviceInfo? device = null;
-            try
+            var tasks = hosts.Select(async host =>
             {
-                if (!cancellationToken.IsCancellationRequested && !localAddresses.Contains(host))
-                {
-                    device = await _probeService
-                        .ProbeAsync(host, 0, cancellationToken)
-                        .ConfigureAwait(false);
+                await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
 
-                    if (device is not null)
+                DeviceInfo? device = null;
+                try
+                {
+                    if (!cancellationToken.IsCancellationRequested && !localAddresses.Contains(host))
                     {
-                        lock (found)
+                        device = await _probeService
+                            .ProbeAsync(host, 0, cancellationToken)
+                            .ConfigureAwait(false);
+
+                        if (device is not null)
                         {
-                            if (!found.Any(item => item.DeviceId == device.DeviceId))
+                            lock (found)
                             {
-                                found.Add(device);
+                                if (!found.Any(item => item.DeviceId == device.DeviceId))
+                                {
+                                    found.Add(device);
+                                }
                             }
                         }
                     }
                 }
-            }
-            catch (OperationCanceledException)
-            {
-                // 用户取消：忽略剩余地址
-            }
-            catch (Exception ex)
-            {
-                _logger.LogDebug(ex, "扫描 {Host} 失败", host);
-            }
-            finally
-            {
-                var current = Interlocked.Increment(ref scanned);
-                progress?.Report(new SubnetScanProgress(current, total, host.ToString(), device));
-                gate.Release();
-            }
-        }).ToList();
+                catch (OperationCanceledException)
+                {
+                    // 用户取消：忽略剩余地址
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "扫描 {Host} 失败", host);
+                }
+                finally
+                {
+                    var current = Interlocked.Increment(ref scanned);
+                    progress?.Report(new SubnetScanProgress(current, total, host.ToString(), device));
+                    gate.Release();
+                }
+            }).ToList();
 
-        await Task.WhenAll(tasks).ConfigureAwait(false);
+            await Task.WhenAll(tasks).ConfigureAwait(false);
 
-        _logger.LogInformation(
-            "网段 {Cidr} 扫描完成：共 {Total} 个地址，发现 {Found} 台设备，耗时 {Elapsed}ms",
-            cidr,
-            total,
-            found.Count,
-            stopwatch.ElapsedMilliseconds);
+            _logger.LogInformation(
+                "网段 {Cidr} 扫描完成：共 {Total} 个地址，发现 {Found} 台设备，耗时 {Elapsed}ms",
+                cidr,
+                total,
+                found.Count,
+                stopwatch.ElapsedMilliseconds);
 
-        return found;
+            return (IReadOnlyList<DeviceInfo>)found;
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     private static IPAddress FromUInt32(uint value)

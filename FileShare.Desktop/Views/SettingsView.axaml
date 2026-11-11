@@ -358,7 +358,7 @@
                     <StackPanel Spacing="8">
                         <TextBlock Classes="h1" Text="{loc:Tr '界面风格'}" />
 
-                        <Grid ColumnDefinitions="130,*">
+                        <Grid ColumnDefinitions="130,*,Auto">
                             <TextBlock Classes="label" Text="{loc:Tr '界面语言'}" />
                             <ComboBox
                                 Grid.Column="1"
@@ -373,23 +373,47 @@
                                     </DataTemplate>
                                 </ComboBox.ItemTemplate>
                             </ComboBox>
+                            <Button
+                                Grid.Column="2"
+                                Margin="6,0,0,0"
+                                Command="{Binding ReloadLanguagesCommand}"
+                                Content="{loc:Tr '重载语言包'}"
+                                ToolTip.Tip="{loc:Tr '读取 i18n 目录下的语言包文件，修改译文或新增语言后立即生效'}" />
                         </Grid>
                         <TextBlock
                             Classes="muted"
                             Text="{loc:Tr '保存后立即生效，界面会按新语言刷新。'}"
                             TextWrapping="Wrap" />
-                        <RadioButton
-                            GroupName="SkinGroup"
-                            IsChecked="{Binding IsWin7Skin}"
-                            Content="Windows 7（Aero）" />
-                        <RadioButton
-                            GroupName="SkinGroup"
-                            IsChecked="{Binding IsWinXPSkin}"
-                            Content="{loc:Tr 'Windows XP 经典蓝（Luna Blue）'}" />
-                        <RadioButton
-                            GroupName="SkinGroup"
-                            IsChecked="{Binding IsWinXPOliveSkin}"
-                            Content="{loc:Tr 'Windows XP 橄榄绿（Luna Olive）'}" />
+                        <TextBlock
+                            Classes="muted"
+                            Text="{loc:Tr '语言包位于应用数据目录的 i18n 文件夹，可直接编辑 JSON 或新增文件来增加语言。'}"
+                            TextWrapping="Wrap" />
+                        <Grid ColumnDefinitions="130,*,Auto">
+                            <TextBlock Classes="label" Text="{loc:Tr '界面主题'}" />
+                            <ComboBox
+                                Grid.Column="1"
+                                MinWidth="220"
+                                HorizontalAlignment="Left"
+                                ItemsSource="{Binding ThemeOptions}"
+                                SelectedValue="{Binding SelectedThemeId}"
+                                SelectedValueBinding="{Binding Id}">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:ThemeOption">
+                                        <TextBlock Text="{Binding Name}" />
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                            <Button
+                                Grid.Column="2"
+                                Margin="6,0,0,0"
+                                Command="{Binding ReloadThemesCommand}"
+                                Content="{loc:Tr '重载主题'}"
+                                ToolTip.Tip="{loc:Tr '读取 themes 目录下的主题包文件，修改配色或新增主题后立即生效'}" />
+                        </Grid>
+                        <TextBlock
+                            Classes="muted"
+                            Text="{loc:Tr '主题包位于应用数据目录的 themes 文件夹，可直接编辑 JSON 调色或新增文件来增加主题。'}"
+                            TextWrapping="Wrap" />
                     </StackPanel>
                 </Border>
 

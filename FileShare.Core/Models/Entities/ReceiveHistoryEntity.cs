@@ -57,7 +57,7 @@ namespace FileShare.Core.Models.Entities
         public string? ErrorMessage { get; set; }
 
         /// <summary>
-        /// 创建时间（UTC）
+        /// 创建时间（UTC，入库统一用 UTC；界面显示用的本地时间换算在 ViewModel 层完成）
         /// </summary>
         public DateTime CreatedAt { get; set; }
 
@@ -72,30 +72,10 @@ namespace FileShare.Core.Models.Entities
         /// <summary>对端设备名（新版字段）。</summary>
         public string? PeerName { get; set; }
 
-        /// <summary>方向的中文描述（UI 绑定用，不入库）。</summary>
-        [System.Text.Json.Serialization.JsonIgnore]
-        public string DirectionText => Direction == TransferDirection.Send ? "发送" : "接收";
-
-        /// <summary>结果的中文描述（UI 绑定用，不入库）。</summary>
-        [System.Text.Json.Serialization.JsonIgnore]
-        public string StatusText => Status switch
-        {
-            TransferStatus.Completed => "成功",
-            TransferStatus.Failed => "失败",
-            TransferStatus.Cancelled => "已取消",
-            _ => "未知"
-        };
-
-        /// <summary>是否成功（UI 用于染色）。</summary>
-        [System.Text.Json.Serialization.JsonIgnore]
-        public bool IsSuccess => Status == TransferStatus.Completed;
-
-        /// <summary>是否有可打开的文件。</summary>
-        [System.Text.Json.Serialization.JsonIgnore]
-        public bool HasFile => !string.IsNullOrEmpty(FilePath);
-
-        /// <summary>用于 UI 显示的对方名称。</summary>
-        [System.Text.Json.Serialization.JsonIgnore]
-        public string PeerDisplayName => PeerName ?? SenderDeviceName ?? PeerId ?? SenderId;
+        /// <summary>
+        /// 原生文本消息全文。非空表示这是一条消息记录（没有可打开的文件）。
+        /// 老库通过幂等 ALTER TABLE 迁移补上该列。
+        /// </summary>
+        public string? Message { get; set; }
     }
 }

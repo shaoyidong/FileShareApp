@@ -1,0 +1,98 @@
+{
+  "id": "winxp",
+  "name": "Windows XP 经典蓝（Luna Blue）",
+  "base": "winxp",
+  "colors": {
+    "FsWindowBrush": "#ECE9D8",
+    "FsSurfaceBrush": "#FFFFFF",
+    "FsCardBrush": "#FFFFFF",
+    "FsBorderBrush": "#7F9DB9",
+    "FsSoftBorderBrush": "#C8D4E2",
+    "FsTextBrush": "#000000",
+    "FsMutedBrush": "#4A4A4A",
+    "FsAccentBrush": "#1C4E9C",
+    "FsAccentTextBrush": "#FFFFFF",
+    "FsDangerBrush": "#B00000",
+    "FsRowHoverBrush": "#E3EEFC",
+    "FsRowSelectedBrush": "#316AC5",
+    "FsButtonBorderBrush": "#8E8F8F",
+    "FsButtonBorderHoverBrush": "#E9A93B",
+    "FsInputBorderBrush": "#7F9DB9",
+    "FsToolbarBrush": {
+      "stops": [
+        {
+          "offset": 0,
+          "color": "#4E86C8"
+        },
+        {
+          "offset": 0.45,
+          "color": "#3568AE"
+        },
+        {
+          "offset": 1,
+          "color": "#1F4A8C"
+        }
+      ]
+    },
+    "FsButtonFaceBrush": {
+      "stops": [
+        {
+          "offset": 0,
+          "color": "#FFFFFF"
+        },
+        {
+          "offset": 0.62,
+          "color": "#F6F4EC"
+        },
+        {
+          "offset": 1,
+          "color": "#E5E1D3"
+        }
+      ]
+    },
+    "FsButtonHoverBrush": {
+      "start": "#FFFEF8",
+      "end": "#FBE7B3"
+    },
+    "FsButtonPressedBrush": {
+      "start": "#DED7C3",
+      "end": "#F4F1E5"
+    },
+    "FsAccentButtonBrush": {
+      "stops": [
+        {
+          "offset": 0,
+          "color": "#5B9BE8"
+        },
+        {
+          "offset": 0.5,
+          "color": "#2E6CC4"
+        },
+        {
+          "offset": 1,
+          "color": "#1B4C96"
+        }
+      ]
+    },
+    "FsAccentButtonHoverBrush": {
+      "stops": [
+        {
+          "offset": 0,
+          "color": "#78B0F0"
+        },
+        {
+          "offset": 0.5,
+          "color": "#3E80D8"
+        },
+        {
+          "offset": 1,
+          "color": "#2A5CAB"
+        }
+      ]
+    },
+    "FsFontFamily": "Tahoma, Microsoft YaHei",
+    "FsTooltipBrush": "#FFFFE1",
+    "FsTooltipTextBrush": "#000000",
+    "FsTooltipBorderBrush": "#767676"
+  }
+}

@@ -80,7 +80,7 @@
                     <Button
                         Classes="icon"
                         Command="{Binding ShowHistoryCommand}"
-                        ToolTip.Tip="{loc:Tr '接收历史'}">
+                        ToolTip.Tip="{loc:Tr '传输历史'}">
                         <TextBlock
                             Classes="iconGlyph"
                             Text="{x:Static fonts:FluentUI.history_24_regular}" />
@@ -181,8 +181,15 @@
                                 Command="{Binding SendTextCommand}"
                                 Content="{loc:Tr '发送文本'}"
                                 IsEnabled="{Binding IsDeviceSelected}"
-                                ToolTip.Tip="{loc:Tr '对端会收到一个 .txt 文件'}" />
+                                ToolTip.Tip="{loc:Tr '将以文本消息发送，对端可直接复制全文'}" />
                         </Grid>
+                        <Button
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Center"
+                            Command="{Binding SendClipboardCommand}"
+                            Content="{loc:Tr '发送剪贴板'}"
+                            IsEnabled="{Binding IsDeviceSelected}"
+                            ToolTip.Tip="{loc:Tr '发送系统剪贴板内容：优先文件，其次截图（转为 PNG），最后是文本消息'}" />
                         <Grid ColumnDefinitions="*,6,*,6,*" IsVisible="{Binding IsSending}">
                             <Button
                                 Grid.Column="0"
@@ -295,7 +302,7 @@
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="vm:FileTransferViewModel">
                                     <Border Padding="8" Classes="card">
-                                        <Grid RowDefinitions="Auto,Auto,Auto,Auto">
+                                        <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto">
                                             <Grid ColumnDefinitions="Auto,*,Auto">
                                                 <TextBlock
                                                     VerticalAlignment="Center"
@@ -322,7 +329,8 @@
                                             <Grid
                                                 Grid.Row="1"
                                                 Margin="0,6,0,0"
-                                                ColumnDefinitions="Auto,*,Auto">
+                                                ColumnDefinitions="Auto,*,Auto"
+                                                IsVisible="{Binding IsFileTransfer}">
                                                 <TextBlock
                                                     Classes="muted"
                                                     Foreground="{Binding Status, Converter={x:Static converters:StatusToColorConverter.Instance}}"
@@ -351,7 +359,8 @@
                                             <Grid
                                                 Grid.Row="2"
                                                 Margin="0,6,0,0"
-                                                ColumnDefinitions="*,Auto">
+                                                ColumnDefinitions="*,Auto"
+                                                IsVisible="{Binding IsFileTransfer}">
                                                 <ProgressBar
                                                     VerticalAlignment="Center"
                                                     Maximum="100"
@@ -365,6 +374,32 @@
                                                     Text="{Binding ProgressPercentage, StringFormat={}{0:F1}%}"
                                                     TextAlignment="Right" />
                                             </Grid>
+
+                                            <!--  文本消息：气泡显示全文 + 复制（隐藏进度 / 大小 / 重试）  -->
+                                            <Border
+                                                Grid.Row="4"
+                                                Margin="0,6,0,0"
+                                                Padding="8,6"
+                                                Background="{DynamicResource FsRowHoverBrush}"
+                                                BorderBrush="{DynamicResource FsSoftBorderBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="3"
+                                                IsVisible="{Binding IsMessage}">
+                                                <Grid ColumnDefinitions="*,Auto">
+                                                    <TextBlock
+                                                        VerticalAlignment="Center"
+                                                        Text="{Binding MessageText}"
+                                                        TextWrapping="Wrap" />
+                                                    <Button
+                                                        Grid.Column="1"
+                                                        MinWidth="56"
+                                                        Margin="8,0,0,0"
+                                                        VerticalAlignment="Top"
+                                                        Command="{Binding $parent[UserControl].DataContext.CopyMessageCommand}"
+                                                        CommandParameter="{Binding}"
+                                                        Content="{loc:Tr '复制'}" />
+                                                </Grid>
+                                            </Border>
 
                                             <!--  发送失败：重试（接收端会续传）  -->
                                             <StackPanel

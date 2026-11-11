@@ -160,6 +160,20 @@ public sealed class MulticastDiscoveryService : IDisposable
 
         _listenCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
 
+        // 立刻把 CTS 与 Token 快照进局部变量：Dispose() 可能在本方法还在执行时销毁 _listenCts，
+        // 之后第 212 行再访问 _listenCts.Token 会抛 ObjectDisposedException（Unobserved task exception）
+        var listenCts = _listenCts;
+        CancellationToken listenToken;
+        try
+        {
+            listenToken = listenCts.Token;
+        }
+        catch (ObjectDisposedException)
+        {
+            listenCts.Dispose();
+            return;
+        }
+
         try
         {
             // 枚举本机所有可用的 IPv4 地址
@@ -209,11 +223,15 @@ public sealed class MulticastDiscoveryService : IDisposable
             await SendAnnouncementAsync(ct);
 
             // 持续监听
-            await ReceiveLoopAsync(_listenCts.Token);
+            await ReceiveLoopAsync(listenToken);
         }
-        catch (OperationCanceledException) when (_listenCts?.IsCancellationRequested == true)
+        catch (OperationCanceledException) when (listenCts.IsCancellationRequested)
         {
             // 正常取消
+        }
+        catch (ObjectDisposedException)
+        {
+            // Dispose() 与监听启动/收包竞态：按正常停止处理
         }
         finally
         {
@@ -273,10 +291,20 @@ public sealed class MulticastDiscoveryService : IDisposable
         {
             try
             {
-                using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                cts.CancelAfter(5000); // 5 秒超时，便于检查取消状态
+                var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                UdpReceiveResult result;
+                try
+                {
+                    cts.CancelAfter(5000); // 5 秒空闲超时，便于检查取消状态
+                    result = await _udpClient.ReceiveAsync(cts.Token);
+                }
+                finally
+                {
+                    // ReceiveAsync 返回（包括超时 / 释放异常）后再显式释放：
+                    // 不能在等待期间提前 dispose，否则 UdpClient 会抛 ObjectDisposedException
+                    cts.Dispose();
+                }
 
-                var result = await _udpClient.ReceiveAsync(cts.Token);
                 if (ct.IsCancellationRequested) break;
 
                 var remoteIp = result.RemoteEndPoint.Address;
@@ -327,13 +355,30 @@ public sealed class MulticastDiscoveryService : IDisposable
                     LsLog.Trace($"    [组播]   → JSON 解析失败");
                 }
             }
-            catch (ObjectDisposedException) when (ct.IsCancellationRequested)
+            catch (ObjectDisposedException)
             {
+                // 停止时 UdpClient 被释放（外层 ct 可能还没来得及置位）：正常退出循环
                 break;
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
                 break;
+            }
+            catch (OperationCanceledException)
+            {
+                // 仅 5 秒空闲超时：继续下一轮，避免组播发现因无人发包而静默停止
+            }
+            catch (Exception ex)
+            {
+                LsLog.Trace($"    [组播] 接收循环异常: {ex.Message}");
+                try
+                {
+                    await Task.Delay(100, ct);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
             }
         }
     }
@@ -413,25 +458,7 @@ public sealed class MulticastDiscoveryService : IDisposable
         _udpClient?.Close();
         _udpClient?.Dispose();
         _listenCts?.Dispose();
+        _listenCts = null;
         _discovered.Clear();
     }
-}
-
-/// <summary>
-/// 通过 UDP 组播发现的对端设备信息。
-/// </summary>
-public sealed class MulticastPeerInfo
-{
-    public string Alias { get; init; } = string.Empty;
-    public string Version { get; init; } = string.Empty;
-    public string? DeviceModel { get; init; }
-    public DeviceType? DeviceType { get; init; }
-    public string Fingerprint { get; init; } = string.Empty;
-    public ushort Port { get; init; }
-    public ProtocolTypeV2 Protocol { get; init; }
-    public bool Download { get; init; }
-    public IPAddress IP { get; init; } = IPAddress.None;
-
-    public override string ToString() =>
-        $"[{Alias}] {IP}:{Port} (v{Version}, {Protocol})";
 }

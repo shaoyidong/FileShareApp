@@ -11,7 +11,7 @@ using System.Threading;
 namespace FileShare.Desktop.Tests.ViewModels;
 
 /// <summary>
-/// LocalSend 设备并入设备列表：发现事件 → 列表项（带 LocalSend 标记、不可收藏）。
+/// LocalSend 设备并入设备列表：发现事件 → 列表项（蓝色徽章标记、不可收藏）。
 /// </summary>
 public class LocalSendDeviceListTests
 {
@@ -38,7 +38,7 @@ public class LocalSendDeviceListTests
             serviceManager.Object,
             new Mock<IDialogService>().Object,
             new Mock<Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime>().Object,
-            SynchronizationContext.Current ?? new SynchronizationContext(),
+            new ImmediateSynchronizationContext(),
             NullLoggerFactory.Instance,
             settings.Object,
             new Mock<IThemeService>().Object,
@@ -61,7 +61,9 @@ public class LocalSendDeviceListTests
         Assert.True(item.IsLocalSend);
         Assert.Equal("localsend:abc", item.DeviceId);
         Assert.Equal("Phone", item.DeviceName);
-        Assert.Contains("LocalSend", item.MetaText);
+        // 「双 LocalSend 徽章」优化：副标题不再重复文字，身份由蓝色徽章（IsLocalSend）标示
+        Assert.DoesNotContain("LocalSend", item.MetaText);
+        Assert.Contains("192.168.1.20", item.MetaText);
         Assert.False(item.CanFavorite);
 
         // 重复发现不应产生重复项

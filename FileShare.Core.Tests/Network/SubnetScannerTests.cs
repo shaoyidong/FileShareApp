@@ -137,6 +137,25 @@ public class SubnetScannerTests
     }
 
     [Fact]
+    public async Task ScanAsync_ReportsEveryAddress_ServiceLayerDoesNotThrottle()
+    {
+        // 节流属于 UI 侧适配，Core 服务层必须如实上报每个地址：
+        // 否则换一个 UI（Mobile / 无界面 / 测试）就会拿不到完整进度，
+        // 而且「发现设备」「收尾进度」可能被服务层按时间窗吞掉。
+        var probe = new FakeProbeService("203.0.113.1");
+        var scanner = new SubnetScanner(probe);
+        var progress = new SyncProgress<SubnetScanProgress>();
+
+        var devices = await scanner.ScanAsync("203.0.113.0/29", progress);
+
+        Assert.Single(devices);
+        Assert.Equal(6, probe.Probed.Count);
+        Assert.Equal(probe.Probed.Count, progress.Items.Count);
+        Assert.Contains(progress.Items, item => item.FoundDevice is not null);
+        Assert.Equal(100, progress.Items[^1].Percent);
+    }
+
+    [Fact]
     public async Task ScanAsync_ThrowsOnInvalidCidr()
     {
         var scanner = new SubnetScanner(new FakeProbeService());
