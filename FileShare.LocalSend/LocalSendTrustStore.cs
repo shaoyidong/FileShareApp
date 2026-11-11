@@ -9,7 +9,7 @@ namespace FileShare.LocalSend;
 public sealed class LocalSendTrustStore
 {
     private readonly string _filePath;
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
     private readonly Dictionary<string, string> _pins;
 
     private LocalSendTrustStore(string filePath, Dictionary<string, string> pins)

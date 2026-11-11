@@ -25,109 +25,109 @@ public partial class SettingsViewModel : ViewModelBase
     private readonly Action _backAction;
 
     [ObservableProperty]
-    private string _deviceName = string.Empty;
+    public partial string DeviceName { get; set; } = string.Empty;
 
     [ObservableProperty]
-    private string _portText = "5237";
+    public partial string PortText { get; set; } = "5237";
 
     [ObservableProperty]
-    private bool _tlsEnabled;
+    public partial bool TlsEnabled { get; set; }
 
     [ObservableProperty]
-    private bool _autoAcceptFromFavorites;
+    public partial bool AutoAcceptFromFavorites { get; set; }
 
     [ObservableProperty]
-    private string _saveDirectory = string.Empty;
+    public partial string SaveDirectory { get; set; } = string.Empty;
 
     [ObservableProperty]
-    private DeviceTypeOption? _selectedDeviceType;
+    public partial DeviceTypeOption? SelectedDeviceType { get; set; }
 
     [ObservableProperty]
-    private bool _overwriteExisting;
+    public partial bool OverwriteExisting { get; set; }
 
     [ObservableProperty]
-    private bool _minimizeToTray;
+    public partial bool MinimizeToTray { get; set; }
 
     [ObservableProperty]
-    private bool _closeToTray;
+    public partial bool CloseToTray { get; set; }
 
     [ObservableProperty]
-    private bool _enableMdns;
+    public partial bool EnableMdns { get; set; }
 
     [ObservableProperty]
-    private bool _enableMulticast;
+    public partial bool EnableMulticast { get; set; }
 
     [ObservableProperty]
-    private bool _enableBroadcast;
+    public partial bool EnableBroadcast { get; set; }
 
     [ObservableProperty]
-    private string _multicastAddress = "224.0.0.167";
+    public partial string MulticastAddress { get; set; } = "224.0.0.167";
 
     [ObservableProperty]
-    private string _multicastPortText = "53317";
+    public partial string MulticastPortText { get; set; } = "53317";
 
     [ObservableProperty]
-    private string _broadcastPortText = "5236";
+    public partial string BroadcastPortText { get; set; } = "5236";
 
 
     [ObservableProperty]
-    private string _networkWhitelistText = string.Empty;
+    public partial string NetworkWhitelistText { get; set; } = string.Empty;
 
     [ObservableProperty]
-    private string _networkBlacklistText = string.Empty;
+    public partial string NetworkBlacklistText { get; set; } = string.Empty;
     [ObservableProperty]
-    private string _parallelTransfersText = "1";
+    public partial string ParallelTransfersText { get; set; } = "1";
 
     [ObservableProperty]
-    private string _uploadLimitText = "0";
+    public partial string UploadLimitText { get; set; } = "0";
 
     [ObservableProperty]
-    private bool _localSendEnabled;
+    public partial bool LocalSendEnabled { get; set; }
 
     [ObservableProperty]
-    private string _localSendPortText = "53317";
+    public partial string LocalSendPortText { get; set; } = "53317";
 
     [ObservableProperty]
-    private string _localSendPinText = string.Empty;
+    public partial string LocalSendPinText { get; set; } = string.Empty;
 
     [ObservableProperty]
-    private string _localSendEndpointText = "（未启用）";
+    public partial string LocalSendEndpointText { get; set; } = "（未启用）";
 
     [ObservableProperty]
-    private string _selectedLanguageCode = "zh-CN";
+    public partial string SelectedLanguageCode { get; set; } = "zh-CN";
 
     /// <summary>可选语言：从已注册的语言包动态生成（重载语言包后可刷新）。</summary>
     [ObservableProperty]
-    private IReadOnlyList<LanguageOption> _languageOptions = Array.Empty<LanguageOption>();
+    public partial IReadOnlyList<LanguageOption> LanguageOptions { get; set; } = Array.Empty<LanguageOption>();
 
     /// <summary>当前主题 id。</summary>
     [ObservableProperty]
-    private string _selectedThemeId = "win7";
+    public partial string SelectedThemeId { get; set; } = "win7";
 
     /// <summary>可选主题：从已注册的主题包动态生成（重载主题后可刷新）。</summary>
     [ObservableProperty]
-    private IReadOnlyList<ThemeOption> _themeOptions = Array.Empty<ThemeOption>();
+    public partial IReadOnlyList<ThemeOption> ThemeOptions { get; set; } = Array.Empty<ThemeOption>();
 
     /// <summary>下拉框选中项变化时立即应用主题（保存按钮不需要管主题）。</summary>
     partial void OnSelectedThemeIdChanged(string value) => ApplyTheme(value);
 
     [ObservableProperty]
-    private bool _webShareEnabled;
+    public partial bool WebShareEnabled { get; set; }
 
     [ObservableProperty]
-    private string _webSharePortText = "8088";
+    public partial string WebSharePortText { get; set; } = "8088";
 
     [ObservableProperty]
-    private string _webShareUrlText = Loc.Get("（未启用）");
+    public partial string WebShareUrlText { get; set; } = Loc.Get("（未启用）");
 
     [ObservableProperty]
-    private string _webSharePinText = "-";
+    public partial string WebSharePinText { get; set; } = "-";
 
     [ObservableProperty]
-    private string _trustedDeviceCountText = Loc.Get("未启用加密");
+    public partial string TrustedDeviceCountText { get; set; } = Loc.Get("未启用加密");
 
     [ObservableProperty]
-    private string _statusMessage = Loc.Get("修改后点击「保存」；标注「重启生效」的项需要重启应用。");
+    public partial string StatusMessage { get; set; } = Loc.Get("修改后点击「保存」；标注「重启生效」的项需要重启应用。");
 
     /// <summary>可选设备类型。</summary>
     public IReadOnlyList<DeviceTypeOption> DeviceTypeOptions { get; } = new[]

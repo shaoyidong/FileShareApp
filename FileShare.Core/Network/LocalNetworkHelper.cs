@@ -12,7 +12,7 @@ public static class LocalNetworkHelper
     // GetAllNetworkInterfaces 在 Windows 上单次可达几十到几百毫秒（还要逐网卡查 IP 属性）。
     // 网段扫描会对每个地址调 IsLocalAddress，逐次枚举网卡会把 UI 线程卡死数秒。
     // 这里做短 TTL 缓存：网卡变化在秒级感知完全够用。
-    private static readonly object CacheLock = new();
+    private static readonly Lock CacheLock = new();
     private static IReadOnlyList<(IPAddress Address, IPAddress Mask)>? _cachedInterfaces;
     private static long _cachedAtTicks;
     private static readonly TimeSpan CacheLifetime = TimeSpan.FromSeconds(3);

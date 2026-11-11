@@ -16,7 +16,7 @@ namespace FileShare.Core.Crypto;
 public sealed class FingerprintStore
 {
     private readonly string _storePath;
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
 
     public FingerprintStore(string storePath)
     {

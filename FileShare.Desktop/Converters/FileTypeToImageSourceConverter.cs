@@ -63,7 +63,7 @@ namespace FileShare.Desktop.Converters
         }
 
         /// <summary>只有真正是图片且文件存在时才返回 Bitmap，其余一律 null（Image.Source 不接受字符串）。</summary>
-        private static IImage? TryLoadBitmap(bool isImageFile, string? fullPath)
+        private static Bitmap? TryLoadBitmap(bool isImageFile, string? fullPath)
         {
             if (!isImageFile || fullPath is null)
             {

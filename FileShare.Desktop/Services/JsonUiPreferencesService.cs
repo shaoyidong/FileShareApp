@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Threading;
 using FileShare.Core.Services;
 using FileShare.Desktop.Helpers;
 using FileShare.Desktop.Localization;
@@ -27,7 +28,7 @@ public sealed class JsonUiPreferencesService : IUiPreferencesService
     private const string DefaultLanguageCode = "zh-CN";
     private const string DefaultThemeId = "win7";
 
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
     private readonly string _filePath;
     private readonly ILogger<JsonUiPreferencesService> _logger;
     private DesktopUiPreferences _current = new();

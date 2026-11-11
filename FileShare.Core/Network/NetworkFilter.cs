@@ -11,6 +11,8 @@ namespace FileShare.Core.Network;
 /// </summary>
 public static class NetworkFilter
 {
+    private static readonly char[] RuleSeparators = { ',', ';', '\n', '\r', ' ' };
+
     /// <summary>
     /// 判断某个地址是否允许参与发现。
     /// </summary>
@@ -64,7 +66,7 @@ public static class NetworkFilter
             return rules;
         }
 
-        foreach (var raw in text.Split(new[] { ',', ';', '\n', '\r', ' ' }, StringSplitOptions.RemoveEmptyEntries))
+        foreach (var raw in text.Split(RuleSeparators, StringSplitOptions.RemoveEmptyEntries))
         {
             var entry = raw.Trim();
             if (entry.Length == 0)

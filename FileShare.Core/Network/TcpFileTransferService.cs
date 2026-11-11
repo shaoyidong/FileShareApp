@@ -30,6 +30,7 @@ namespace FileShare.Core.Network;
 public class TcpFileTransferService : IDisposable
 {
     private const int BUFFER_SIZE = 65536; // 64KB缓冲区
+    private static readonly SearchValues<char> InvalidFileNameChars = SearchValues.Create(new[] { '/', '\\', ':', '\0' });
     private const int REQUEST_TIMEOUT_MS = 60000; // 请求超时时间（60秒）
     private const int WAIT_CHECKSUM_TIMEOUT_MS = 60000; // 等待超时时间（60秒）
     private const double PROGRESS_THRESHOLD = 0.5;
@@ -336,7 +337,7 @@ public class TcpFileTransferService : IDisposable
                 string? remoteIp = (client.Client.RemoteEndPoint as IPEndPoint)?.Address.ToString();
 
                 // 全局并发限制：如果已达到最大连接数，直接拒绝
-                if (!_connectionSemaphore.Wait(0))
+                if (!_connectionSemaphore.Wait(0, cancellationToken))
                 {
                     try
                     {
@@ -380,7 +381,7 @@ public class TcpFileTransferService : IDisposable
                             DecrementIpCount(remoteIp);
                         }
                     }
-                });
+                }, cancellationToken);
             }
         }
         catch (OperationCanceledException)
@@ -569,7 +570,7 @@ public class TcpFileTransferService : IDisposable
     /// <summary>
     /// 校验传输请求
     /// </summary>
-    private bool ValidateRequest(TransferRequest request)
+    private static bool ValidateRequest(TransferRequest request)
     {
         if (request == null || string.IsNullOrEmpty(request.TransferId)
             || string.IsNullOrEmpty(request.SenderId) || string.IsNullOrEmpty(request.ReceiverId))
@@ -582,7 +583,7 @@ public class TcpFileTransferService : IDisposable
             return false;
 
         // 文件名不允许带路径（文件夹传输请用 RelativePath），杜绝 "../" 之类的目录穿越
-        if (request.FileName.IndexOfAny(new[] { '/', '\\', ':', '\0' }) >= 0)
+        if (request.FileName.AsSpan().IndexOfAny(InvalidFileNameChars) >= 0)
             return false;
 
         if (request.FileName is "." or "..")
@@ -758,7 +759,7 @@ public class TcpFileTransferService : IDisposable
     /// </summary>
     private static async Task<int> ReadOneByteAsync(Stream stream, byte[] buffer, CancellationToken cancellationToken)
     {
-        return await stream.ReadAsync(buffer, 0, 1, cancellationToken).ConfigureAwait(false);
+        return await stream.ReadAsync(buffer.AsMemory(0, 1), cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -872,7 +873,7 @@ public class TcpFileTransferService : IDisposable
             };
 
             await SendResponseAsync(stream, response, cancellationToken).ConfigureAwait(false);
-            _logger.LogDebug($"send response: {response}");
+            _logger.LogDebug("send response: {Response}", response);
         }
         catch (Exception ex)
         {
@@ -990,11 +991,11 @@ public class TcpFileTransferService : IDisposable
             while (totalBytesRead < request.FileSize && !cts.Token.IsCancellationRequested)
             {
                 int bytesToRead = (int)Math.Min(buffer.Length, request.FileSize - totalBytesRead);
-                var bytesRead = await stream.ReadAsync(buffer, 0, bytesToRead, cts.Token).ConfigureAwait(false);
+                var bytesRead = await stream.ReadAsync(buffer.AsMemory(0, bytesToRead), cts.Token).ConfigureAwait(false);
                 if (bytesRead == 0)
                     break;
 
-                await fileStream.WriteAsync(buffer, 0, bytesRead, cts.Token).ConfigureAwait(false);
+                await fileStream.WriteAsync(buffer.AsMemory(0, bytesRead), cts.Token).ConfigureAwait(false);
                 totalBytesRead += bytesRead;
 
                 Interlocked.Add(ref _totalBytesReceived, bytesRead);
@@ -1007,7 +1008,7 @@ public class TcpFileTransferService : IDisposable
             
             if (cts.Token.IsCancellationRequested)
             {
-                await OnReceiverCancelled(stream, transferInfo, partFilePath).ConfigureAwait(false);
+                await OnReceiverCancelled(stream, transferInfo).ConfigureAwait(false);
                 return;
             }
 
@@ -1042,7 +1043,7 @@ public class TcpFileTransferService : IDisposable
         }
         catch (OperationCanceledException)
         {
-            await OnReceiverCancelled(stream, transferInfo, partFilePath).ConfigureAwait(false);
+            await OnReceiverCancelled(stream, transferInfo).ConfigureAwait(false);
             return;
         }
         catch (Exception ex)
@@ -1195,7 +1196,7 @@ public class TcpFileTransferService : IDisposable
             else
             {
                 transferInfo.Status = TransferStatus.Failed;
-                _logger.LogError($"'{request.FileName}'文件校验或落盘失败");
+                _logger.LogError("'{RequestFileName}'文件校验或落盘失败", request.FileName);
                 OnTransferCompleted?.Invoke(transferInfo, "校验或落盘失败");
             }
         }
@@ -1366,7 +1367,7 @@ public class TcpFileTransferService : IDisposable
         return Convert.ToHexString(hashBytes);
     }
 
-    private async Task OnReceiverCancelled(Stream stream, FileTransferInfo transferInfo, string tempFilePath)
+    private async Task OnReceiverCancelled(Stream stream, FileTransferInfo transferInfo)
     {
         // 传输被取消
         transferInfo.Status = TransferStatus.Cancelled;
@@ -1386,7 +1387,7 @@ public class TcpFileTransferService : IDisposable
     /// <summary>
     /// 发送响应
     /// </summary>
-    private async Task SendResponseAsync(Stream stream, TransferResponse response, CancellationToken cancellationToken = default)
+    private static async Task SendResponseAsync(Stream stream, TransferResponse response, CancellationToken cancellationToken = default)
     {
         var responseJson = JsonSerializer.Serialize(response, SourceGenerationContext.Default.TransferResponse);
         var responseBytes = System.Text.Encoding.UTF8.GetBytes(responseJson);
@@ -1400,7 +1401,7 @@ public class TcpFileTransferService : IDisposable
     /// <summary>
     /// 发送错误响应
     /// </summary>
-    private async Task SendErrorResponseAsync(string transferId,Stream stream, string message, CancellationToken cancellationToken)
+    private static async Task SendErrorResponseAsync(string transferId,Stream stream, string message, CancellationToken cancellationToken)
     {
         var response = new TransferResponse
         {
@@ -1678,93 +1679,91 @@ public class TcpFileTransferService : IDisposable
             using (var cts = CancellationTokenSource.CreateLinkedTokenSource(
                 _cts.Token, userCts.Token, timeoutCts.Token, cancellationToken))
             {
-                using (var client = new TcpClient())
+                using var client = new TcpClient();
+                // 连接到目标设备，添加超时
+                await client.ConnectAsync(targetDevice.IpAddress, targetDevice.Port, cts.Token).ConfigureAwait(false);
+                using (stream = client.GetStream())
                 {
-                    // 连接到目标设备，添加超时
-                    await client.ConnectAsync(targetDevice.IpAddress, targetDevice.Port, cts.Token).ConfigureAwait(false);
-                    using (stream = client.GetStream())
+                    // 双方均启用 TLS 时升级到 SslStream（双向认证 + TOFU 校验对端证书）；
+                    // 否则保持裸 TCP，向后兼容未启用 TLS 的旧版本对端。
+                    if (_tlsEnabled && targetDevice.SupportsTls)
                     {
-                        // 双方均启用 TLS 时升级到 SslStream（双向认证 + TOFU 校验对端证书）；
-                        // 否则保持裸 TCP，向后兼容未启用 TLS 的旧版本对端。
-                        if (_tlsEnabled && targetDevice.SupportsTls)
+                        stream = await UpgradeOutboundStreamToTlsAsync(stream, targetDevice.DeviceId, cts.Token).ConfigureAwait(false);
+                    }
+
+                    // 发送文件请求
+                    var request = new TransferRequest
+                    {
+                        Type = TransferRequestType.SendFileRequest,
+                        TransferId = transferId,
+                        FileName = displayName,
+                        FileSize = fileInfo.Length,
+                        SenderId = senderId,
+                        ReceiverId = targetDevice.DeviceId,
+                        RelativePath = transferInfo.RelativePath,
+                    };
+
+                    await SendRequestAsync(stream, request, cts.Token).ConfigureAwait(false);
+
+                    // 接收响应
+                    var response = await ReceiveResponseAsync(stream, cts.Token).ConfigureAwait(false);
+
+                    if (response?.Accepted ?? false)
+                    {
+                        // 发送文件数据，增加文件传输的超时时间
+                        // 初始设置超时，后续会根据进度更新重置
+                        timeoutCts.CancelAfter(TimeSpan.FromMilliseconds(REQUEST_TIMEOUT_MS));
+                        // 断点续传：接收端已有多少字节，就从那里开始发（旧接收端返回 0）
+                        var resumeOffset = response.ResumeOffset > 0 && response.ResumeOffset < fileInfo.Length
+                            ? response.ResumeOffset
+                            : 0;
+
+                        if (resumeOffset > 0)
                         {
-                            stream = await UpgradeOutboundStreamToTlsAsync(stream, targetDevice.DeviceId, cts.Token).ConfigureAwait(false);
+                            transferInfo.TransferredSize = resumeOffset;
+                            _logger.LogInformation("断点续传：已有 {Offset} 字节，从该处继续发送", resumeOffset);
                         }
 
-                        // 发送文件请求
-                        var request = new TransferRequest
+
+                        var (dataSent, preReadResponse) = await SendFileDataAsync(stream, filePath, transferInfo, timeoutCts, resumeOffset, cancellationToken: cts.Token).ConfigureAwait(false);
+                        //发送流程未被接收方取消
+                        if (dataSent)
                         {
-                            Type = TransferRequestType.SendFileRequest,
-                            TransferId = transferId,
-                            FileName = displayName,
-                            FileSize = fileInfo.Length,
-                            SenderId = senderId,
-                            ReceiverId = targetDevice.DeviceId,
-                            RelativePath = transferInfo.RelativePath,
-                        };
-
-                        await SendRequestAsync(stream, request, cts.Token).ConfigureAwait(false);
-
-                        // 接收响应
-                        var response = await ReceiveResponseAsync(stream, cts.Token).ConfigureAwait(false);
-
-                        if (response?.Accepted ?? false)
-                        {
-                            // 发送文件数据，增加文件传输的超时时间
-                            // 初始设置超时，后续会根据进度更新重置
-                            timeoutCts.CancelAfter(TimeSpan.FromMilliseconds(REQUEST_TIMEOUT_MS));
-                            // 断点续传：接收端已有多少字节，就从那里开始发（旧接收端返回 0）
-                            var resumeOffset = response.ResumeOffset > 0 && response.ResumeOffset < fileInfo.Length
-                                ? response.ResumeOffset
-                                : 0;
-
-                            if (resumeOffset > 0)
+                            if (cts.IsCancellationRequested)
                             {
-                                transferInfo.TransferredSize = resumeOffset;
-                                _logger.LogInformation("断点续传：已有 {Offset} 字节，从该处继续发送", resumeOffset);
-                            }
-
-
-                            var (dataSent, preReadResponse) = await SendFileDataAsync(stream, filePath, transferInfo, cts.Token, timeoutCts, resumeOffset).ConfigureAwait(false);
-                            //发送流程未被接收方取消
-                            if (dataSent)
-                            {
-                                if (cts.IsCancellationRequested)
+                                //发送方自行取消
+                                if (userCts.IsCancellationRequested)
                                 {
-                                    //发送方自行取消
-                                    if (userCts.IsCancellationRequested)
-                                    {
-                                        await OnSenderCancelled(stream, transferInfo, false).ConfigureAwait(false);
-                                    }
-                                    //发送方超时自行取消
-                                    if (timeoutCts.IsCancellationRequested)
-                                    {
-                                        await OnSenderCancelled(stream, transferInfo, true).ConfigureAwait(false);
-                                    }
-                                    return false;
+                                    await OnSenderCancelled(transferInfo, false).ConfigureAwait(false);
+                                }
+                                //发送方超时自行取消
+                                if (timeoutCts.IsCancellationRequested)
+                                {
+                                    await OnSenderCancelled(transferInfo, true).ConfigureAwait(false);
+                                }
+                                return false;
+                            }
+                            else
+                            {
+                                // 接收完成响应：优先使用监听任务提前读到的响应，避免重复读取被阻塞
+                                response = preReadResponse ?? await ReceiveResponseAsync(stream, cts.Token).ConfigureAwait(false);
+
+                                if (response?.Accepted ?? false)
+                                {
+                                    transferInfo.Status = TransferStatus.Completed;
+                                    OnTransferCompleted?.Invoke(transferInfo, null);
+                                    return true;
                                 }
                                 else
                                 {
-                                    // 接收完成响应：优先使用监听任务提前读到的响应，避免重复读取被阻塞
-                                    response = preReadResponse ?? await ReceiveResponseAsync(stream, cts.Token).ConfigureAwait(false);
-
-                                    if (response?.Accepted ?? false)
-                                    {
-                                        transferInfo.Status = TransferStatus.Completed;
-                                        OnTransferCompleted?.Invoke(transferInfo, null);
-                                        return true;
-                                    }
-                                    else
-                                    {
-                                        _logger.LogWarning("文件传输被接收方拒绝: {Message}", response?.Message);
-                                    }
+                                    _logger.LogWarning("文件传输被接收方拒绝: {Message}", response?.Message);
                                 }
                             }
                         }
-                        else
-                        {
-                            _logger.LogWarning("文件请求被接收方拒绝: {Message}", response?.Message);
-                        }
+                    }
+                    else
+                    {
+                        _logger.LogWarning("文件请求被接收方拒绝: {Message}", response?.Message);
                     }
                 }
             }
@@ -1822,7 +1821,7 @@ public class TcpFileTransferService : IDisposable
         }
     }
 
-    private async Task OnSenderCancelled(Stream stream, FileTransferInfo transferInfo, bool isTimeout = false)
+    private async Task OnSenderCancelled(FileTransferInfo transferInfo, bool isTimeout = false)
     {
         transferInfo.Status = TransferStatus.Cancelled;
         OnTransferCompleted?.Invoke(transferInfo, isTimeout ? "传输超时" : "传输被发送方取消");
@@ -1845,7 +1844,7 @@ public class TcpFileTransferService : IDisposable
     /// <param name="timeoutCts">超时取消令牌源，用于在进度更新时重置</param>
     /// <returns>(DataSent, PreReadResponse)：DataSent=true 表示数据已发完或自行取消，false 表示接收方取消；
     /// PreReadResponse 为监听任务读到的完成响应（避免上层重复读取被阻塞），null 表示需上层自行读取或已取消。</returns>
-    private async Task<(bool DataSent, TransferResponse? PreReadResponse)> SendFileDataAsync(Stream stream, string filePath, FileTransferInfo transferInfo, CancellationToken cancellationToken = default, CancellationTokenSource? timeoutCts = null, long startOffset = 0)
+    private async Task<(bool DataSent, TransferResponse? PreReadResponse)> SendFileDataAsync(Stream stream, string filePath, FileTransferInfo transferInfo, CancellationTokenSource? timeoutCts = null, long startOffset = 0, CancellationToken cancellationToken = default)
     {
         transferInfo.Status = TransferStatus.Transferring;
         // 触发传输进度事件，通知UI状态变化
@@ -1912,7 +1911,7 @@ public class TcpFileTransferService : IDisposable
             {
                 // 监听异常（如连接重置）不在此处中断，由消费者的 WriteAsync 抛出后统一处理
             }
-        });
+        }, cancellationToken);
 
         byte[]? hash = null;
         // 生产者：从文件读取数据块写入 Channel，缓冲区从 ArrayPool 租用
@@ -1975,7 +1974,7 @@ public class TcpFileTransferService : IDisposable
                 return;
             }
             channel.Writer.TryComplete();
-        });
+        }, cancellationToken);
 
         // 消费者（主流程）：从 Channel 读出并写入网络
         var totalBytesRead = startOffset;
@@ -1985,7 +1984,7 @@ public class TcpFileTransferService : IDisposable
             {
                 try
                 {
-                    await stream.WriteAsync(buffer, 0, length, linkedCts.Token).ConfigureAwait(false);
+                    await stream.WriteAsync(buffer.AsMemory(0, length), linkedCts.Token).ConfigureAwait(false);
                 }
                 catch
                 {
@@ -2072,7 +2071,7 @@ public class TcpFileTransferService : IDisposable
     /// <summary>
     /// 发送请求
     /// </summary>
-    private async Task SendRequestAsync(Stream stream, TransferRequest request, CancellationToken cancellationToken = default)
+    private static async Task SendRequestAsync(Stream stream, TransferRequest request, CancellationToken cancellationToken = default)
     {
         var requestJson = JsonSerializer.Serialize(request, SourceGenerationContext.Default.TransferRequest);
         var requestBytes = System.Text.Encoding.UTF8.GetBytes(requestJson);
@@ -2127,14 +2126,14 @@ public class TcpFileTransferService : IDisposable
     /// <summary>
     /// 读取指定长度的字节
     /// </summary>
-    private async Task<byte[]> ReadBytesAsync(Stream stream, int length, CancellationToken cancellationToken = default)
+    private static async Task<byte[]> ReadBytesAsync(Stream stream, int length, CancellationToken cancellationToken = default)
     {
         var buffer = new byte[length];
         var totalBytesRead = 0;
 
         while (totalBytesRead < length)
         {
-            var bytesRead = await stream.ReadAsync(buffer, totalBytesRead, length - totalBytesRead, cancellationToken).ConfigureAwait(false);
+            var bytesRead = await stream.ReadAsync(buffer.AsMemory(totalBytesRead, length - totalBytesRead), cancellationToken).ConfigureAwait(false);
             if (bytesRead == 0)
                 return buffer[..totalBytesRead]; // EOF reached before reading the requested length
 
@@ -2169,8 +2168,7 @@ public class TcpFileTransferService : IDisposable
         double currentProgress = transferInfo.ProgressPercentage;
 
         // 获取上次进度值，如果不存在则默认为-1
-        double lastProgress = -1;
-        _lastProgressValues.TryGetValue(transferInfo.TransferId, out lastProgress);
+        _lastProgressValues.TryGetValue(transferInfo.TransferId, out double lastProgress);
 
         // 只有当进度变化超过0.5%时才触发事件
         if (Math.Abs(currentProgress - lastProgress) >= PROGRESS_THRESHOLD || lastProgress < 0)

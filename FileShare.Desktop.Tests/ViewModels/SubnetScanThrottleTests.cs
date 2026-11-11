@@ -1,5 +1,6 @@
 using FileShare.Core.Models;
 using FileShare.Core.Network.Discovery;
+using FileShare.Desktop.Helpers;
 using FileShare.Desktop.Services;
 using System.Reflection;
 

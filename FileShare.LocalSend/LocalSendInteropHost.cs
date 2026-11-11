@@ -1136,7 +1136,8 @@ public sealed class LocalSendInteropHost : ILocalSendInteropHost
     {
         try
         {
-            return global::FileShare.Core.Network.LocalNetworkHelper.GetLocalIPv4Addresses().FirstOrDefault()?.ToString();
+            var addresses = global::FileShare.Core.Network.LocalNetworkHelper.GetLocalIPv4Addresses();
+            return addresses.Count > 0 ? addresses[0].ToString() : null;
         }
         catch (Exception)
         {
