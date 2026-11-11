@@ -253,8 +253,10 @@ namespace FileShare.Desktop
             services.AddSingleton<IThemeService, ThemeService>();
 
             // LocalSend 适配层通过 UI 桥反向注入通知 / 文案，适配层本身不依赖 Avalonia
-            services.AddSingleton<ILocalSendUiBridge>(sp =>
-                new LocalSendUiBridge(sp.GetRequiredService<IToastService>()));
+            services.AddSingleton<ILocalSendUiBridge>(sp => new LocalSendUiBridge(
+                sp.GetRequiredService<IToastService>(),
+                sp.GetRequiredService<IAppSettingsService>()));
+            services.AddSingleton<IAppUiBridge>(sp => sp.GetRequiredService<ILocalSendUiBridge>());
 
             // 通知卡片（懒解析 lifetime：解析发生在 App 初始化之后）
             services.AddSingleton<ILocalSendInteropHost>(sp => new LocalSendInteropHost(
@@ -269,7 +271,8 @@ namespace FileShare.Desktop
                 sp.GetRequiredService<IPlatformDirectoryService>(),
                 sp.GetRequiredService<ILoggerFactory>(),
                 sp.GetRequiredService<IToastService>(),
-                sp.GetRequiredService<IDatabaseService>()));
+                sp.GetRequiredService<IDatabaseService>(),
+                sp.GetRequiredService<IAppUiBridge>()));
 
             services.AddSingleton<IToastService>(_ => new ToastService(() =>
                 (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow));

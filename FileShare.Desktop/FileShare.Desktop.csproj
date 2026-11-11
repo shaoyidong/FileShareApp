@@ -21,7 +21,15 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<Folder Include="Models\" />
+		<!-- 内置语言包模板：发布后程序会复制到数据目录 i18n/，用户可直接编辑或新增 -->
+		<!--<Content Include="Localization\packs\*.json" CopyToOutputDirectory="PreserveNewest" />-->
+		<EmbeddedResource Include="Localization\packs\*.json" />
+		<!-- 内置主题配色包：发布后程序会复制到数据目录 themes/，用户可直接编辑或新增 -->
+		<EmbeddedResource Include="Themes\packs\*.json" />
+		<Content Include="Themes\packs\*.json" CopyToOutputDirectory="PreserveNewest" />
+	</ItemGroup>
+
+	<ItemGroup>
 		<AvaloniaResource Include="Assets\**" />
 		<AvaloniaResource Remove="Assets\Fonts\FluentUI.cs" />
 		<Content Include="Assets\logo.ico" />
@@ -96,4 +104,7 @@
 	    <CopyToOutputDirectory>Never</CopyToOutputDirectory>
 	  </Compile>
 	</ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="FileShare.Desktop.Tests" />
+  </ItemGroup>
 </Project>

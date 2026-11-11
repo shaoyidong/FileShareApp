@@ -1,0 +1,62 @@
+{
+  "id": "win7",
+  "name": "Windows 7（Aero）",
+  "base": "win7",
+  "colors": {
+    "FsWindowBrush": "#F0F0F0",
+    "FsSurfaceBrush": "#FFFFFF",
+    "FsCardBrush": "#FFFFFF",
+    "FsBorderBrush": "#C6C6C6",
+    "FsSoftBorderBrush": "#DCDCDC",
+    "FsTextBrush": "#1F1F1F",
+    "FsMutedBrush": "#6D6D6D",
+    "FsAccentBrush": "#2E7BD6",
+    "FsAccentTextBrush": "#FFFFFF",
+    "FsDangerBrush": "#C42B1C",
+    "FsRowHoverBrush": "#EAF2FB",
+    "FsRowSelectedBrush": "#CFE4F8",
+    "FsButtonBorderBrush": "#ADADAD",
+    "FsButtonBorderHoverBrush": "#7EB4EA",
+    "FsInputBorderBrush": "#9AA5B1",
+    "FsToolbarBrush": {
+      "start": "#FDFEFF",
+      "end": "#E6EEF9"
+    },
+    "FsButtonFaceBrush": {
+      "stops": [
+        {
+          "offset": 0,
+          "color": "#FCFCFD"
+        },
+        {
+          "offset": 0.55,
+          "color": "#F1F1F1"
+        },
+        {
+          "offset": 1,
+          "color": "#E4E4E4"
+        }
+      ]
+    },
+    "FsButtonHoverBrush": {
+      "start": "#F7FBFF",
+      "end": "#DCEBFB"
+    },
+    "FsButtonPressedBrush": {
+      "start": "#D9E7F7",
+      "end": "#F0F6FC"
+    },
+    "FsAccentButtonBrush": {
+      "start": "#66A8E4",
+      "end": "#2A72C9"
+    },
+    "FsAccentButtonHoverBrush": {
+      "start": "#7CB8EC",
+      "end": "#3A82D9"
+    },
+    "FsFontFamily": "Segoe UI, Microsoft YaHei",
+    "FsTooltipBrush": "#FFFFE1",
+    "FsTooltipTextBrush": "#1F1F1F",
+    "FsTooltipBorderBrush": "#767676"
+  }
+}

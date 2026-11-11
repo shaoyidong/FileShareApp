@@ -13,12 +13,6 @@ using FileShare.Desktop.Localization;
 
 namespace FileShare.Desktop.ViewModels;
 
-/// <summary>设备类型下拉项。</summary>
-
-/// <summary>语言下拉项。</summary>
-public sealed record LanguageOption(string Code, string Text);
-public sealed record DeviceTypeOption(DeviceType Value, string Text);
-
 /// <summary>
 /// 设置页视图模型：设备名、设备类型、端口、加密、保存目录、同名策略、托盘、发现方式、并发、皮肤、信任设备。
 /// <para>标注「重启生效」的项在启动时被读入服务，因此修改后需要重启应用。</para>
@@ -102,9 +96,20 @@ public partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     private string _selectedLanguageCode = "zh-CN";
 
-    /// <summary>可选语言：从已注册的语言包动态生成（新增语言无需改这里）。</summary>
-    public IReadOnlyList<LanguageOption> LanguageOptions { get; } =
-        Loc.Packs.Select(pack => new LanguageOption(pack.Code, pack.DisplayName)).ToArray();
+    /// <summary>可选语言：从已注册的语言包动态生成（重载语言包后可刷新）。</summary>
+    [ObservableProperty]
+    private IReadOnlyList<LanguageOption> _languageOptions = Array.Empty<LanguageOption>();
+
+    /// <summary>当前主题 id。</summary>
+    [ObservableProperty]
+    private string _selectedThemeId = "win7";
+
+    /// <summary>可选主题：从已注册的主题包动态生成（重载主题后可刷新）。</summary>
+    [ObservableProperty]
+    private IReadOnlyList<ThemeOption> _themeOptions = Array.Empty<ThemeOption>();
+
+    /// <summary>下拉框选中项变化时立即应用主题（保存按钮不需要管主题）。</summary>
+    partial void OnSelectedThemeIdChanged(string value) => ApplyTheme(value);
 
     [ObservableProperty]
     private bool _webShareEnabled;
@@ -132,45 +137,6 @@ public partial class SettingsViewModel : ViewModelBase
         new DeviceTypeOption(DeviceType.Tablet, Loc.Get("平板"))
     };
 
-    /// <summary>Windows 7 风格。</summary>
-    public bool IsWin7Skin
-    {
-        get => _themeService.Current == AppSkin.Win7;
-        set
-        {
-            if (value)
-            {
-                ApplySkin(AppSkin.Win7);
-            }
-        }
-    }
-
-    /// <summary>Windows XP 经典蓝（Luna Blue）。</summary>
-    public bool IsWinXPSkin
-    {
-        get => _themeService.Current == AppSkin.WinXP;
-        set
-        {
-            if (value)
-            {
-                ApplySkin(AppSkin.WinXP);
-            }
-        }
-    }
-
-    /// <summary>Windows XP 橄榄绿（Luna Olive）。</summary>
-    public bool IsWinXPOliveSkin
-    {
-        get => _themeService.Current == AppSkin.WinXPOlive;
-        set
-        {
-            if (value)
-            {
-                ApplySkin(AppSkin.WinXPOlive);
-            }
-        }
-    }
-
     /// <summary>设置文件路径（只读展示，便于用户备份）。</summary>
     public string SettingsFilePath => string.IsNullOrEmpty(_settingsService.SettingsFilePath)
         ? Loc.Get("（内存模式，未持久化）")
@@ -185,6 +151,8 @@ public partial class SettingsViewModel : ViewModelBase
     public ICommand RegenerateWebSharePinCommand { get; }
     public ICommand OpenWebShareCommand { get; }
     public ICommand RefreshWebShareCommand { get; }
+    public ICommand ReloadLanguagesCommand { get; }
+    public ICommand ReloadThemesCommand { get; }
 
     public SettingsViewModel(
         IAppSettingsService settingsService,
@@ -206,10 +174,43 @@ public partial class SettingsViewModel : ViewModelBase
         RegenerateWebSharePinCommand = new RelayCommand(RegenerateWebSharePin);
         OpenWebShareCommand = new RelayCommand(OpenWebShare);
         RefreshWebShareCommand = new RelayCommand(RefreshWebShareStatus);
+        ReloadLanguagesCommand = new RelayCommand(ReloadLanguages);
+        ReloadThemesCommand = new RelayCommand(ReloadThemes);
 
+        RefreshLanguageOptions();
+        RefreshThemeOptions();
         Load();
         RefreshWebShareStatus();
         RefreshTrustedDevices();
+    }
+
+    /// <summary>刷新语言下拉框（语言包文件可在应用发布后修改 / 新增）。</summary>
+    private void RefreshLanguageOptions() =>
+        LanguageOptions = Loc.Packs
+            .Select(pack => new LanguageOption(pack.Code, pack.DisplayName))
+            .ToArray();
+
+    /// <summary>重新读取 i18n 目录下的语言包文件，立即应用改过的译文或新增加的语言。</summary>
+    private void ReloadLanguages()
+    {
+        Loc.ReloadPacks();
+        RefreshLanguageOptions();
+        StatusMessage = Loc.Get("语言包已重载");
+    }
+
+    /// <summary>刷新主题下拉框（themes 目录下的 JSON 可在应用发布后修改 / 新增）。</summary>
+    private void RefreshThemeOptions() =>
+        ThemeOptions = _themeService.AvailableThemes
+            .Select(pack => new ThemeOption(pack.Id, pack.Name))
+            .ToArray();
+
+    /// <summary>重新读取 themes 目录，立即应用改过的配色或新增加的主题。</summary>
+    private void ReloadThemes()
+    {
+        var loaded = _themeService.ReloadThemes();
+        RefreshThemeOptions();
+        SelectedThemeId = _themeService.Current;
+        StatusMessage = Loc.F("主题包已重载（共 {0} 个）", loaded);
     }
 
     private void Load()
@@ -237,6 +238,7 @@ public partial class SettingsViewModel : ViewModelBase
         LocalSendPortText = settings.LocalSendPort.ToString();
         LocalSendPinText = settings.LocalSendPin;
         SelectedLanguageCode = uiPreferences?.LanguageCode ?? "zh-CN";
+        SelectedThemeId = uiPreferences?.SkinId ?? "win7";
         NetworkBlacklistText = settings.NetworkBlacklist;
         ParallelTransfersText = settings.ParallelTransfers.ToString();
         UploadLimitText = settings.UploadLimitKBps.ToString();
@@ -258,26 +260,22 @@ public partial class SettingsViewModel : ViewModelBase
         return DeviceTypeOptions[0];
     }
 
-    private void ApplySkin(AppSkin skin)
+    private void ApplyTheme(string themeId)
     {
-        if (_themeService.Current == skin)
+        if (string.IsNullOrWhiteSpace(themeId) ||
+            string.Equals(_themeService.Current, themeId, StringComparison.OrdinalIgnoreCase))
         {
             return;
         }
 
         // ThemeService 内部会持久化到桌面端私有配置文件（desktop-ui.json）
-        _themeService.Apply(skin);
+        _themeService.Apply(themeId);
+        SelectedThemeId = _themeService.Current;
 
-        OnPropertyChanged(nameof(IsWin7Skin));
-        OnPropertyChanged(nameof(IsWinXPSkin));
-        OnPropertyChanged(nameof(IsWinXPOliveSkin));
-
-        StatusMessage = skin switch
-        {
-            AppSkin.WinXP => Loc.Get("已切换为 Windows XP 经典蓝（Luna Blue）"),
-            AppSkin.WinXPOlive => Loc.Get("已切换为 Windows XP 橄榄绿（Luna Olive）"),
-            _ => Loc.Get("已切换为 Windows 7 风格（Aero）")
-        };
+        var name = _themeService.AvailableThemes
+            .FirstOrDefault(pack => string.Equals(pack.Id, SelectedThemeId, StringComparison.OrdinalIgnoreCase))
+            ?.Name ?? SelectedThemeId;
+        StatusMessage = Loc.F("已切换主题：{0}", name);
     }
 
     private void Save()

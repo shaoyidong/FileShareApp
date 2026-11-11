@@ -16,7 +16,7 @@ public partial class FileTransferViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// 文件名
+    /// 文件名（文本消息时是摘要）
     /// </summary>    
     private string? _fileName;
     public string? FileName
@@ -24,6 +24,31 @@ public partial class FileTransferViewModel : ViewModelBase
         get { return _fileName; }
         set { SetProperty(ref _fileName, value); }
     }
+
+    /// <summary>是否为原生文本消息（气泡显示全文 + 复制，隐藏进度/大小）。</summary>
+    private bool _isMessage;
+    public bool IsMessage
+    {
+        get => _isMessage;
+        set
+        {
+            if (SetProperty(ref _isMessage, value))
+            {
+                OnPropertyChanged(nameof(IsFileTransfer));
+            }
+        }
+    }
+
+    /// <summary>文本消息全文。</summary>
+    private string? _messageText;
+    public string? MessageText
+    {
+        get => _messageText;
+        set => SetProperty(ref _messageText, value);
+    }
+
+    /// <summary>是否走普通文件分支（用于 XAML 隐藏进度 / 大小）。</summary>
+    public bool IsFileTransfer => !IsMessage;
 
     //private string? _deviceName;
     //public string? DeviceName
@@ -178,6 +203,8 @@ public partial class FileTransferViewModel : ViewModelBase
             ProgressPercentage = model.ProgressPercentage,
             SavePath = model.SavePath,
             Direction = model.Direction,
+            IsMessage = model.IsMessage,
+            MessageText = model.MessageText
         };
     }
 }

@@ -102,18 +102,14 @@ public interface IFileShareServiceManager : IDisposable, IAsyncDisposable
         TransferQueueControl? queue = null);
 
     /// <summary>
-    /// 发送文本（对端收到一个 .txt 文件）。
+    /// 发送一条原生文本消息（对端显示为可复制的消息，不落盘）。
     /// </summary>
     /// <param name="text">文本内容。</param>
     /// <param name="targetDevice">目标设备。</param>
-    /// <param name="fileName">对端看到的文件名。</param>
-    /// <param name="progress">进度。</param>
     /// <param name="cancellationToken">取消令牌。</param>
-    Task<bool> SendTextAsync(
+    Task<bool> SendTextMessageAsync(
         string text,
         DeviceInfo targetDevice,
-        string? fileName = null,
-        IProgress<FileSendProgress>? progress = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>

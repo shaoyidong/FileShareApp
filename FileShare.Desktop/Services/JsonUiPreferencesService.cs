@@ -4,7 +4,9 @@ using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using FileShare.Core.Services;
+using FileShare.Desktop.Helpers;
 using FileShare.Desktop.Localization;
+using FileShare.Desktop.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -23,6 +25,7 @@ public sealed class JsonUiPreferencesService : IUiPreferencesService
 {
     private const string FileName = "desktop-ui.json";
     private const string DefaultLanguageCode = "zh-CN";
+    private const string DefaultThemeId = "win7";
 
     private readonly object _gate = new();
     private readonly string _filePath;
@@ -54,11 +57,11 @@ public sealed class JsonUiPreferencesService : IUiPreferencesService
     }
 
     /// <inheritdoc />
-    public void SetSkin(AppSkin skin)
+    public void SetSkinId(string skinId)
     {
         lock (_gate)
         {
-            _current.Skin = skin;
+            _current.SkinId = string.IsNullOrWhiteSpace(skinId) ? "win7" : skinId;
         }
 
         Save();
@@ -85,6 +88,26 @@ public sealed class JsonUiPreferencesService : IUiPreferencesService
         }
 
         Save();
+    }
+
+    /// <summary>
+    /// 把旧版枚举名（Win7 / WinXP / WinXPOlive / 0 / 1 / 2）映射成主题 id；
+    /// 其它值原样保留，因为用户可以在 themes/ 里放自定义主题包。
+    /// </summary>
+    internal static string NormalizeThemeId(string? id)
+    {
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            return DefaultThemeId;
+        }
+
+        return id.Trim() switch
+        {
+            "0" or "Win7" or "win7" => "win7",
+            "1" or "WinXP" or "winxp" => "winxp",
+            "2" or "WinXPOlive" or "winxp-olive" => "winxp-olive",
+            var other => other
+        };
     }
 
     private static string NormalizeCode(string? code)
@@ -118,17 +141,41 @@ public sealed class JsonUiPreferencesService : IUiPreferencesService
                 }
             }
 
-            if (!Enum.IsDefined(_current.Skin))
-            {
-                _current.Skin = AppSkin.Win7;
-            }
-
-            // 旧格式的 Language 是枚举数字（0=zh-CN / 1=en-US）；source-gen 会忽略该未知字段，
-            // 这里用 JsonDocument 单独读出并一次性迁移为 LanguageCode。
+            // 旧格式把皮肤保存为 "Skin": 0|1|2 枚举值；source-gen 会忽略该未知字段，
+            // 这里用 JsonDocument 单独读出并一次性迁移为字符串主题 id。
             bool migrated = false;
             using (var document = JsonDocument.Parse(json))
             {
-                if (document.RootElement.TryGetProperty("Language", out var legacy))
+                var root = document.RootElement;
+                var hasSkinId = root.TryGetProperty("SkinId", out var skinIdElement) &&
+                                skinIdElement.ValueKind == JsonValueKind.String &&
+                                !string.IsNullOrWhiteSpace(skinIdElement.GetString());
+
+                if (!hasSkinId && root.TryGetProperty("Skin", out var legacySkin))
+                {
+                    string? themeId = legacySkin.ValueKind switch
+                    {
+                        JsonValueKind.Number when legacySkin.TryGetInt32(out var n) => n switch
+                        {
+                            1 => "winxp",
+                            2 => "winxp-olive",
+                            _ => "win7"
+                        },
+                        JsonValueKind.String => legacySkin.GetString(),
+                        _ => null
+                    };
+
+                    if (!string.IsNullOrWhiteSpace(themeId))
+                    {
+                        _current.SkinId = NormalizeThemeId(themeId);
+                        migrated = true;
+                    }
+                }
+
+                _current.SkinId = NormalizeThemeId(_current.SkinId);
+
+                // 旧格式的 Language 是枚举数字（0=zh-CN / 1=en-US），同样一次性迁移为 LanguageCode。
+                if (root.TryGetProperty("Language", out var legacy))
                 {
                     string? code = legacy.ValueKind switch
                     {
@@ -175,7 +222,7 @@ public sealed class JsonUiPreferencesService : IUiPreferencesService
             {
                 snapshot = new DesktopUiPreferences
                 {
-                    Skin = _current.Skin,
+                    SkinId = _current.SkinId,
                     LanguageCode = _current.LanguageCode,
                     MinimizeToTray = _current.MinimizeToTray,
                     CloseToTray = _current.CloseToTray
@@ -192,10 +239,4 @@ public sealed class JsonUiPreferencesService : IUiPreferencesService
             _logger.LogWarning(ex, "保存桌面 UI 偏好失败");
         }
     }
-}
-
-/// <summary>桌面端 JSON 源生成上下文（AOT 友好）。</summary>
-[JsonSerializable(typeof(DesktopUiPreferences))]
-internal partial class DesktopJsonContext : JsonSerializerContext
-{
 }

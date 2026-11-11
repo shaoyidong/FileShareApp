@@ -39,8 +39,8 @@ public partial class DeviceItemViewModel : ViewModelBase
 
     /// <summary>第二行副标题：类型 · IP · 加密标记。</summary>
     public string MetaText => $"{DeviceTypeText} · {Device.IpAddress}"
-                             + (Device.SupportsTls ? Loc.Get(" · 加密") : string.Empty)
-                             + (IsLocalSend ? " · LocalSend" : string.Empty);
+                             + (Device.SupportsTls ? Loc.Get(" · 加密") : string.Empty);
+    // LocalSend 身份由列表里的蓝色徽章单独标示，副标题不再重复「· LocalSend」
 
     /// <summary>只有本项目自有协议的设备才能收藏。</summary>
     public bool CanFavorite => !IsLocalSend;

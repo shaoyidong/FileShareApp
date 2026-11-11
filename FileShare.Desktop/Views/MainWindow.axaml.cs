@@ -1,8 +1,11 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
+using Avalonia.VisualTree;
 using FileShare.Desktop.Services;
 using System;
 using System.ComponentModel;
+using System.Linq;
 
 namespace FileShare.Desktop.Views;
 
@@ -47,7 +50,45 @@ public partial class MainWindow : Window
 
         if (_uiPreferences?.Current.MinimizeToTray == true && _trayService is { IsAvailable: true })
         {
+            CloseOpenFlyouts(this);
             Hide();
+        }
+    }
+
+    /// <summary>
+    /// 窗口隐藏到托盘前收起所有已打开的 Flyout / Popup。
+    /// <para>MenuFlyout 挂在 OverlayLayer 的独立 Popup 上，窗口隐藏后其 PlatformImpl
+    /// 会被释放，残留的浮层再触发点击 / 关闭事件会抛异常导致关窗崩溃。</para>
+    /// </summary>
+    private static void CloseOpenFlyouts(Window window)
+    {
+        try
+        {
+            var descendants = window.GetVisualDescendants().ToArray();
+            foreach (var control in descendants.OfType<Control>())
+            {
+                if (control.ContextFlyout is PopupFlyoutBase { IsOpen: true } contextFlyout)
+                {
+                    contextFlyout.Hide();
+                }
+
+                if (control is Button { Flyout: PopupFlyoutBase { IsOpen: true } buttonFlyout })
+                {
+                    buttonFlyout.Hide();
+                }
+            }
+
+            foreach (var popup in descendants.OfType<Popup>())
+            {
+                if (popup.IsOpen)
+                {
+                    popup.IsOpen = false;
+                }
+            }
+        }
+        catch (Exception)
+        {
+            // 收起浮层失败不应阻断隐藏窗口
         }
     }
 
@@ -65,6 +106,7 @@ public partial class MainWindow : Window
         }
 
         e.Cancel = true;
+        CloseOpenFlyouts(this);
         Hide();
         _trayService.SetVisible(true);
     }

@@ -482,6 +482,9 @@ public class TcpFileTransferService : IDisposable
                                     case TransferRequestType.FileChecksum:
                                         await HandleFileChecksumRequest(stream, request, cancellationToken).ConfigureAwait(false);
                                         break;
+                                    case TransferRequestType.SendTextMessage:
+                                        await HandleSendTextMessageRequest(stream, request, cancellationToken).ConfigureAwait(false);
+                                        break;
                                 }
                             }
                         }
@@ -1410,6 +1413,208 @@ public class TcpFileTransferService : IDisposable
 
     #endregion
 
+    #region 文本消息
+
+    /// <summary>
+    /// 生成文本消息在传输列表 / 历史记录里显示的摘要（单行、无路径字符）。
+    /// </summary>
+    internal static string BuildMessageSummary(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return "文本消息";
+        }
+
+        var singleLine = text
+            .Replace('\r', ' ')
+            .Replace('\n', ' ')
+            .Replace('\t', ' ')
+            .Replace('/', ' ')
+            .Replace('\\', ' ')
+            .Replace(':', ' ')
+            .Replace('\0', ' ')
+            .Trim();
+
+        if (singleLine.Length > 24)
+        {
+            singleLine = singleLine[..24] + "…";
+        }
+
+        return string.IsNullOrWhiteSpace(singleLine) ? "文本消息" : singleLine;
+    }
+
+    /// <summary>
+    /// 接收一条原生文本消息：免确认、不落盘，直接进传输列表 / 历史并回复成功。
+    /// 内容随请求 JSON 一起到达，不需要后续的数据帧与校验和帧。
+    /// </summary>
+    private async Task HandleSendTextMessageRequest(
+        Stream stream,
+        TransferRequest request,
+        CancellationToken cancellationToken)
+    {
+        var text = request.Message ?? string.Empty;
+        var size = request.FileSize > 0 ? request.FileSize : System.Text.Encoding.UTF8.GetByteCount(text);
+
+        var info = new FileTransferInfo
+        {
+            TransferId = request.TransferId,
+            FileName = BuildMessageSummary(text),
+            FileSize = size,
+            TransferredSize = size,
+            Status = TransferStatus.Completed,
+            SenderId = request.SenderId,
+            ReceiverId = request.ReceiverId,
+            Direction = TransferDirection.Receive,
+            IsMessage = true,
+            MessageText = text
+        };
+
+        _logger.LogInformation("收到文本消息: {Length} 字节，来自 {Sender}", size, request.SenderId);
+
+        // 先回 ACK：文本消息免确认，接收端已经「完成」了。
+        // 若先通知 UI，任何一个订阅者抛异常都会让发送端读不到响应、把成功误判成失败。
+        await SendResponseAsync(stream, new TransferResponse
+        {
+            TransferId = request.TransferId,
+            Accepted = true,
+            Message = "文本消息已接收"
+        }, cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            // 再更新界面条目 + 写历史（Manager 订阅 OnTransferCompleted）
+            OnTransferRequestSendAndReceive?.Invoke(info);
+            OnTransferCompleted?.Invoke(info, null);
+        }
+        catch (Exception ex)
+        {
+            // UI 层异常不能影响协议握手与历史记录之外的流程
+            _logger.LogWarning(ex, "通知 UI 文本消息失败");
+        }
+    }
+
+    /// <summary>
+    /// 发送一条原生文本消息：单个请求携带全文，对端免确认直接完成（不产生文件）。
+    /// 与旧版客户端不兼容（旧端不认识该请求类型），两端需同时升级。
+    /// </summary>
+    public async Task<bool> SendTextMessageAsync(string text, DeviceInfo targetDevice, string senderId)
+    {
+        if (text is null)
+        {
+            return false;
+        }
+
+        var transferId = Guid.NewGuid().ToString();
+        var size = System.Text.Encoding.UTF8.GetByteCount(text);
+        var info = new FileTransferInfo
+        {
+            TransferId = transferId,
+            FileName = BuildMessageSummary(text),
+            FileSize = size,
+            TransferredSize = 0,
+            Status = TransferStatus.Pending,
+            SenderId = senderId,
+            ReceiverId = targetDevice.DeviceId,
+            Direction = TransferDirection.Send,
+            IsMessage = true,
+            MessageText = text
+        };
+
+        OnTransferRequestSendAndReceive?.Invoke(info);
+
+        Stream? stream = null;
+        try
+        {
+            using var userCts = new CancellationTokenSource();
+            using var timeoutCts = new CancellationTokenSource(TimeSpan.FromMilliseconds(REQUEST_TIMEOUT_MS));
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token, userCts.Token, timeoutCts.Token);
+            _transferCancellationTokens[transferId] = userCts;
+
+            using var client = new TcpClient();
+            await client.ConnectAsync(targetDevice.IpAddress, targetDevice.Port, cts.Token).ConfigureAwait(false);
+
+            stream = client.GetStream();
+            if (_tlsEnabled && targetDevice.SupportsTls)
+            {
+                stream = await UpgradeOutboundStreamToTlsAsync(stream, targetDevice.DeviceId, cts.Token)
+                    .ConfigureAwait(false);
+            }
+
+            var request = new TransferRequest
+            {
+                Type = TransferRequestType.SendTextMessage,
+                TransferId = transferId,
+                FileName = info.FileName,
+                FileSize = size,
+                SenderId = senderId,
+                ReceiverId = targetDevice.DeviceId,
+                Message = text
+            };
+
+            await SendRequestAsync(stream, request, cts.Token).ConfigureAwait(false);
+
+            // 文本消息是「免确认」的轻量消息：请求完整写出即视为送达。
+            // ACK 只用于识别明确的拒绝；对端不回 ACK（旧版本不认识该请求类型、
+            // 或接收端回完就断开）不能再把发送结果误判成失败，否则历史里会固定出现「失败」。
+            TransferResponse? response = null;
+            try
+            {
+                using var ackCts = CancellationTokenSource.CreateLinkedTokenSource(cts.Token);
+                ackCts.CancelAfter(TimeSpan.FromSeconds(3));
+                response = await ReceiveResponseAsync(stream, ackCts.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (!cts.IsCancellationRequested)
+            {
+                _logger.LogDebug("文本消息未收到 ACK（对端可能运行旧版本），按已发出处理");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "读取文本消息 ACK 失败，按已发出处理");
+            }
+
+            if (response is { Accepted: false })
+            {
+                info.Status = TransferStatus.Cancelled;
+                OnTransferCompleted?.Invoke(info, response.Message ?? "接收方未接受文本消息");
+                return false;
+            }
+
+            if (response is null)
+            {
+                _logger.LogInformation("文本消息已发出（对端未回 ACK）: {TransferId}", transferId);
+            }
+
+            info.TransferredSize = size;
+            info.Status = TransferStatus.Completed;
+            OnTransferCompleted?.Invoke(info, null);
+            return true;
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogWarning("发送文本消息已取消或超时");
+            info.Status = TransferStatus.Cancelled;
+            OnTransferCompleted?.Invoke(info, "发送文本消息已取消或超时");
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "发送文本消息失败");
+            info.Status = TransferStatus.Failed;
+            OnTransferCompleted?.Invoke(info, $"异常: {ex.Message}");
+            return false;
+        }
+        finally
+        {
+            _transferCancellationTokens.TryRemove(transferId, out _);
+            if (stream is not null)
+            {
+                try { await stream.DisposeAsync().ConfigureAwait(false); } catch (Exception) { }
+            }
+        }
+    }
+
+    #endregion
+
     #region 发送文件
 
     /// <summary>
@@ -1425,7 +1630,8 @@ public class TcpFileTransferService : IDisposable
         DeviceInfo targetDevice,
         string senderId,
         string? relativePath = null,
-        string? fileNameOverride = null)
+        string? fileNameOverride = null,
+        CancellationToken cancellationToken = default)
     {
         string? transferId = null;
         CancellationTokenSource? userCts = null;
@@ -1466,7 +1672,11 @@ public class TcpFileTransferService : IDisposable
             userCts = new CancellationTokenSource();
             _transferCancellationTokens[transferId] = userCts;
             timeoutCts = new CancellationTokenSource(TimeSpan.FromMilliseconds(REQUEST_TIMEOUT_MS));
-            using (var cts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token, userCts.Token, timeoutCts.Token))
+            // 把调用方（发送队列 / 用户取消）的令牌并入：此前 queue.Cancel() 只能阻止
+            // 「还没开始」的文件，正在等待对端响应的传输完全感知不到取消，任务会一直挂到
+            // 超时，且取消的发送在历史里查无记录。
+            using (var cts = CancellationTokenSource.CreateLinkedTokenSource(
+                _cts.Token, userCts.Token, timeoutCts.Token, cancellationToken))
             {
                 using (var client = new TcpClient())
                 {
@@ -1565,21 +1775,16 @@ public class TcpFileTransferService : IDisposable
         }
         catch (OperationCanceledException)
         {
-            //发送方自行取消
-            if (userCts?.IsCancellationRequested ?? false)
+            // 发送方自行取消 / 超时。无论取消发生在哪个阶段（连接建立前 / 等待确认 / 传输中），
+            // 都要置为 Cancelled 并触发完成事件，否则这次取消的发送在历史里查无记录。
+            if (transferInfo is not null && transferInfo.Status is not TransferStatus.Completed)
             {
-                if (transferInfo != null && stream != null)
-                {
-                    await OnSenderCancelled(stream, transferInfo, false).ConfigureAwait(false);
-                }
-            }
-            //发送方超时自行取消
-            if (timeoutCts?.IsCancellationRequested ?? false)
-            {
-                if (transferInfo != null && stream != null)
-                {
-                    await OnSenderCancelled(stream, transferInfo, true).ConfigureAwait(false);
-                }
+                var cancelledByUser = userCts?.IsCancellationRequested == true
+                    || cancellationToken.IsCancellationRequested;
+                transferInfo.Status = TransferStatus.Cancelled;
+                OnTransferCompleted?.Invoke(
+                    transferInfo,
+                    cancelledByUser ? "传输被发送方取消" : "传输超时");
             }
             return false;
         }
@@ -1884,11 +2089,38 @@ public class TcpFileTransferService : IDisposable
     private async Task<TransferResponse?> ReceiveResponseAsync(Stream stream, CancellationToken cancellationToken = default)
     {
         var headerBytes = await ReadBytesAsync(stream, 4, cancellationToken).ConfigureAwait(false);
-        var headerLength = BitConverter.ToInt32(headerBytes, 0);
-        var responseBytes = await ReadBytesAsync(stream, headerLength, cancellationToken).ConfigureAwait(false);
-        var responseJson = System.Text.Encoding.UTF8.GetString(responseBytes);
+        // ReadBytesAsync 在 EOF 时会返回「短包」；直接 BitConverter.ToInt32 会抛
+        // ArgumentOutOfRangeException(startIndex)，把一次正常的连接关闭误报成异常失败
+        if (headerBytes.Length < 4)
+        {
+            _logger.LogWarning("接收响应时连接已关闭（只读到 {Count}/4 字节头）", headerBytes.Length);
+            return null;
+        }
 
-        return JsonSerializer.Deserialize<TransferResponse>(responseJson, SourceGenerationContext.Default.TransferResponse);
+        var headerLength = BitConverter.ToInt32(headerBytes, 0);
+        if (headerLength <= 0 || headerLength > 10 * 1024 * 1024)
+        {
+            _logger.LogWarning("无效的响应头长度: {Length}", headerLength);
+            return null;
+        }
+
+        var responseBytes = await ReadBytesAsync(stream, headerLength, cancellationToken).ConfigureAwait(false);
+        if (responseBytes.Length < headerLength)
+        {
+            _logger.LogWarning("接收响应时连接被提前关闭（{Read}/{Total} 字节）", responseBytes.Length, headerLength);
+            return null;
+        }
+
+        try
+        {
+            var responseJson = System.Text.Encoding.UTF8.GetString(responseBytes);
+            return JsonSerializer.Deserialize<TransferResponse>(responseJson, SourceGenerationContext.Default.TransferResponse);
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogWarning(ex, "响应 JSON 解析失败");
+            return null;
+        }
     }
     #endregion
 
@@ -1998,50 +2230,4 @@ public class TcpFileTransferService : IDisposable
         Dispose(disposing: true);
         GC.SuppressFinalize(this);
     }
-}
-
-/// <summary>
-/// 传输请求类型
-/// </summary>
-public enum TransferRequestType
-{
-    SendFileRequest,
-    SendFileData,
-    FileChecksum,
-}
-
-/// <summary>
-/// 传输请求
-/// </summary>
-public class TransferRequest
-{
-    public TransferRequestType Type { get; set; }
-    public required string TransferId { get; set; }
-    public required string FileName { get; set; }
-    public long FileSize { get; set; }
-    public required string SenderId { get; set; }
-    public required string ReceiverId { get; set; }
-    public string? Checksum { get; set; }
-
-    /// <summary>
-    /// 文件夹传输时的相对路径（例如 <c>相册/2024/IMG_0001.jpg</c>）。
-    /// 单文件传输为 <c>null</c>，旧客户端不认识该字段时会忽略，退化为平铺保存。
-    /// </summary>
-    public string? RelativePath { get; set; }
-
-    /// <summary>断点续传起点（字节，0 表示从头）。</summary>
-    public long StartOffset { get; set; }
-}
-
-/// <summary>
-/// 传输响应
-/// </summary>
-public class TransferResponse
-{
-    public required string TransferId { get; set; }
-    public bool Accepted { get; set; }
-    public string? Message { get; set; }
-
-    /// <summary>接收端已有字节数，发送端应从这里继续；0 表示从头。</summary>
-    public long ResumeOffset { get; set; }
 }

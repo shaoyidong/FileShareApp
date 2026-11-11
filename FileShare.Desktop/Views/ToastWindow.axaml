@@ -9,6 +9,7 @@
     SizeToContent="Height"
     CanResize="False"
     ShowInTaskbar="False"
+    ShowActivated="False"
     SystemDecorations="None"
     Topmost="True"
     d:DesignWidth="360"

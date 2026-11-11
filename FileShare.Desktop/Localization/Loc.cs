@@ -11,9 +11,9 @@ namespace FileShare.Desktop.Localization;
 /// 迁移成本最低，且不会出现「key 写错导致界面显示 key」的问题（找不到译文时自动回退中文）。
 /// </para>
 /// <para>
-/// 新增一种语言：新建一个实现 <see cref="ILanguagePack"/> 的文件（一个译文表 + Code/DisplayName），
-/// 再在 <see cref="Register"/> 处加一行注册即可；语言下拉框会自动多出一项，
-/// 不需要改枚举、分支或 code 转换。
+/// 译文存放在「应用数据目录 / i18n / *.json」：改 JSON 文件即可改译文，按同样格式放入新文件
+/// 即可新增一套语言，语言下拉框会自动多出一项。首次访问会自动加载（无需显式初始化），
+/// AOT / TrimMode=full 下也安全（只用 JsonDocument 与文件 IO，不用反射序列化）。
 /// </para>
 /// </summary>
 public static class Loc
@@ -23,20 +23,73 @@ public static class Loc
     private static readonly List<ILanguagePack> _packs = new();
     private static readonly Dictionary<string, ILanguagePack> _byCode =
         new(StringComparer.OrdinalIgnoreCase);
+    private static readonly object _initGate = new();
+    private static bool _filePacksLoaded;
     private static ILanguagePack _current = null!;
 
     static Loc()
     {
-        // ---- 语言注册表：新增语言只需在这里加一行 ----
+        // 源语言（中文）内置保底；其它语言由 i18n/*.json 在启动时动态注册
         Register(new ChineseLanguagePack());
-        Register(new EnglishLanguagePack());
-        // -----------------------------------------------
-
         _current = _byCode[DefaultCode];
     }
 
+    /// <summary>
+    /// 从外部语言包文件初始化。新增语言只需在「数据目录 / i18n」放入一个符合格式的 JSON 文件，
+    /// 不需要改代码、也不需要重新编译（AOT 发布后同样适用）。
+    /// </summary>
+    public static void Initialize(string dataDirectory)
+    {
+        LanguagePackLoader.Initialize(dataDirectory);
+        _filePacksLoaded = true;
+    }
+
+    /// <summary>懒加载语言包文件（测试 / 设计器等未显式调用 Initialize 的场景也能正常工作）。</summary>
+    private static void EnsurePacksLoaded()
+    {
+        if (_filePacksLoaded)
+        {
+            return;
+        }
+
+        lock (_initGate)
+        {
+            if (_filePacksLoaded)
+            {
+                return;
+            }
+
+            LanguagePackLoader.Initialize(
+                global::FileShare.Core.Services.AppPaths.GetDataDirectory());
+            _filePacksLoaded = true;
+        }
+    }
+
+    /// <summary>重新读取语言包文件（发布后直接改文件 / 新增语言文件后可即时生效）。</summary>
+    public static int ReloadPacks()
+    {
+        EnsurePacksLoaded();
+        var loaded = LanguagePackLoader.Reload();
+
+        // 当前语言包可能已被替换，回退到中文并通知界面重建
+        if (!_byCode.ContainsKey(_current.Code))
+        {
+            _current = _byCode[DefaultCode];
+        }
+        LanguageChanged?.Invoke();
+
+        return loaded;
+    }
+
     /// <summary>已注册的语言包（按注册顺序，用于生成语言下拉框）。</summary>
-    public static IReadOnlyList<ILanguagePack> Packs => _packs.AsReadOnly();
+    public static IReadOnlyList<ILanguagePack> Packs
+    {
+        get
+        {
+            EnsurePacksLoaded();
+            return _packs.AsReadOnly();
+        }
+    }
 
     /// <summary>当前语言的 BCP-47 代码。</summary>
     public static string LanguageCode => _current.Code;
@@ -60,6 +113,10 @@ public static class Loc
             var index = _packs.IndexOf(existing);
             _packs[index] = pack;
             _byCode[pack.Code] = pack;
+            if (ReferenceEquals(_current, existing))
+            {
+                _current = pack;
+            }
         }
         else
         {
@@ -71,6 +128,8 @@ public static class Loc
     /// <summary>按 BCP-47 code 切换语言；未注册的 code 回退到简体中文。</summary>
     public static void SetLanguage(string code)
     {
+        EnsurePacksLoaded();
+
         var normalized = !string.IsNullOrWhiteSpace(code) && _byCode.ContainsKey(code)
             ? code
             : DefaultCode;
@@ -94,6 +153,7 @@ public static class Loc
             return string.Empty;
         }
 
+        EnsurePacksLoaded();
         return _current.Map.TryGetValue(chinese, out var translated) ? translated : chinese;
     }
 
@@ -113,29 +173,5 @@ public static class Loc
             // 译文模板占位符与参数不匹配时，退回原始拼接，避免界面崩溃
             return chineseTemplate;
         }
-    }
-}
-
-/// <summary>
-/// XAML 标记扩展：<c>Text="{loc:Tr '发送文件'}"</c>。
-/// </summary>
-public sealed class TrExtension : MarkupExtension
-{
-    public TrExtension()
-    {
-    }
-
-    public TrExtension(string text)
-    {
-        Text = text;
-    }
-
-    /// <summary>中文原文（同时作为翻译 key）。</summary>
-    public string? Text { get; set; }
-
-    /// <inheritdoc />
-    public override object ProvideValue(IServiceProvider serviceProvider)
-    {
-        return Loc.Get(Text);
     }
 }

@@ -6,14 +6,16 @@
     x:CompileBindings="True"
     RequestedThemeVariant="Light">
     <!--
-        皮肤（Win7 / WinXP 蓝 / WinXP 橄榄绿）全部在编译期静态声明：
-        AOT / TrimMode=full 会裁掉仅靠运行时 URI 反射加载的 axaml，
-        所以 ThemeService 只做「移除全部皮肤实例 → 回填目标实例」，不再 new StyleInclude(uri)。
-        App.Initialize 会在窗口创建前按用户偏好摘除多余皮肤（无闪烁）。
+        皮肤不再在此静态声明：三套 Themes/*.axaml 都带 x:Class，编译期生成
+        Win7Skin / WinXPSkin / WinXPOliveSkin，ThemeService 直接 new 实例（AOT 安全，
+        不再走 StyleInclude 的运行时 XAML URI 加载，也就不会有 "No precompiled XAML found"）。
 
-        基础主题使用 SimpleTheme（而不是 FluentTheme）：
-        Simple 的控件模板几乎不带圆角、阴影、Reveal 高亮和主题色硬编码，
-        皮肤只需覆盖少量属性就能完全「古典化」，自建皮肤的友好度明显更高。
+        配色由「数据目录 / themes / *.json」主题包提供，ThemeService.Apply 会把色值
+        同时写入皮肤 Resources 与这里的 Application.Resources；下面这份 Fs* 是兜底默认值，
+        保证主题包全部缺失时界面仍有完整配色（与 Win7 主题包一致）。
+
+        基础主题使用 SimpleTheme（而不是 FluentTheme）：Simple 的控件模板几乎不带
+        圆角、阴影和主题色硬编码，皮肤只需覆盖少量属性就能完全「古典化」。
     -->
 
     <Application.Resources>
@@ -32,14 +34,60 @@
             <Color x:Key="DirectionUnknown">#7f8c8d</Color>
 
             <FontFamily x:Key="FluentIcons">avares://FileShare.Desktop/Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons</FontFamily>
+
+            <!--  皮肤调色板兜底（Win7 默认；运行时由 ThemeService 按 JSON 主题包覆盖）  -->
+            <SolidColorBrush x:Key="FsWindowBrush" Color="#F0F0F0" />
+            <SolidColorBrush x:Key="FsSurfaceBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="FsCardBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="FsBorderBrush" Color="#C6C6C6" />
+            <SolidColorBrush x:Key="FsSoftBorderBrush" Color="#DCDCDC" />
+            <SolidColorBrush x:Key="FsTextBrush" Color="#1F1F1F" />
+            <SolidColorBrush x:Key="FsMutedBrush" Color="#6D6D6D" />
+            <SolidColorBrush x:Key="FsAccentBrush" Color="#2E7BD6" />
+            <SolidColorBrush x:Key="FsAccentTextBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="FsDangerBrush" Color="#C42B1C" />
+            <SolidColorBrush x:Key="FsRowHoverBrush" Color="#EAF2FB" />
+            <SolidColorBrush x:Key="FsRowSelectedBrush" Color="#CFE4F8" />
+            <SolidColorBrush x:Key="FsButtonBorderBrush" Color="#ADADAD" />
+            <SolidColorBrush x:Key="FsButtonBorderHoverBrush" Color="#7EB4EA" />
+            <SolidColorBrush x:Key="FsInputBorderBrush" Color="#9AA5B1" />
+
+            <LinearGradientBrush x:Key="FsToolbarBrush" StartPoint="0%,0%" EndPoint="0%,100%">
+                <GradientStop Offset="0" Color="#FDFEFF" />
+                <GradientStop Offset="1" Color="#E6EEF9" />
+            </LinearGradientBrush>
+            <LinearGradientBrush x:Key="FsButtonFaceBrush" StartPoint="0%,0%" EndPoint="0%,100%">
+                <GradientStop Offset="0" Color="#FCFCFD" />
+                <GradientStop Offset="0.55" Color="#F1F1F1" />
+                <GradientStop Offset="1" Color="#E4E4E4" />
+            </LinearGradientBrush>
+            <LinearGradientBrush x:Key="FsButtonHoverBrush" StartPoint="0%,0%" EndPoint="0%,100%">
+                <GradientStop Offset="0" Color="#F7FBFF" />
+                <GradientStop Offset="1" Color="#DCEBFB" />
+            </LinearGradientBrush>
+            <LinearGradientBrush x:Key="FsButtonPressedBrush" StartPoint="0%,0%" EndPoint="0%,100%">
+                <GradientStop Offset="0" Color="#D9E7F7" />
+                <GradientStop Offset="1" Color="#F0F6FC" />
+            </LinearGradientBrush>
+            <LinearGradientBrush x:Key="FsAccentButtonBrush" StartPoint="0%,0%" EndPoint="0%,100%">
+                <GradientStop Offset="0" Color="#66A8E4" />
+                <GradientStop Offset="1" Color="#2A72C9" />
+            </LinearGradientBrush>
+            <LinearGradientBrush x:Key="FsAccentButtonHoverBrush" StartPoint="0%,0%" EndPoint="0%,100%">
+                <GradientStop Offset="0" Color="#7CB8EC" />
+                <GradientStop Offset="1" Color="#3A82D9" />
+            </LinearGradientBrush>
+
+            <FontFamily x:Key="FsFontFamily">Segoe UI, Microsoft YaHei</FontFamily>
+
+            <!--  ToolTip 兜底（浅底深字，保证任何主题下都可读）  -->
+            <SolidColorBrush x:Key="FsTooltipBrush" Color="#FFFFE1" />
+            <SolidColorBrush x:Key="FsTooltipTextBrush" Color="#1F1F1F" />
+            <SolidColorBrush x:Key="FsTooltipBorderBrush" Color="#767676" />
         </ResourceDictionary>
     </Application.Resources>
 
     <Application.Styles>
         <SimpleTheme />
-        <!-- StyleInclude 不支持 x:Name，ThemeService 按 Source 路径识别并缓存这三个编译期实例 -->
-        <StyleInclude Source="avares://FileShare.Desktop/Themes/Win7.axaml" />
-        <StyleInclude Source="avares://FileShare.Desktop/Themes/WinXP.axaml" />
-        <StyleInclude Source="avares://FileShare.Desktop/Themes/WinXPOlive.axaml" />
     </Application.Styles>
 </Application>

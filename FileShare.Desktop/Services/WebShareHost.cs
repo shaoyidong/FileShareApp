@@ -1,5 +1,7 @@
+using FileShare.Core.Models;
 using FileShare.Core.Services;
 using FileShare.Core.Web;
+using FileShare.LocalSend;
 using Microsoft.Extensions.Logging;
 using System;
 using System.IO;
@@ -9,24 +11,6 @@ using FileShare.Desktop.Localization;
 
 namespace FileShare.Desktop.Services;
 
-/// <summary>
-/// 网页分享宿主：根据设置启动/停止 <see cref="WebShareService"/>，并负责 PIN 的生成与持久化。
-/// </summary>
-public interface IWebShareHost
-{
-    /// <summary>按当前设置应用（启动或停止）。</summary>
-    void Apply();
-
-    /// <summary>当前访问地址（未启用时为 null）。</summary>
-    string? Url { get; }
-
-    /// <summary>当前 PIN。</summary>
-    string Pin { get; }
-
-    /// <summary>重新生成 PIN 并重启服务。</summary>
-    string RegeneratePin();
-}
-
 /// <inheritdoc cref="IWebShareHost"/>
 public sealed class WebShareHost : IWebShareHost, IDisposable
 {
@@ -34,24 +18,29 @@ public sealed class WebShareHost : IWebShareHost, IDisposable
     private readonly IPlatformDirectoryService _directoryService;
     private readonly IToastService? _toastService;
     private readonly IDatabaseService? _databaseService;
+    private readonly IAppUiBridge? _uiBridge;
     private readonly ILogger<WebShareHost> _logger;
     private readonly WebShareService _service;
+    private string _saveDirectory = string.Empty;
 
     public WebShareHost(
         IAppSettingsService settingsService,
         IPlatformDirectoryService directoryService,
         ILoggerFactory loggerFactory,
         IToastService? toastService = null,
-        IDatabaseService? databaseService = null)
+        IDatabaseService? databaseService = null,
+        IAppUiBridge? uiBridge = null)
     {
         _settingsService = settingsService;
         _directoryService = directoryService;
         _databaseService = databaseService;
         _toastService = toastService;
+        _uiBridge = uiBridge;
         _logger = loggerFactory.CreateLogger<WebShareHost>();
 
         _service = new WebShareService(loggerFactory);
         _service.FileReceived += OnFileReceived;
+        _service.FileReceiveFailed += OnFileReceiveFailed;
     }
 
     /// <inheritdoc />
@@ -79,7 +68,7 @@ public sealed class WebShareHost : IWebShareHost, IDisposable
             _settingsService.Update(s => s.WebSharePin = pin);
         }
 
-        var saveDirectory = string.IsNullOrWhiteSpace(settings.SaveDirectory)
+        _saveDirectory = string.IsNullOrWhiteSpace(settings.SaveDirectory)
             ? _directoryService.GetDownloadsDirectory()
             : settings.SaveDirectory!;
 
@@ -89,7 +78,9 @@ public sealed class WebShareHost : IWebShareHost, IDisposable
             {
                 Port = settings.WebSharePort,
                 Pin = pin,
-                SaveDirectory = saveDirectory
+                SaveDirectory = _saveDirectory,
+                // 与 FileShare / LocalSend 一致：非收藏来源需确认后才落盘，并进入传输列表
+                ReceiveApprovalAsync = ApproveUploadAsync
             });
 
             _logger.LogInformation("网页分享已启用: {Url}", _service.Url);
@@ -110,9 +101,54 @@ public sealed class WebShareHost : IWebShareHost, IDisposable
         return pin;
     }
 
-    private void OnFileReceived(string path)
+    /// <summary>上传审批：先在传输列表显示等待确认，再询问用户；拒绝返回 null。</summary>
+    private async Task<string?> ApproveUploadAsync(string fileName, long size)
+    {
+        var transferId = "web:" + Guid.NewGuid().ToString("N");
+        if (_uiBridge is null)
+        {
+            // 无界面宿主（单元测试）：保持原有直接接收行为
+            return transferId;
+        }
+
+        _uiBridge.ReportTransfer(ExternalTransferUpdate.For(transferId, fileName, size,
+            TransferDirection.Receive, TransferStatus.Pending, senderId: "web-share"));
+
+        try
+        {
+            var decision = await _uiBridge.ConfirmReceiveAsync(new ExternalReceiveRequest(
+                "web-share", "网页分享", fileName, size, _saveDirectory)).ConfigureAwait(false);
+
+            if (!decision.Accept)
+            {
+                _uiBridge.ReportTransfer(ExternalTransferUpdate.For(transferId, fileName, size,
+                    TransferDirection.Receive, TransferStatus.Cancelled, senderId: "web-share"));
+                return null;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "网页分享接收确认失败: {File}", fileName);
+            _uiBridge.ReportTransfer(ExternalTransferUpdate.For(transferId, fileName, size,
+                TransferDirection.Receive, TransferStatus.Failed, senderId: "web-share"));
+            return null;
+        }
+
+        _uiBridge.ReportTransfer(ExternalTransferUpdate.For(transferId, fileName, size,
+            TransferDirection.Receive, TransferStatus.Transferring, senderId: "web-share"));
+        return transferId;
+    }
+
+    private void OnFileReceived(string path, string? transferId)
     {
         var directory = Path.GetDirectoryName(path) ?? string.Empty;
+        var size = GetFileSize(path);
+
+        if (!string.IsNullOrEmpty(transferId))
+        {
+            _uiBridge?.ReportTransfer(ExternalTransferUpdate.For(transferId, Path.GetFileName(path), size,
+                TransferDirection.Receive, TransferStatus.Completed, size, "web-share", path));
+        }
 
         // 记录到接收历史（与局域网接收一致，历史里可直接打开/定位）
         _ = RecordHistoryAsync(path, directory);
@@ -121,6 +157,17 @@ public sealed class WebShareHost : IWebShareHost, IDisposable
             Loc.Get("网页分享收到文件"),
             Loc.F("{0}（已保存到 {1}）", Path.GetFileName(path), directory),
             null);
+    }
+
+    private void OnFileReceiveFailed(string path, string? transferId)
+    {
+        if (string.IsNullOrEmpty(transferId))
+        {
+            return;
+        }
+
+        _uiBridge?.ReportTransfer(ExternalTransferUpdate.For(transferId, Path.GetFileName(path),
+            GetFileSize(path), TransferDirection.Receive, TransferStatus.Failed, senderId: "web-share"));
     }
 
     /// <summary>把网页分享收到的文件写入接收历史。</summary>
@@ -133,20 +180,6 @@ public sealed class WebShareHost : IWebShareHost, IDisposable
 
         try
         {
-            long size = 0;
-            try
-            {
-                var info = new FileInfo(path);
-                if (info.Exists)
-                {
-                    size = info.Length;
-                }
-            }
-            catch (Exception)
-            {
-                // 大小只用于展示
-            }
-
             var entity = new Core.Models.Entities.ReceiveHistoryEntity
             {
                 SenderId = "web-share",
@@ -154,7 +187,7 @@ public sealed class WebShareHost : IWebShareHost, IDisposable
                 PeerId = "web-share",
                 PeerName = "Web Share",
                 FileName = Path.GetFileName(path),
-                FileSize = size,
+                FileSize = GetFileSize(path),
                 SavePath = directory,
                 FilePath = path,
                 Status = Core.Models.TransferStatus.Completed,
@@ -170,12 +203,26 @@ public sealed class WebShareHost : IWebShareHost, IDisposable
         }
     }
 
+    private static long GetFileSize(string path)
+    {
+        try
+        {
+            var info = new FileInfo(path);
+            return info.Exists ? info.Length : 0;
+        }
+        catch (Exception)
+        {
+            return 0;
+        }
+    }
+
     private static string GeneratePin() => RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
 
     /// <inheritdoc />
     public void Dispose()
     {
         _service.FileReceived -= OnFileReceived;
+        _service.FileReceiveFailed -= OnFileReceiveFailed;
         _service.Dispose();
     }
 }

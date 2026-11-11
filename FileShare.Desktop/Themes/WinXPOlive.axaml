@@ -1,5 +1,6 @@
 ﻿<Styles xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="FileShare.Desktop.Themes.WinXPOliveSkin">
 
     <!--
         Windows XP / Luna 橄榄绿（Olive）皮肤。
@@ -63,47 +64,47 @@
 
     <!--  窗口  -->
     <Style Selector="Window">
-        <Setter Property="Background" Value="{StaticResource FsWindowBrush}" />
-        <Setter Property="Foreground" Value="{StaticResource FsTextBrush}" />
-        <Setter Property="FontFamily" Value="{StaticResource FsFontFamily}" />
+        <Setter Property="Background" Value="{DynamicResource FsWindowBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource FsTextBrush}" />
+        <Setter Property="FontFamily" Value="{DynamicResource FsFontFamily}" />
         <Setter Property="FontSize" Value="11" />
     </Style>
 
     <Style Selector="UserControl">
-        <Setter Property="FontFamily" Value="{StaticResource FsFontFamily}" />
+        <Setter Property="FontFamily" Value="{DynamicResource FsFontFamily}" />
         <Setter Property="FontSize" Value="11" />
-        <Setter Property="Foreground" Value="{StaticResource FsTextBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource FsTextBrush}" />
     </Style>
 
     <!--  面板 / 卡片 / 工具栏 / 状态栏  -->
     <Style Selector="Border.panel">
-        <Setter Property="Background" Value="{StaticResource FsSurfaceBrush}" />
-        <Setter Property="BorderBrush" Value="{StaticResource FsBorderBrush}" />
+        <Setter Property="Background" Value="{DynamicResource FsSurfaceBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FsBorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="CornerRadius" Value="3" />
     </Style>
 
     <Style Selector="Border.card">
-        <Setter Property="Background" Value="{StaticResource FsCardBrush}" />
-        <Setter Property="BorderBrush" Value="{StaticResource FsSoftBorderBrush}" />
+        <Setter Property="Background" Value="{DynamicResource FsCardBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FsSoftBorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="CornerRadius" Value="3" />
     </Style>
 
     <Style Selector="Border.toolbar">
-        <Setter Property="Background" Value="{StaticResource FsToolbarBrush}" />
-        <Setter Property="BorderBrush" Value="{StaticResource FsBorderBrush}" />
+        <Setter Property="Background" Value="{DynamicResource FsToolbarBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FsBorderBrush}" />
         <Setter Property="BorderThickness" Value="0,0,0,1" />
     </Style>
 
     <Style Selector="Border.statusbar">
-        <Setter Property="Background" Value="{StaticResource FsToolbarBrush}" />
-        <Setter Property="BorderBrush" Value="{StaticResource FsBorderBrush}" />
+        <Setter Property="Background" Value="{DynamicResource FsToolbarBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FsBorderBrush}" />
         <Setter Property="BorderThickness" Value="0,1,0,0" />
     </Style>
 
     <Style Selector="Border.separator">
-        <Setter Property="Background" Value="{StaticResource FsBorderBrush}" />
+        <Setter Property="Background" Value="{DynamicResource FsBorderBrush}" />
         <Setter Property="Width" Value="1" />
         <Setter Property="Margin" Value="4,2" />
     </Style>
@@ -112,13 +113,13 @@
     <Style Selector="TextBlock.h1">
         <Setter Property="FontSize" Value="11" />
         <Setter Property="FontWeight" Value="Bold" />
-        <Setter Property="Foreground" Value="{StaticResource FsTextBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource FsTextBrush}" />
         <Setter Property="Margin" Value="2,0,0,0" />
     </Style>
 
     <Style Selector="TextBlock.muted">
         <Setter Property="FontSize" Value="11" />
-        <Setter Property="Foreground" Value="{StaticResource FsMutedBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource FsMutedBrush}" />
     </Style>
 
     <Style Selector="TextBlock.accent">
@@ -126,7 +127,7 @@
     </Style>
 
     <Style Selector="TextBlock.danger">
-        <Setter Property="Foreground" Value="{StaticResource FsDangerBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource FsDangerBrush}" />
     </Style>
 
     <Style Selector="TextBlock.label">
@@ -155,29 +156,29 @@
 
     <!--  按钮  -->
     <Style Selector="Button">
-        <Setter Property="Background" Value="{StaticResource FsButtonFaceBrush}" />
-        <Setter Property="BorderBrush" Value="{StaticResource FsButtonBorderBrush}" />
+        <Setter Property="Background" Value="{DynamicResource FsButtonFaceBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FsButtonBorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="CornerRadius" Value="3" />
         <Setter Property="Padding" Value="9,2" />
         <Setter Property="MinHeight" Value="22" />
         <Setter Property="MinWidth" Value="70" />
         <Setter Property="FontSize" Value="11" />
-        <Setter Property="Foreground" Value="{StaticResource FsTextBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource FsTextBrush}" />
         <Setter Property="HorizontalContentAlignment" Value="Center" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
     </Style>
 
     <Style Selector="Button:pointerover">
-        <Setter Property="BorderBrush" Value="{StaticResource FsButtonBorderHoverBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FsButtonBorderHoverBrush}" />
     </Style>
 
     <Style Selector="Button:pointerover /template/ ContentPresenter">
-        <Setter Property="Background" Value="{StaticResource FsButtonHoverBrush}" />
+        <Setter Property="Background" Value="{DynamicResource FsButtonHoverBrush}" />
     </Style>
 
     <Style Selector="Button:pressed /template/ ContentPresenter">
-        <Setter Property="Background" Value="{StaticResource FsButtonPressedBrush}" />
+        <Setter Property="Background" Value="{DynamicResource FsButtonPressedBrush}" />
     </Style>
 
     <Style Selector="Button:disabled">
@@ -186,21 +187,21 @@
 
     <!--  主操作按钮（XP 的「默认按钮」= 深蓝渐变 + 深色描边）  -->
     <Style Selector="Button.accent">
-        <Setter Property="Background" Value="{StaticResource FsAccentButtonBrush}" />
+        <Setter Property="Background" Value="{DynamicResource FsAccentButtonBrush}" />
         <Setter Property="BorderBrush" Value="#3C4F14" />
         <Setter Property="BorderThickness" Value="2" />
-        <Setter Property="Foreground" Value="{StaticResource FsAccentTextBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource FsAccentTextBrush}" />
         <Setter Property="FontWeight" Value="Bold" />
         <Setter Property="Padding" Value="11,3" />
     </Style>
 
     <Style Selector="Button.accent /template/ ContentPresenter">
-        <Setter Property="Background" Value="{StaticResource FsAccentButtonBrush}" />
-        <Setter Property="TextBlock.Foreground" Value="{StaticResource FsAccentTextBrush}" />
+        <Setter Property="Background" Value="{DynamicResource FsAccentButtonBrush}" />
+        <Setter Property="TextBlock.Foreground" Value="{DynamicResource FsAccentTextBrush}" />
     </Style>
 
     <Style Selector="Button.accent:pointerover /template/ ContentPresenter">
-        <Setter Property="Background" Value="{StaticResource FsAccentButtonHoverBrush}" />
+        <Setter Property="Background" Value="{DynamicResource FsAccentButtonHoverBrush}" />
     </Style>
 
     <!--  图标按钮 / 文字按钮  -->
@@ -218,7 +219,7 @@
     </Style>
 
     <Style Selector="Button.icon:pointerover /template/ ContentPresenter">
-        <Setter Property="Background" Value="{StaticResource FsRowHoverBrush}" />
+        <Setter Property="Background" Value="{DynamicResource FsRowHoverBrush}" />
     </Style>
 
     <Style Selector="Button.danger">
@@ -227,30 +228,30 @@
         <Setter Property="MinWidth" Value="0" />
         <Setter Property="MinHeight" Value="20" />
         <Setter Property="Padding" Value="4" />
-        <Setter Property="Foreground" Value="{StaticResource FsDangerBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource FsDangerBrush}" />
         <Setter Property="FontSize" Value="13" />
     </Style>
 
     <Style Selector="Button.danger /template/ ContentPresenter">
         <Setter Property="Background" Value="Transparent" />
-        <Setter Property="TextBlock.Foreground" Value="{StaticResource FsDangerBrush}" />
+        <Setter Property="TextBlock.Foreground" Value="{DynamicResource FsDangerBrush}" />
     </Style>
 
     <Style Selector="Button.danger:pointerover /template/ ContentPresenter">
         <Setter Property="Background" Value="#F7DEDE" />
-        <Setter Property="TextBlock.Foreground" Value="{StaticResource FsDangerBrush}" />
+        <Setter Property="TextBlock.Foreground" Value="{DynamicResource FsDangerBrush}" />
     </Style>
 
     <!--  输入框  -->
     <Style Selector="TextBox">
         <Setter Property="Background" Value="#FFFFFF" />
-        <Setter Property="BorderBrush" Value="{StaticResource FsInputBorderBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FsInputBorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="CornerRadius" Value="0" />
         <Setter Property="Padding" Value="4,2" />
         <Setter Property="MinHeight" Value="21" />
         <Setter Property="FontSize" Value="11" />
-        <Setter Property="Foreground" Value="{StaticResource FsTextBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource FsTextBrush}" />
     </Style>
 
     <Style Selector="TextBox:pointerover">
@@ -258,7 +259,7 @@
     </Style>
 
     <Style Selector="TextBox:focus">
-        <Setter Property="BorderBrush" Value="{StaticResource FsAccentBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FsAccentBrush}" />
     </Style>
 
     <!--  列表  -->
@@ -280,16 +281,16 @@
     </Style>
 
     <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
-        <Setter Property="Background" Value="{StaticResource FsRowHoverBrush}" />
+        <Setter Property="Background" Value="{DynamicResource FsRowHoverBrush}" />
     </Style>
 
     <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
-        <Setter Property="Background" Value="{StaticResource FsRowSelectedBrush}" />
-        <Setter Property="TextBlock.Foreground" Value="{StaticResource FsAccentTextBrush}" />
+        <Setter Property="Background" Value="{DynamicResource FsRowSelectedBrush}" />
+        <Setter Property="TextBlock.Foreground" Value="{DynamicResource FsAccentTextBrush}" />
     </Style>
 
     <Style Selector="ListBoxItem:selected">
-        <Setter Property="Foreground" Value="{StaticResource FsAccentTextBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource FsAccentTextBrush}" />
     </Style>
 
     <!--  XP 选中项是深蓝底白字，选中项里的次级文字也要提亮  -->
@@ -305,12 +306,19 @@
     </Style>
 
     <!--  工具提示  -->
+    <!--  Foreground 与 TextElement.Foreground 是同一属性，Style 内只保留一个 setter，避免 Duplicate setter 异常  -->
     <Style Selector="ToolTip">
-        <Setter Property="Background" Value="#FFFFE1" />
-        <Setter Property="Foreground" Value="#000000" />
-        <Setter Property="BorderBrush" Value="#767676" />
+        <Setter Property="Background" Value="{DynamicResource FsTooltipBrush}" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource FsTooltipTextBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FsTooltipBorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="FontSize" Value="11" />
         <Setter Property="Padding" Value="4,2" />
+    </Style>
+
+    <!--  ToolTip 在独立 Popup 里，内部 TextBlock 不继承 ToolTip.Foreground，
+          必须显式给深色文字，避免浅底浅字看不清  -->
+    <Style Selector="ToolTip TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource FsTooltipTextBrush}" />
     </Style>
 </Styles>

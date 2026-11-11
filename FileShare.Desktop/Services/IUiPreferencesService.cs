@@ -1,3 +1,5 @@
+using FileShare.Desktop.Models;
+
 namespace FileShare.Desktop.Services;
 
 /// <summary>
@@ -8,8 +10,8 @@ public interface IUiPreferencesService
     /// <summary>当前偏好。</summary>
     DesktopUiPreferences Current { get; }
 
-    /// <summary>更新皮肤并立即保存。</summary>
-    void SetSkin(AppSkin skin);
+    /// <summary>更新主题 id 并立即保存。</summary>
+    void SetSkinId(string skinId);
 
     /// <summary>按 BCP-47 code 更新语言并立即保存。</summary>
     void SetLanguage(string languageCode);

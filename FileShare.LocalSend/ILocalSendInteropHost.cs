@@ -46,4 +46,13 @@ public interface ILocalSendInteropHost : IDisposable
         string? relativePath = null,
         Action<ulong, ulong>? progress = null,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 发送一条文本消息：用 <c>text/*</c> + 非空 <c>Preview</c> 承载正文，
+    /// 官方客户端会把它显示为消息而不是文件（零协议改动）。
+    /// </summary>
+    Task<LocalSendSendResult> SendMessageAsync(
+        LocalSendPeer peer,
+        string text,
+        CancellationToken cancellationToken = default);
 }

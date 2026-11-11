@@ -3,7 +3,8 @@ using System.Collections.Generic;
 namespace FileShare.Desktop.Localization;
 
 /// <summary>
-/// 语言包：新增一种语言 = 新建一个实现本接口的文件 + 在 <see cref="Loc.Register"/> 注册一行。
+/// 语言包：新增一种语言 = 在「应用数据目录 / i18n」放一个 JSON 文件（由
+/// <see cref="LanguagePackLoader"/> 加载并注册到 <see cref="Loc"/>），无需改代码或重新编译。
 /// <para>
 /// 译文表的 key 仍是中文原文，因此界面上几百个 <c>Loc.Get("中文")</c> 调用点零改动；
 /// 查不到译文时 <see cref="Loc.Get"/> 自动回退中文原文。

@@ -24,9 +24,8 @@ namespace FileShare.Desktop.Tests.ViewModels
         public MainWindowViewModelTests()
         {
             // 设置测试同步上下文
-            //_testSynchronizationContext = new SynchronizationContext();
-            //SynchronizationContext.SetSynchronizationContext(_testSynchronizationContext);
-            _testSynchronizationContext = SynchronizationContext.Current?? new SynchronizationContext();
+            // 用同步执行的替身上下文，保证 Post 回调在断言前完成
+            _testSynchronizationContext = new ImmediateSynchronizationContext();
 
             // 创建模拟对象
             _mockServiceManager = new Mock<IFileShareServiceManager>();

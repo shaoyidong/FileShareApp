@@ -1,0 +1,86 @@
+{
+  "id": "winxp-olive",
+  "name": "Windows XP 橄榄绿（Luna Olive）",
+  "base": "winxp-olive",
+  "colors": {
+    "FsWindowBrush": "#ECE9D8",
+    "FsSurfaceBrush": "#FFFFFF",
+    "FsCardBrush": "#FFFFFF",
+    "FsBorderBrush": "#ACA899",
+    "FsSoftBorderBrush": "#D4D0C8",
+    "FsTextBrush": "#000000",
+    "FsMutedBrush": "#4A4A4A",
+    "FsAccentBrush": "#55701F",
+    "FsAccentTextBrush": "#FFFFFF",
+    "FsDangerBrush": "#B00000",
+    "FsRowHoverBrush": "#EFF3DE",
+    "FsRowSelectedBrush": "#7C9B48",
+    "FsButtonBorderBrush": "#8E8F8F",
+    "FsButtonBorderHoverBrush": "#C2A54A",
+    "FsInputBorderBrush": "#9AA88A",
+    "FsToolbarBrush": {
+      "start": "#F7F6E9",
+      "end": "#DFE0C2"
+    },
+    "FsButtonFaceBrush": {
+      "stops": [
+        {
+          "offset": 0,
+          "color": "#FFFFFF"
+        },
+        {
+          "offset": 0.6,
+          "color": "#F3F2E6"
+        },
+        {
+          "offset": 1,
+          "color": "#E4E2CE"
+        }
+      ]
+    },
+    "FsButtonHoverBrush": {
+      "start": "#FDFCF0",
+      "end": "#F0E7B8"
+    },
+    "FsButtonPressedBrush": {
+      "start": "#DFDCC0",
+      "end": "#F5F4E6"
+    },
+    "FsAccentButtonBrush": {
+      "stops": [
+        {
+          "offset": 0,
+          "color": "#A7BD6B"
+        },
+        {
+          "offset": 0.55,
+          "color": "#7B9A3E"
+        },
+        {
+          "offset": 1,
+          "color": "#4E6418"
+        }
+      ]
+    },
+    "FsAccentButtonHoverBrush": {
+      "stops": [
+        {
+          "offset": 0,
+          "color": "#BED389"
+        },
+        {
+          "offset": 0.55,
+          "color": "#8EAE4E"
+        },
+        {
+          "offset": 1,
+          "color": "#5D7423"
+        }
+      ]
+    },
+    "FsFontFamily": "Tahoma, Microsoft YaHei",
+    "FsTooltipBrush": "#FFFFE1",
+    "FsTooltipTextBrush": "#000000",
+    "FsTooltipBorderBrush": "#767676"
+  }
+}

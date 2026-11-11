@@ -1,5 +1,5 @@
 using FileShare.Core.Common;
-using FileShare.Core.Models.Entities;
+using FileShare.Mobile.ViewModels;
 using System;
 using System.Globalization;
 using System.IO;
@@ -13,12 +13,12 @@ namespace FileShare.Mobile.Helpers
         {
             string param = parameter as string ?? string.Empty;
 
-            if (value is ReceiveHistoryEntity history)
+            if (value is HistoryItemViewModel item)
             {
-                string fullPath = Path.Combine(history.SavePath, history.FileName);
-                string extension = Path.GetExtension(history.FileName).ToLower();
+                string? fullPath = item.ResolveLocalFile();
+                string extension = Path.GetExtension(item.FileName).ToLower();
                 bool isImageFile = FileTypeHelper.IsImageFile(extension);
-                bool fileExists = File.Exists(fullPath);
+                bool fileExists = fullPath is not null;
 
                 switch (param)
                 {
@@ -27,7 +27,7 @@ namespace FileShare.Mobile.Helpers
                     case "isIcon":
                         return !isImageFile || !fileExists;
                     default:
-                        if (isImageFile && fileExists)
+                        if (isImageFile && fileExists && fullPath is not null)
                         {
                             try
                             {
