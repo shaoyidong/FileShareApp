@@ -52,35 +52,34 @@ namespace FileShare.Desktop.ViewModels
         private TransferQueueControl? _sendQueue;
 
         [ObservableProperty]
-        private bool _isSending;
+        public partial bool IsSending { get; set; }
 
         [ObservableProperty]
-        private bool _isSendPaused;
+        public partial bool IsSendPaused { get; set; }
+        [ObservableProperty]
+        public partial bool IsScanning { get; set; }
 
         [ObservableProperty]
-        private bool _isScanning;
+        public partial bool IsSubnetScanning { get; set; }
 
         [ObservableProperty]
-        private bool _isSubnetScanning;
+        public partial bool IsConnecting { get; set; }
 
         [ObservableProperty]
-        private bool _isConnecting;
+        public partial double SubnetScanProgress { get; set; }
 
         [ObservableProperty]
-        private double _subnetScanProgress;
+        public partial string SubnetCidr { get; set; } = "192.168.1.0/24";
 
         [ObservableProperty]
-        private string _subnetCidr = "192.168.1.0/24";
+        public partial string ManualAddress { get; set; } = string.Empty;
 
         [ObservableProperty]
-        private string _manualAddress = string.Empty;
+        public partial string StatusMessage { get; set; } = Loc.Get("准备就绪");
 
         [ObservableProperty]
-        private string _statusMessage = Loc.Get("准备就绪");
+        public partial object? CurrentView { get; set; }
 
-        [ObservableProperty]
-        private object? _currentView;
-        
         private DeviceItemViewModel? _selectedItem;
 
         public DeviceItemViewModel? SelectedItem
@@ -97,7 +96,7 @@ namespace FileShare.Desktop.ViewModels
         }
 
         [ObservableProperty]
-        private string _localDeviceSummary = string.Empty;
+        public partial string LocalDeviceSummary { get; set; } = string.Empty;
 
         /// <summary>本机设备信息。</summary>
         public DeviceInfo? LocalDevice { get; }
@@ -797,27 +796,19 @@ namespace FileShare.Desktop.ViewModels
             {
                 try
                 {
-                    // 注：Avalonia 11.3 标记该重载过时，但替代 API 是无参 TryGetDataAsync()
-                    // + IAsyncDataTransfer，读取模型完全不同；此处保留旧重载，
-                    // 仅作为 TryGetFilesAsync 失败后的兜底（多数平台不会走到）。
-                    var data = await clipboard.GetDataAsync(DataFormats.Files);
-                    switch (data)
+                    // TryGetFilesAsync 失败后的兜底：用新读取模型（无参 TryGetDataAsync +
+                    // IAsyncDataTransfer）再取一次 File 格式（多数平台不会走到）。
+                    var transfer = await clipboard.TryGetDataAsync();
+                    if (transfer is not null)
                     {
-                        case IEnumerable<IStorageItem> storageItems:
+                        var storageItems = await transfer.TryGetValuesAsync(DataFormat.File);
+                        if (storageItems is { Length: > 0 })
+                        {
                             foreach (var item in storageItems)
                             {
                                 AddPath(item.Path.IsAbsoluteUri ? item.Path.LocalPath : item.Path.OriginalString);
                             }
-                            break;
-                        case IEnumerable<string> fileNames:
-                            foreach (var fileName in fileNames)
-                            {
-                                AddPath(fileName);
-                            }
-                            break;
-                        case string singlePath:
-                            AddPath(singlePath);
-                            break;
+                        }
                     }
                 }
                 catch (Exception)
@@ -832,7 +823,7 @@ namespace FileShare.Desktop.ViewModels
         /// <summary>把剪贴板里的位图（截图）另存为临时 PNG；没有图片时返回 null。</summary>
         private static async Task<string?> SaveClipboardImageAsync(IClipboard clipboard)
         {
-            Bitmap? bitmap = null;
+            Bitmap? bitmap;
             try
             {
                 bitmap = await clipboard.TryGetBitmapAsync();
@@ -1208,13 +1199,13 @@ namespace FileShare.Desktop.ViewModels
                 return;
             }
 
-            var savePath = GetSafePath(folder[0].Path);
+            var savePath = MainViewModel.GetSafePath(folder[0].Path);
             _serviceManager.HandleTransferRequest(viewModel.TransferId, true, savePath);
             StatusMessage = Loc.F("开始接收文件: {0} (保存到: {1})", viewModel.FileName, savePath);
             _logger.LogInformation("开始接收文件: {File} (保存到: {Path})", viewModel.FileName, savePath);
         }
 
-        private string GetSafePath(Uri uri)
+        private static string GetSafePath(Uri uri)
         {
             string savePath;
             if (uri.IsAbsoluteUri && uri.Scheme == Uri.UriSchemeFile)
@@ -1979,10 +1970,7 @@ namespace FileShare.Desktop.ViewModels
             _serviceManager.OnTransferCompleted -= OnTransferCompleted;
             _settingsService.Changed -= OnSettingsChanged;
             Loc.LanguageChanged -= OnLanguageChanged;
-            if (_localSendHost is not null)
-            {
-                _localSendHost.PeerDiscovered -= OnLocalSendPeerDiscovered;
-            }
+            _localSendHost?.PeerDiscovered -= OnLocalSendPeerDiscovered;
             _serviceManager.OnFirstUseTrusted -= OnFirstUseTrusted;
             _serviceManager.OnFingerprintMismatch -= OnFingerprintMismatch;
             _serviceManager.Dispose();
@@ -1994,7 +1982,7 @@ namespace FileShare.Desktop.ViewModels
     /// </summary>
     internal sealed class InMemoryAppSettingsService : IAppSettingsService
     {
-        private AppSettings _current = new();
+        private readonly AppSettings _current = new();
 
         public AppSettings Current => _current;
 

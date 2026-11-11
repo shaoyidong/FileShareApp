@@ -18,7 +18,7 @@ public abstract class ServerEventV2
     /// </summary>
     public sealed class Register : ServerEventV2
     {
-        public IPAddress Ip { get; init; }
+        public IPAddress Ip { get; init; } = IPAddress.None;
         public RegisterDtoV2 Info { get; init; } = new();
     }
 

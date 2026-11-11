@@ -1,6 +1,7 @@
 using Avalonia.Markup.Xaml;
 using System;
 using System.Collections.Generic;
+using System.Threading;
 
 namespace FileShare.Desktop.Localization;
 
@@ -23,7 +24,7 @@ public static class Loc
     private static readonly List<ILanguagePack> _packs = new();
     private static readonly Dictionary<string, ILanguagePack> _byCode =
         new(StringComparer.OrdinalIgnoreCase);
-    private static readonly object _initGate = new();
+    private static readonly Lock _initGate = new();
     private static bool _filePacksLoaded;
     private static ILanguagePack _current = null!;
 
@@ -103,10 +104,7 @@ public static class Loc
     /// <summary>注册（或替换）一个语言包。</summary>
     public static void Register(ILanguagePack pack)
     {
-        if (pack is null)
-        {
-            throw new ArgumentNullException(nameof(pack));
-        }
+        ArgumentNullException.ThrowIfNull(pack);
 
         if (_byCode.TryGetValue(pack.Code, out var existing))
         {

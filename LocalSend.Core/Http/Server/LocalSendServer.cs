@@ -30,6 +30,8 @@ namespace LocalSend.Core.Http.Server;
 /// </remarks>
 public sealed class LocalSendServer : IDisposable
 {
+    private static readonly string[] HeaderLineSeparators = { "\r\n" };
+
     private readonly ushort _port;
     private readonly TlsConfig? _tls;
     private readonly AppState _state;
@@ -206,7 +208,7 @@ public sealed class LocalSendServer : IDisposable
 
             // 2. 解析请求行和头部
             var headerText = Encoding.ASCII.GetString(headerData, 0, headerEnd);
-            var lines = headerText.Split(new[] { "\r\n" }, StringSplitOptions.None);
+            var lines = headerText.Split(HeaderLineSeparators, StringSplitOptions.None);
             if (lines.Length == 0 || string.IsNullOrEmpty(lines[0])) return;
 
             var firstLineParts = lines[0].Split(' ');

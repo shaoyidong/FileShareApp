@@ -73,17 +73,10 @@
 	<ItemGroup>
 		<!-- App Icon -->
 		<!-- Android 专用配置：添加 ForegroundScale 并指定条件 -->
-		<MauiIcon Include="Resources\AppIcon\appicon.svg"
-				  ForegroundFile="Resources\AppIcon\appiconfg.svg"
-				  Color="#17171a"
-				  ForegroundScale="0.65"
-				  Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'" />
+		<MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.svg" Color="#17171a" ForegroundScale="0.65" Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'" />
 
 		<!-- iOS 等其他平台：保留原配置，不需要缩放 -->
-		<MauiIcon Include="Resources\AppIcon\appicon.svg"
-				  ForegroundFile="Resources\AppIcon\appiconfg.svg"
-				  Color="#17171a"
-				  Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) != 'android'" />
+		<MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.svg" Color="#17171a" Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) != 'android'" />
 
 		<!-- Splash Screen -->
 		<MauiSplashScreen Include="Resources\Splash\splash.svg" Color="#17171a" BaseSize="128,128" />
@@ -108,9 +101,9 @@
 	</ItemGroup>-->
 
 	<ItemGroup>
-    <PackageReference Include="CommunityToolkit.Maui" Version="15.0.1" />
-    <PackageReference Include="Microsoft.Maui.Controls" Version="10.0.101" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.12" />
+    <PackageReference Include="CommunityToolkit.Maui" Version="16.0.0" />
+    <PackageReference Include="Microsoft.Maui.Controls" Version="11.0.10" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="11.0.0" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageReference Include="Syncfusion.Maui.Toolkit" Version="1.0.11" />
     <PackageReference Include="Serilog" Version="4.4.0" />

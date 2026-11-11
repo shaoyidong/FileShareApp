@@ -13,7 +13,7 @@ namespace FileShare.Core.Services;
 /// </summary>
 public sealed class JsonAppSettingsService : IAppSettingsService
 {
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
     private readonly ILogger<JsonAppSettingsService> _logger;
     private AppSettings _current = new();
 

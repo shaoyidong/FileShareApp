@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
 using FileShare.Core.Services;
 
 namespace FileShare.Desktop.Theming;
@@ -27,7 +28,7 @@ public static class ThemePackLoader
     private static readonly string TemplateDirectory =
         Path.Combine(AppContext.BaseDirectory, "Themes", "packs");
 
-    private static readonly object _gate = new();
+    private static readonly Lock _gate = new();
     private static readonly List<ThemePack> _packs = new();
     private static readonly Dictionary<string, ThemePack> _byId =
         new(StringComparer.OrdinalIgnoreCase);

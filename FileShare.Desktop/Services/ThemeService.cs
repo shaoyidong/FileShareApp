@@ -125,7 +125,7 @@ public sealed class ThemeService : IThemeService
             }
 
             try { skin.Resources[key] = value; } catch (Exception) { }
-            try { if (appResources is not null) appResources[key] = value; } catch (Exception) { }
+            try { appResources?[key] = value; } catch (Exception) { }
         }
 
         foreach (var key in ThemePack.ResourceKeys)
