@@ -455,13 +455,16 @@
 
         <!--  状态栏  -->
         <Border Grid.Row="2" Padding="8,3" Classes="statusbar">
-            <Grid ColumnDefinitions="Auto,*,Auto">
+            <!--  状态文本放在 Star 列：宽度由 Grid 分配，不随文本长短反复重算列宽。
+                  扫描期间状态文本会周期性变化，放在 Auto 列会让整条状态栏反复 layout，
+                  与拖动窗口时的持续重绘叠加就会掉帧。  -->
+            <Grid ColumnDefinitions="*,Auto">
                 <TextBlock
                     VerticalAlignment="Center"
                     Text="{Binding StatusMessage}"
                     TextTrimming="CharacterEllipsis" />
                 <ProgressBar
-                    Grid.Column="2"
+                    Grid.Column="1"
                     Width="160"
                     Height="10"
                     VerticalAlignment="Center"

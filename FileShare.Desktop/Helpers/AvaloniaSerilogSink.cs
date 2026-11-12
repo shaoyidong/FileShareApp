@@ -12,6 +12,14 @@ namespace FileShare.Desktop.Helpers;
 /// </summary>
 internal sealed class AvaloniaSerilogSink : ILogSink
 {
+    /// <summary>
+    /// WinUIComposition 后端合成器提交超时后，Avalonia 会自行 force-trigger next tick 恢复，
+    /// 属于已自愈的内部保护性日志，不是应用异常。精确降级这一条为 Warning，
+    /// 避免日志里出现误导性的 [ERR]；其他 Error 一律原样保留。
+    /// </summary>
+    private const string CompositorCommitTimeoutMessage =
+        "ICompositor5.RequestCommitAsync timed out, force-triggering next tick";
+
     private readonly ILogger _logger;
 
     public AvaloniaSerilogSink(ILogger logger)
@@ -42,7 +50,11 @@ internal sealed class AvaloniaSerilogSink : ILogSink
             log = log.ForContext("SourceObject", source.GetType().Name);
         }
         // Avalonia 的 messageTemplate 使用 {Prop} 结构化占位符，与 Serilog 兼容
-        log.Write(MapLevel(level), messageTemplate, propertyValues);
+        var effectiveLevel = level == LogEventLevel.Error
+            && messageTemplate.Contains(CompositorCommitTimeoutMessage, StringComparison.Ordinal)
+                ? LogEventLevel.Warning
+                : level;
+        log.Write(MapLevel(effectiveLevel), messageTemplate, propertyValues);
     }
 
     public void Log<T0>(LogEventLevel level, string area, object? source, string messageTemplate, T0? propertyValue0)
