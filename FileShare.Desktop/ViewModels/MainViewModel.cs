@@ -49,6 +49,8 @@ namespace FileShare.Desktop.ViewModels
         private readonly string _localDeviceId;
 
         private CancellationTokenSource? _scanCts;
+        private SubnetScanProgressCollector? _scanCollector;
+        private DispatcherTimer? _scanProgressTimer;
         private TransferQueueControl? _sendQueue;
 
         [ObservableProperty]
@@ -250,7 +252,7 @@ namespace FileShare.Desktop.ViewModels
             SendTextCommand = new RelayCommand(async () => await SendTextAsync());
             SendClipboardCommand = new RelayCommand(async () => await SendClipboardAsync());
             ConnectByAddressCommand = new RelayCommand(async () => await ConnectByAddressAsync());
-            ScanSubnetCommand = new RelayCommand(async () => await ScanSubnetAsync());
+            ScanSubnetCommand = new AsyncRelayCommand(ScanSubnetAsync);
             CancelSubnetScanCommand = new RelayCommand(CancelSubnetScan);
             ToggleFavoriteCommand = new RelayCommand<DeviceItemViewModel>(ToggleFavorite);
             AcceptTransferCommand = new RelayCommand<FileTransferViewModel>(AcceptTransfer);
@@ -1089,32 +1091,63 @@ namespace FileShare.Desktop.ViewModels
 
             IsSubnetScanning = true;
             SubnetScanProgress = 0;
+            StatusMessage = Loc.Get("正在扫描网段…");
             _scanCts = new CancellationTokenSource();
 
-            // 节流放在 UI 侧：服务层只管如实上报，刷新频率是「服务 → UI」的适配细节。
-            // 自定义 IProgress 而非 Progress<T>：Progress<T> 每次 Report 都会 Post 一个回调到
-            // UI 队列，即便在回调里过滤，4096 个地址仍会塞满队列、打断渲染。
-            // 这里在后台线程的 Report 里先过滤，被丢弃的事件根本不进 UI 队列。
-            var progress = new ThrottledScanProgress(
-                item =>
+            // 扫描期间对 UI 线程「零跨线程投递」：后台只把结果聚合进采集器，结束时一次性入列。
+            // Windows 手动拖动窗口会进入 modal move loop，线程池 Timer + Post 会和输入/渲染
+            // 争用 UI 线程。进度条与「当前扫描 IP」都由 UI 线程自己的 DispatcherTimer
+            // 以 Background 优先级低频直读采集器快照：不排队自定义消息、不逐条刷新，
+            // 拖动/输入优先，进度与 IP 仍可见。
+            var collector = new SubnetScanProgressCollector();
+            _scanCollector = collector;
+            _scanProgressTimer = new DispatcherTimer(DispatcherPriority.Background)
+            {
+                // 共享 socket 批量探测下 /24 只需约 0.7 秒，1 秒间隔会让 IP 显示来不及出现；
+                // 300ms 是低频折中（大网段约 4 秒 → 十余次），且是 UI 线程自己的 Background
+                // 定时器，不是线程池 Timer + Post，拖动/输入始终优先。
+                Interval = TimeSpan.FromMilliseconds(300)
+            };
+            _scanProgressTimer.Tick += (_, _) =>
+            {
+                if (_scanCollector is not { Total: > 0 } current)
                 {
-                    SubnetScanProgress = item.Percent;
-                    if (item.FoundDevice is not null)
-                    {
-                        AddOrUpdateDevice(item.FoundDevice);
-                    }
+                    return;
+                }
 
-                    if (item.CurrentAddress is not null)
-                    {
-                        StatusMessage = Loc.F("正在扫描 {0} ... ({1}/{2})", item.CurrentAddress, item.Scanned, item.Total);
-                    }
-                },
-                RunOnUiThread);
+                // 进度与「当前 IP」同一节奏（300ms 一次）更新：两者都只读采集器快照，
+                // 不跨线程 Post、不逐条刷新；Background 优先级让拖动 / 输入始终优先。
+                var percent = current.Percent;
+                if (Math.Abs(SubnetScanProgress - percent) > 0.05)
+                {
+                    SubnetScanProgress = percent;
+                }
 
+                var address = current.CurrentAddress;
+                if (string.IsNullOrEmpty(address))
+                {
+                    return;
+                }
+
+                var text = Loc.F("正在扫描 {0} ... ({1}/{2})",
+                    address, current.Scanned, current.Total);
+                if (!string.Equals(StatusMessage, text, StringComparison.Ordinal))
+                {
+                    StatusMessage = text;
+                }
+            };
+            _scanProgressTimer.Start();
+
+            var scanToken = _scanCts.Token;
+            IReadOnlyList<DeviceInfo>? scannedDevices = null;
             try
             {
-                var devices = await _serviceManager.ScanSubnetAsync(SubnetCidr, progress, _scanCts.Token);
-                StatusMessage = Loc.F("扫描完成，网段 {0} 内发现 {1} 台设备", SubnetCidr, devices.Count);
+                scannedDevices = await _serviceManager.ScanSubnetAsync(SubnetCidr, collector, scanToken);
+                // 批量探测的取消是正常控制流（不抛 OCE），用令牌状态判断收尾文案；
+                // 下面的 catch 仍保留，用于预取消或回退路径按 .NET 契约抛出的 OCE。
+                StatusMessage = scanToken.IsCancellationRequested
+                    ? Loc.Get("已停止扫描")
+                    : Loc.F("扫描完成，网段 {0} 内发现 {1} 台设备", SubnetCidr, scannedDevices.Count);
             }
             catch (OperationCanceledException)
             {
@@ -1127,6 +1160,24 @@ namespace FileShare.Desktop.ViewModels
             }
             finally
             {
+                // 先停掉低优先级定时器，避免收尾文案被最后一次 Tick 覆盖。
+                _scanProgressTimer?.Stop();
+                _scanProgressTimer = null;
+
+                // 正常完成 / 取消 / 失败都保留已探测到的设备，一次性并入列表。
+                // 权威结果是扫描返回值；采集器里的 FoundDevice 作为补充 —— 共享 socket
+                // 批量探测下迟到的 UDP 应答可能晚于对应地址的进度上报，单靠采集器会漏设备。
+                var (_, foundDevices) = collector.Drain();
+                var seen = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var device in foundDevices.Concat(scannedDevices ?? Array.Empty<DeviceInfo>()))
+                {
+                    if (seen.Add(device.DeviceId))
+                    {
+                        AddOrUpdateDevice(device, silent: true);
+                    }
+                }
+
+                _scanCollector = null;
                 IsSubnetScanning = false;
                 SubnetScanProgress = 0;
                 _scanCts?.Dispose();
@@ -1134,16 +1185,39 @@ namespace FileShare.Desktop.ViewModels
             }
         }
 
-
         private void CancelSubnetScan()
+        {
+            // 先停掉进度/IP 刷新：取消到 finally 之间还有一小段异步时间，
+            // 低频 Tick 会把「正在停止扫描…」覆盖回「正在扫描 x.x.x.x ...」。
+            _scanProgressTimer?.Stop();
+
+            // 立刻给 UI 反馈，不等后台扫描收尾。
+            StatusMessage = Loc.Get("正在停止扫描…");
+
+            var cts = _scanCts;
+            if (cts is null)
+            {
+                return;
+            }
+
+            _ = CancelScanAsync(cts);
+        }
+
+        private async Task CancelScanAsync(CancellationTokenSource cts)
         {
             try
             {
-                _scanCts?.Cancel();
+                // CancelAsync 把已注册的取消回调放到线程池执行，不阻塞 UI 线程；
+                // 异常在这里被完整观察，不会变成 UnobservedTaskException。
+                await cts.CancelAsync().ConfigureAwait(false);
             }
             catch (ObjectDisposedException)
             {
-                // 扫描已结束，忽略
+                // 扫描已结束并释放了 CTS，忽略
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "取消网段扫描时回调异常");
             }
         }
 
@@ -1242,7 +1316,7 @@ namespace FileShare.Desktop.ViewModels
         /// <summary>
         /// 把设备合并到列表：已存在则刷新显示，不存在则按「收藏优先」插入。
         /// </summary>
-        private void AddOrUpdateDevice(DeviceInfo device)
+        private void AddOrUpdateDevice(DeviceInfo device, bool silent = false)
         {
             if (device is null || string.IsNullOrEmpty(device.DeviceId) || device.DeviceId == _localDeviceId)
             {
@@ -1266,6 +1340,12 @@ namespace FileShare.Desktop.ViewModels
                 Devices.Add(item);
             }
 
+            // 扫描批量入列时静默：状态文本与日志每 500ms 反复写会拖慢 UI 线程
+            if (silent)
+            {
+                return;
+            }
+
             StatusMessage = Loc.F("发现设备: {0}", device.DeviceName);
             _logger.LogInformation("发现设备: {Name} ({Id})", device.DeviceName, device.DeviceId);
         }
@@ -1273,6 +1353,14 @@ namespace FileShare.Desktop.ViewModels
         private void OnDeviceDiscovered(DeviceInfo device)
         {
             if (device.DeviceId == _localDeviceId)
+            {
+                return;
+            }
+
+            // 扫描期间（含收尾的 InjectDevice 批量）不逐台 Post 到 UI 队列：
+            // ScanSubnetAsync 结束时用采集器一次性入列，既避免队列洪峰，
+            // 也避免迟到的事件回调覆盖「扫描完成 / 已停止」收尾文案。
+            if (IsSubnetScanning)
             {
                 return;
             }

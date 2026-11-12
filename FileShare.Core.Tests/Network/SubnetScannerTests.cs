@@ -133,7 +133,9 @@ public class SubnetScannerTests
         Assert.Equal(2, probe.Probed.Count);
         Assert.Equal(2, progress.Items.Count);
         Assert.Contains(progress.Items, item => item.FoundDevice is not null);
-        Assert.Equal(100, progress.Items[^1].Percent);
+        // 并发 worker 的上报到达顺序与完成顺序无关（UI 侧采集器用 BumpToMax 保证单调），
+        // 这里只要求如实上报过 100% 的完成进度，不断言最后一条恰好是它。
+        Assert.Equal(100, progress.Items.Max(item => item.Percent));
     }
 
     [Fact]
@@ -152,7 +154,9 @@ public class SubnetScannerTests
         Assert.Equal(6, probe.Probed.Count);
         Assert.Equal(probe.Probed.Count, progress.Items.Count);
         Assert.Contains(progress.Items, item => item.FoundDevice is not null);
-        Assert.Equal(100, progress.Items[^1].Percent);
+        // 并发 worker 的上报到达顺序与完成顺序无关（UI 侧采集器用 BumpToMax 保证单调），
+        // 这里只要求如实上报过 100% 的完成进度，不断言最后一条恰好是它。
+        Assert.Equal(100, progress.Items.Max(item => item.Percent));
     }
 
     [Fact]

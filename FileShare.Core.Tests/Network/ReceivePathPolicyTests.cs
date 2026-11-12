@@ -118,7 +118,35 @@ public class ReceivePathPolicyTests
 
         public List<string> Events { get; } = new();
 
-        public string Diagnostics => string.Join(" | ", _loggerFactory.Lines.Concat(Events));
+        public void AddEvent(string text)
+        {
+            lock (Events)
+            {
+                Events.Add(text);
+            }
+        }
+
+        // 传输回调在后台线程追加 Events / Lines，读取时必须先取快照，
+        // 否则 string.Join 枚举期间集合被修改会偶发 InvalidOperationException。
+        public string Diagnostics
+        {
+            get
+            {
+                string[] lines;
+                lock (_loggerFactory.Lines)
+                {
+                    lines = _loggerFactory.Lines.ToArray();
+                }
+
+                string[] events;
+                lock (Events)
+                {
+                    events = Events.ToArray();
+                }
+
+                return string.Join(" | ", lines.Concat(events));
+            }
+        }
 
         public static async Task<TransferHarness> CreateAsync(
             IPlatformDirectoryService directoryService,
@@ -136,11 +164,11 @@ public class ReceivePathPolicyTests
 
             receiver.OnTransferRequestSendAndReceive += info =>
             {
-                harness.Events.Add($"接收请求: {info.FileName}");
+                harness.AddEvent($"接收请求: {info.FileName}");
                 receiver.HandleTransferRequest(info.TransferId, accept: true, savePath: saveDirectory);
             };
-            receiver.OnTransferCompleted += (info, message) => harness.Events.Add($"接收完成: {info.Status} {message}");
-            sender.OnTransferCompleted += (info, message) => harness.Events.Add($"发送完成: {info.Status} {message}");
+            receiver.OnTransferCompleted += (info, message) => harness.AddEvent($"接收完成: {info.Status} {message}");
+            sender.OnTransferCompleted += (info, message) => harness.AddEvent($"发送完成: {info.Status} {message}");
 
             await receiver.StartAsync();
             await sender.StartAsync();
