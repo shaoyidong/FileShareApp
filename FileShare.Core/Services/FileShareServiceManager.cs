@@ -455,7 +455,7 @@ public class FileShareServiceManager : IFileShareServiceManager
             .Select(path => new FileSendItem(path, null))
             .ToList();
 
-        return await SendItemsAsync(items, targetDevice, progress, cancellationToken, parallelism, queue).ConfigureAwait(false);
+        return await SendItemsAsync(items, targetDevice, progress, parallelism, queue, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -508,7 +508,7 @@ public class FileShareServiceManager : IFileShareServiceManager
             return true;
         }
 
-        return await SendItemsAsync(items, targetDevice, progress, cancellationToken, parallelism, queue).ConfigureAwait(false);
+        return await SendItemsAsync(items, targetDevice, progress, parallelism, queue, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -541,10 +541,10 @@ public class FileShareServiceManager : IFileShareServiceManager
     private async Task<bool> SendItemsAsync(
         IReadOnlyList<FileSendItem> items,
         DeviceInfo targetDevice,
-        IProgress<FileSendProgress>? progress,
-        CancellationToken cancellationToken,
+        IProgress<FileSendProgress>? progress,        
         int parallelism,
-        TransferQueueControl? queue)
+        TransferQueueControl? queue,
+        CancellationToken cancellationToken)
     {
         var concurrency = Math.Clamp(parallelism, 1, 4);
         var completed = 0;

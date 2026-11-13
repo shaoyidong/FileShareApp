@@ -65,7 +65,7 @@
                     Margin="0,14,0,0"
                     HorizontalAlignment="Center"
                     ColumnDefinitions="Auto,Auto"
-                    RowDefinitions="Auto,Auto">
+                    RowDefinitions="Auto,Auto,Auto,Auto">
                     <TextBlock Classes="label" Text="{loc:Tr '版本号'}" />
                     <TextBlock
                         Grid.Column="1"
@@ -83,37 +83,59 @@
                         Margin="10,4,0,0"
                         FontWeight="SemiBold"
                         Text="{Binding BuildDate}" />
+                    <TextBlock Margin="0,4,0,0" Grid.Row="2" Grid.ColumnSpan="2" HorizontalAlignment="Center" Text="{Binding Developer}" />
+                    <TextBlock Margin="0,4,0,0" Grid.Row="3" Grid.ColumnSpan="2" HorizontalAlignment="Center" Classes="muted" Text="{Binding Copyright}" />
                 </Grid>
             </StackPanel>
 
-            <!--  署名 + 求职信息 + 微信二维码  -->
-            <Border Grid.Row="2" Margin="0,14,0,0" Classes="card" Padding="14,12">
+            <!--  动态信息区：内容来自 数据目录/about.json 或远程配置，
+                  发布后无需重新编译即可更换（见 Services/AboutContentService.cs）  -->
+            <Border Grid.Row="2" Margin="0,10,0,0" Classes="card" Padding="14,8">
                 <StackPanel Spacing="3">
-                    <TextBlock HorizontalAlignment="Center" Text="{Binding Developer}" />
-                    <TextBlock HorizontalAlignment="Center" Classes="muted" Text="{Binding Copyright}" />
-
-                    <Border Height="1" Margin="0,8" Background="{DynamicResource FsSoftBorderBrush}" />
+                   
 
                     <TextBlock
                         HorizontalAlignment="Center"
                         Classes="accent"
                         FontWeight="Bold"
-                        Text="{loc:Tr '求职长沙：应用软件 / 上位机软件开发'}" />
+                        TextAlignment="Center"
+                        TextWrapping="Wrap"
+                        Text="{Binding Headline}"
+                        IsVisible="{Binding HasHeadline}" />
                     <TextBlock
                         HorizontalAlignment="Center"
                         Classes="muted"
-                        Text="{loc:Tr '欢迎用人单位扫码联系'}" />
+                        TextAlignment="Center"
+                        TextWrapping="Wrap"
+                        Text="{Binding Subtitle}"
+                        IsVisible="{Binding HasSubtitle}" />
 
                     <Border
                         Width="150"
                         Height="150"
-                        Margin="0,10,0,0"
+                        Margin="0,8,0,0"
                         HorizontalAlignment="Center"
                         Background="White"
                         CornerRadius="6"
-                        Padding="4">
-                        <Image Source="avares://FileShare.Desktop/Assets/wechat-qr.png" Stretch="Uniform" />
+                        Padding="2"
+                        IsVisible="{Binding HasQrImage}">
+                        <Image Source="{Binding QrImage}" Stretch="Uniform" />
                     </Border>
+
+                    <Button
+                        Margin="0,8,0,0"
+                        HorizontalAlignment="Center"
+                        Padding="0"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Cursor="Hand"
+                        IsVisible="{Binding HasLink}"
+                        Command="{Binding OpenLinkCommand}">
+                        <TextBlock
+                            Classes="accent"
+                            TextDecorations="Underline"
+                            Text="{Binding LinkText}" />
+                    </Button>
                 </StackPanel>
             </Border>
         </Grid>
