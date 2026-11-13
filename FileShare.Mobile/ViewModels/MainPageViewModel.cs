@@ -128,6 +128,7 @@ public partial class MainPageViewModel : ViewModelBase
     public ICommand RefreshDevicesCommand { get; }
     public ICommand SendFileCommand { get; }
     public ICommand SendMultipleFilesCommand { get; }
+    public ICommand SendMediaCommand { get; }
     public ICommand SendFolderCommand { get; }
     public ICommand ChooseSaveDirectoryCommand { get; }
     public ICommand SendTextCommand { get; }
@@ -193,6 +194,7 @@ public partial class MainPageViewModel : ViewModelBase
         RefreshDevicesCommand = new RelayCommand(async () => RefreshDevicesAsync());
         SendFileCommand = new RelayCommand(async () => SendFileAsync());
         SendMultipleFilesCommand = new RelayCommand(() => _ = SendMultipleFilesAsync());
+        SendMediaCommand = new RelayCommand(() => _ = SendMediaAsync());
         SendFolderCommand = new RelayCommand(() => _ = SendFolderAsync());
         ChooseSaveDirectoryCommand = new RelayCommand(() => _ = ChooseSaveDirectoryAsync());
         SendTextCommand = new RelayCommand(() => _ = SendTextAsync());
@@ -386,6 +388,52 @@ public partial class MainPageViewModel : ViewModelBase
             StatusMessage = $"发送文件失败: {ex.Message}";
             await _alertService.DisplayToastAsync(ex.Message).ConfigureAwait(false);
             _logger.LogError(ex, "批量发送文件失败");
+        }
+        finally
+        {
+            StopForegroundServiceIfNoTasksRunning();
+        }
+    }
+
+    /// <summary>
+    /// 发送媒体：系统选择器只显示图片 / 视频（类似 LocalSend 移动端的「发送媒体」），
+    /// 支持多选，选中后按普通文件顺序发送。
+    /// </summary>
+    private async Task SendMediaAsync()
+    {
+        if (SelectedDevice == null)
+        {
+            await _alertService.DisplayToastAsync("请先选择目标设备").ConfigureAwait(false);
+            return;
+        }
+
+        try
+        {
+            var files = await _filePickerService.PickFilesAsync(new PickOptions
+            {
+                PickerTitle = "选择要发送的图片或视频（可多选）",
+                FileTypes = MediaFileTypes.ImagesAndVideos
+            }).ConfigureAwait(false);
+
+            if (files.Count == 0)
+            {
+                return;
+            }
+
+            await _foregroundService.StartServiceAsync().ConfigureAwait(false);
+
+            _uiContext.Post(_ => StatusMessage = $"正在发送 {files.Count} 个媒体文件...", null);
+
+            var paths = files.Select(file => file.FullPath).Where(path => !string.IsNullOrEmpty(path)).ToList();
+            await _serviceManager.SendFilesAsync(paths, SelectedDevice).ConfigureAwait(false);
+
+            _uiContext.Post(_ => StatusMessage = StatusMessage, null);
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"发送媒体失败: {ex.Message}";
+            await _alertService.DisplayToastAsync(ex.Message).ConfigureAwait(false);
+            _logger.LogError(ex, "发送媒体失败");
         }
         finally
         {
