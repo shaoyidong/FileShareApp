@@ -348,7 +348,7 @@
                     Margin="0,16,0,0"
                     ColumnDefinitions="*,*"
                     ColumnSpacing="10"
-                    RowDefinitions="Auto,Auto,Auto"
+                    RowDefinitions="Auto,Auto,Auto,Auto,Auto"
                     RowSpacing="10">
                     <Button
                         Grid.Column="0"
@@ -395,8 +395,18 @@
                         HorizontalOptions="Fill"
                         Style="{StaticResource SecondaryButton}"
                         Text="设置" />
+                    <!--  发送媒体：系统选择器只显示图片 / 视频（对齐 LocalSend 移动端）  -->
                     <Button
                         Grid.Row="3"
+                        Grid.Column="0"
+                        Grid.ColumnSpan="2"
+                        Command="{Binding SendMediaCommand}"
+                        HorizontalOptions="Fill"
+                        IsEnabled="{Binding IsDeviceSelected}"
+                        Style="{StaticResource PrimaryButton}"
+                        Text="发送媒体（图片 / 视频）" />
+                    <Button
+                        Grid.Row="4"
                         Grid.Column="0"
                         Grid.ColumnSpan="2"
                         Command="{Binding NavigateToAppListCommand}"

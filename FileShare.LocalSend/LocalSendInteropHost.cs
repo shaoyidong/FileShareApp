@@ -744,9 +744,10 @@ public sealed class LocalSendInteropHost : ILocalSendInteropHost
                 : prepare.Info.Alias;
             _sessions[prepare.SessionId] = new PeerSessionInfo(senderId, senderName);
 
+            // 留空表示「按文件类型自动归类」，确认窗与自研 TCP 接收路径展示一致
             var saveDirectory = string.IsNullOrWhiteSpace(_settingsService.Current.SaveDirectory)
-                ? _directoryService.GetDownloadsDirectory()
-                : _settingsService.Current.SaveDirectory!;
+                ? null
+                : _settingsService.Current.SaveDirectory;
 
             // 1) 文本消息：跳过确认流程，立即显示为「已完成」并写历史（不落盘）
             var messageIds = new HashSet<string>();
@@ -961,8 +962,9 @@ public sealed class LocalSendInteropHost : ILocalSendInteropHost
 
         try
         {
+            // 与自研 TCP 接收路径保持一致：未固定保存目录时按文件类型归类（图片/视频/音乐/文档/下载）
             var directory = string.IsNullOrWhiteSpace(_settingsService.Current.SaveDirectory)
-                ? _directoryService.GetDownloadsDirectory()
+                ? FileTypeHelper.GetDirectoryByFileType(upload.File.FileName, _directoryService)
                 : _settingsService.Current.SaveDirectory!;
 
             Directory.CreateDirectory(directory);
