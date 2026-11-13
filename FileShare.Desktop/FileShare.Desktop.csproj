@@ -7,7 +7,16 @@
 		<ApplicationManifest>app.manifest</ApplicationManifest>
 		<AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
 		<AvaloniaXamlCompilerLogLevel>Diagnostic</AvaloniaXamlCompilerLogLevel>
+		<Version>1.0.2</Version>
 	</PropertyGroup>
+
+	<ItemGroup>
+		<!-- 构建时间戳：关于窗口展示「构建日期」用（每次编译自动刷新） -->
+		<AssemblyAttribute Include="System.Reflection.AssemblyMetadata">
+			<_Parameter1>BuildDate</_Parameter1>
+			<_Parameter2>$([System.DateTime]::Now.ToString(&quot;yyyy-MM-dd&quot;))</_Parameter2>
+		</AssemblyAttribute>
+	</ItemGroup>
 
 	<!-- 仅发布时启用 AOT / Trim -->
 	<PropertyGroup Condition="'$(Configuration)' == 'Release' And '$(_IsPublishing)' == 'true'">

@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Media;
+using Avalonia.Win32;
 using FileShare.Core.Network.Discovery;
 using FileShare.Core.Network.Tls;
 using FileShare.Core.Services;
@@ -82,11 +83,28 @@ namespace FileShare.Desktop
                 // 其他操作系统的默认配置
                 fontOptions.DefaultFamilyName = "PingFang SC"; // macOS 上的苹方
             }
-           return  AppBuilder.Configure<App>()
-               .UsePlatformDetect()
-               //.WithInterFont()             
-       // 配置字体选项，解决Linux下中文显示问题
-               .With(fontOptions);
+            var builder = AppBuilder.Configure<App>()
+                .UsePlatformDetect()
+                .With(fontOptions);
+
+            if (OperatingSystem.IsWindows())
+            {
+                // 默认首选 WinUIComposition；它的 ICompositor5.RequestCommitAsync 在合成器
+                // 提交超时时会打一条 Error 并自行 force-trigger next tick（已自愈，不是应用异常）。
+                // 本项目未使用任何亚克力 / 模糊 / 透明特效，把 DirectComposition 提到首位
+                // 功能等价且更轻；后两项保留 Avalonia 原有的完整回退能力。
+                builder = builder.With(new Win32PlatformOptions
+                {
+                    CompositionMode = new[]
+                    {
+                        Win32CompositionMode.DirectComposition,
+                        Win32CompositionMode.WinUIComposition,
+                        Win32CompositionMode.RedirectionSurface
+                    }
+                });
+            }
+
+            return builder;
         }
 
         private static void ExtractAndLoadNativeLibs()

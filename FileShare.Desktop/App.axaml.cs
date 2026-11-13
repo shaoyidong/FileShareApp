@@ -4,6 +4,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Data.Core;
 using Avalonia.Data.Core.Plugins;
 using Avalonia.Markup.Xaml;
+using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using FileShare.Core.Services;
 using FileShare.Desktop.Services;
@@ -238,6 +239,27 @@ namespace FileShare.Desktop
                         LogSkinState("Restored");
                         viewModel.CurrentView = viewModel;
                         break;
+                    case 7:
+                        // 关于窗口：验证浮动卡片 XAML / 版本信息加载正常
+                        Views.AboutWindow.ShowAbout();
+                        LogSkinState("about-shown");
+                        break;
+                    case 8:
+                        // 先给关于窗口截图存盘，再模拟「点击主窗口」（激活主窗口 → 关于窗失活应自动收起）
+                        CaptureAboutWindow(desktop);
+                        desktop.MainWindow?.Activate();
+                        break;
+                    case 9:
+                        // 回归验证：主窗口不能被最小化/隐藏（Avalonia#4868 家族），关于窗应已收起
+                        var leftover = desktop.Windows.OfType<Views.AboutWindow>().FirstOrDefault();
+                        var mainAfterActivate = desktop.MainWindow;
+                        LogSkinState(
+                            $"after-activate: about-closed={leftover is null}; main-state=" +
+                            (mainAfterActivate is null
+                                ? "none"
+                                : $"{mainAfterActivate.WindowState},visible={mainAfterActivate.IsVisible}"));
+                        leftover?.Close();
+                        break;
                     default:
                         timer.Stop();
                         desktop.Shutdown(0);
@@ -245,6 +267,32 @@ namespace FileShare.Desktop
                 }
             };
             timer.Start();
+        }
+
+        /// <summary>冒烟自检用：给关于窗口截图存盘（保持窗口打开，由后续步骤模拟点击主窗口触发失活关闭）。</summary>
+        private static void CaptureAboutWindow(IClassicDesktopStyleApplicationLifetime desktop)
+        {
+            try
+            {
+                var about = desktop.Windows.OfType<Views.AboutWindow>().FirstOrDefault();
+                if (about is null)
+                {
+                    LogSkinState("about-missing");
+                    return;
+                }
+
+                var size = new PixelSize(Math.Max(1, (int)about.Bounds.Width), Math.Max(1, (int)about.Bounds.Height));
+                using var bitmap = new RenderTargetBitmap(size, new Vector(96, 96));
+                bitmap.Render(about);
+                bitmap.Save(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "fs-about-smoke.png"));
+                LogSkinState("about-captured");
+            }
+            catch (Exception ex)
+            {
+                System.IO.File.AppendAllText(
+                    System.IO.Path.Combine(System.IO.Path.GetTempPath(), "fs-skin-smoke.txt"),
+                    $"about-capture-failed: {ex.GetType().Name} {ex.Message}\n");
+            }
         }
 
         /// <summary>冒烟自检用：记录当前生效的皮肤数量与主背景色，便于验证切换是否真的生效。</summary>

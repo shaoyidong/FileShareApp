@@ -2,6 +2,13 @@
   "code": "en-US",
   "displayName": "English",
   "translations": {
+    "关于": "About",
+    "关于 FileShare": "About FileShare",
+    "局域网传输": "LAN file transfer",
+    "版本号": "Version",
+    "构建日期": "Build date",
+    "求职长沙：应用软件 / 上位机软件开发": "Seeking app / HMI software development jobs in Changsha",
+    "欢迎用人单位扫码联系": "Employers are welcome to scan the QR code to connect",
     " · 加密": " · Encrypted",
     "（按文件类型自动归类：图片 / 视频 / 音乐 / 文档 / 下载）": "(auto-sorted by type: Pictures / Videos / Music / Documents / Downloads)",
     "(空)": "(empty)",

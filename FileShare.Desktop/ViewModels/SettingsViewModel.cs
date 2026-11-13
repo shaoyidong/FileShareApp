@@ -153,6 +153,7 @@ public partial class SettingsViewModel : ViewModelBase
     public ICommand RefreshWebShareCommand { get; }
     public ICommand ReloadLanguagesCommand { get; }
     public ICommand ReloadThemesCommand { get; }
+    public ICommand ShowAboutCommand { get; }
 
     public SettingsViewModel(
         IAppSettingsService settingsService,
@@ -176,6 +177,7 @@ public partial class SettingsViewModel : ViewModelBase
         RefreshWebShareCommand = new RelayCommand(RefreshWebShareStatus);
         ReloadLanguagesCommand = new RelayCommand(ReloadLanguages);
         ReloadThemesCommand = new RelayCommand(ReloadThemes);
+        ShowAboutCommand = new RelayCommand(Views.AboutWindow.ShowAbout);
 
         RefreshLanguageOptions();
         RefreshThemeOptions();

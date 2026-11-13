@@ -1,0 +1,121 @@
+<Window
+    x:Class="FileShare.Desktop.Views.AboutWindow"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:fonts="using:FileShare.Desktop.Assets.Fonts"
+    xmlns:loc="using:FileShare.Desktop.Localization"
+    xmlns:vm="using:FileShare.Desktop.ViewModels"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    Title="{loc:Tr '关于 FileShare'}"
+    Width="400"
+    Height="600"
+    CanResize="False"
+    SystemDecorations="None"
+    TransparencyLevelHint="Transparent"
+    Background="Transparent"
+    WindowStartupLocation="CenterOwner"
+    d:DesignHeight="600"
+    d:DesignWidth="400"
+    x:DataType="vm:AboutViewModel"
+    mc:Ignorable="d">
+
+    <!--  Qoder 风格浮动卡片：无边框圆角面板 + 鼠标跟随 3D 倾斜（交互逻辑见 AboutWindow.xaml.cs）  -->
+    <Border
+        x:Name="TiltRoot"
+        Margin="32"
+        Classes="panel"
+        CornerRadius="14"
+        BoxShadow="0 8 24 #40000000"
+        PointerMoved="OnTiltSurfacePointerMoved">
+        <Grid RowDefinitions="Auto,*,Auto" Margin="20,12,20,16">
+
+            <!--  顶部：关闭按钮（无边框窗口需要显式关闭入口）  -->
+            <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+                <Button
+                    Grid.Column="1"
+                    Classes="icon"
+                    Click="OnCloseClick"
+                    ToolTip.Tip="{loc:Tr '关闭'}">
+                    <TextBlock
+                        Classes="iconGlyph"
+                        Text="{x:Static fonts:FluentUI.dismiss_24_regular}" />
+                </Button>
+            </Grid>
+
+            <!--  产品标识：Logo / 名称 / 版本 / 构建日期  -->
+            <StackPanel Grid.Row="1" VerticalAlignment="Center">
+                <Image
+                    Width="72"
+                    Height="72"
+                    HorizontalAlignment="Center"
+                    Source="avares://FileShare.Desktop/Assets/logo.png" />
+                <TextBlock
+                    Margin="0,10,0,0"
+                    HorizontalAlignment="Center"
+                    FontSize="22"
+                    FontWeight="Bold"
+                    Text="FileShare" />
+                <TextBlock
+                    HorizontalAlignment="Center"
+                    Classes="muted"
+                    Text="{loc:Tr '局域网传输'}" />
+
+                <Grid
+                    Margin="0,14,0,0"
+                    HorizontalAlignment="Center"
+                    ColumnDefinitions="Auto,Auto"
+                    RowDefinitions="Auto,Auto">
+                    <TextBlock Classes="label" Text="{loc:Tr '版本号'}" />
+                    <TextBlock
+                        Grid.Column="1"
+                        Margin="10,0,0,0"
+                        FontWeight="SemiBold"
+                        Text="{Binding Version}" />
+                    <TextBlock
+                        Grid.Row="1"
+                        Margin="0,4,0,0"
+                        Classes="label"
+                        Text="{loc:Tr '构建日期'}" />
+                    <TextBlock
+                        Grid.Row="1"
+                        Grid.Column="1"
+                        Margin="10,4,0,0"
+                        FontWeight="SemiBold"
+                        Text="{Binding BuildDate}" />
+                </Grid>
+            </StackPanel>
+
+            <!--  署名 + 求职信息 + 微信二维码  -->
+            <Border Grid.Row="2" Margin="0,14,0,0" Classes="card" Padding="14,12">
+                <StackPanel Spacing="3">
+                    <TextBlock HorizontalAlignment="Center" Text="{Binding Developer}" />
+                    <TextBlock HorizontalAlignment="Center" Classes="muted" Text="{Binding Copyright}" />
+
+                    <Border Height="1" Margin="0,8" Background="{DynamicResource FsSoftBorderBrush}" />
+
+                    <TextBlock
+                        HorizontalAlignment="Center"
+                        Classes="accent"
+                        FontWeight="Bold"
+                        Text="{loc:Tr '求职长沙：应用软件 / 上位机软件开发'}" />
+                    <TextBlock
+                        HorizontalAlignment="Center"
+                        Classes="muted"
+                        Text="{loc:Tr '欢迎用人单位扫码联系'}" />
+
+                    <Border
+                        Width="150"
+                        Height="150"
+                        Margin="0,10,0,0"
+                        HorizontalAlignment="Center"
+                        Background="White"
+                        CornerRadius="6"
+                        Padding="4">
+                        <Image Source="avares://FileShare.Desktop/Assets/wechat-qr.png" Stretch="Uniform" />
+                    </Border>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Border>
+</Window>

@@ -444,6 +444,10 @@
                     Spacing="6">
                     <Button
                         MinWidth="80"
+                        Command="{Binding ShowAboutCommand}"
+                        Content="{loc:Tr '关于'}" />
+                    <Button
+                        MinWidth="80"
                         Classes="accent"
                         Command="{Binding SaveCommand}"
                         Content="{loc:Tr '保存'}" />
