@@ -36,6 +36,13 @@ public partial class AboutWindow : Window
         TiltRoot.RenderTransform = _tiltTransform;
 
         Activated += (_, _) => _activatedOnce = true;
+        Closed += (_, _) =>
+        {
+            _tiltResetTimer?.Stop();
+            // VM 持有静态事件订阅，窗口关闭时释放，避免窗口被静态事件持有
+            (DataContext as IDisposable)?.Dispose();
+        };
+
         // 浮动卡片语义：主窗口抢回焦点即收起。
         // 必须用 Post 延迟关闭：在 WM_ACTIVATE(WA_INACTIVE) 处理栈内同步 Close() owned 窗口
         // 会触发 Avalonia Win32 的激活修复失败（Avalonia#4868），把 owner 主窗口错误最小化。
@@ -47,7 +54,6 @@ public partial class AboutWindow : Window
             }
         };
         PointerExited += (_, _) => StartTiltReset();
-        Closed += (_, _) => _tiltResetTimer?.Stop();
     }
 
     /// <summary>打开关于窗口（已打开则激活现有窗口）。</summary>

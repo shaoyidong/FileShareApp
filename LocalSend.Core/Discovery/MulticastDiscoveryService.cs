@@ -137,7 +137,7 @@ public sealed class MulticastDiscoveryService : IDisposable
                     SocketOptionLevel.IP,
                     SocketOptionName.MulticastInterface,
                     localAddr.GetAddressBytes());
-                await _udpClient.SendAsync(data, data.Length, ep);
+                await _udpClient.SendAsync(data.AsMemory(), ep,ct);
             }
             catch (Exception)
             {

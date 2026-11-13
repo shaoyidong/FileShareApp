@@ -58,6 +58,11 @@ namespace FileShare.Desktop
                 FileShare.Desktop.Localization.Loc.SetLanguage(uiPreferences?.Current.LanguageCode ?? "zh-CN");
                 FileShare.Desktop.Theming.ThemePackLoader.Initialize(dataDirectory);
 
+                // 关于窗口内容同样来自外部配置：内置默认 -> 数据目录 about.json -> 远程 JSON。
+                // 后台拉取失败会静默沿用旧内容，不阻塞启动。
+                FileShare.Desktop.Services.AboutContentService.Initialize(dataDirectory);
+                _ = FileShare.Desktop.Services.AboutContentService.RefreshAsync();
+
                 var themeService = ServiceProvider?.GetService<IThemeService>();
                 // 摘除旧版静态声明残留的皮肤实例（窗口创建前完成）
                 if (themeService is ThemeService concreteTheme)
@@ -160,12 +165,11 @@ namespace FileShare.Desktop
 
                 desktop.ShutdownRequested += (s, e) =>
                 {
-                    if (TrayService is not null)
-                    {
-                        TrayService.IsExiting = true;
-                    }
+                    TrayService?.IsExiting = true;
 
+#pragma warning disable CS4014 // 由于此调用不会等待，因此在调用完成前将继续执行当前方法
                     serviceManager.StopServicesAsync();
+#pragma warning restore CS4014 // 由于此调用不会等待，因此在调用完成前将继续执行当前方法
                 };
 
                 desktop.Exit += (s, e) =>
@@ -186,7 +190,7 @@ namespace FileShare.Desktop
         }
 
         [UnconditionalSuppressMessage("Trim", "IL2026")]
-        private void DisableAvaloniaDataAnnotationValidation()
+        private static void DisableAvaloniaDataAnnotationValidation()
         {
             // Get an array of plugins to remove
             var dataValidationPluginsToRemove =

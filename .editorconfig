@@ -18,6 +18,7 @@ dotnet_diagnostic.IDE0290.severity = none
 dotnet_diagnostic.IDE0300.severity = none
 dotnet_diagnostic.IDE0301.severity = none
 dotnet_diagnostic.IDE0305.severity = none
+dotnet_diagnostic.IDE0306.severity = none
 dotnet_diagnostic.IDE1006.severity = none
 
 # 类别：性能-误报。日志均为结构化模板 + 廉价属性/局部变量，加 IsEnabled 守卫
