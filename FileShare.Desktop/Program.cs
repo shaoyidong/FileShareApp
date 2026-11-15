@@ -7,6 +7,7 @@ using FileShare.Core.Network.Tls;
 using FileShare.Core.Services;
 using FileShare.Desktop.Helpers;
 using FileShare.Desktop.Services;
+using FileShare.Desktop.Services.Dialogs;
 using FileShare.LocalSend;
 using FileShare.Desktop.ViewModels;
 using FileShare.Desktop.Views;
@@ -273,7 +274,8 @@ namespace FileShare.Desktop
             // LocalSend 适配层通过 UI 桥反向注入通知 / 文案，适配层本身不依赖 Avalonia
             services.AddSingleton<ILocalSendUiBridge>(sp => new LocalSendUiBridge(
                 sp.GetRequiredService<IToastService>(),
-                sp.GetRequiredService<IAppSettingsService>()));
+                sp.GetRequiredService<IAppSettingsService>(),
+                sp.GetRequiredService<IDialogService>()));
             services.AddSingleton<IAppUiBridge>(sp => sp.GetRequiredService<ILocalSendUiBridge>());
 
             // 通知卡片（懒解析 lifetime：解析发生在 App 初始化之后）
@@ -301,6 +303,12 @@ namespace FileShare.Desktop
 
             // 平台服务
             services.AddSingleton<IPlatformDirectoryService, DesktopDirectoryService>();
+
+            // 平台对话框（选择器 / MsBox）：lifetime 在 App 初始化时才就绪，
+            // 工厂在解析时（App.OnFrameworkInitializationCompleted）才取
+            services.AddSingleton<IPlatformDialogService>(_ => new PlatformDialogService(
+                (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)
+                ?? throw new InvalidOperationException("ApplicationLifetime 未初始化")));
 
             // 核心服务管理器
             services.AddSingleton<FileShareServiceManager>(sp =>
@@ -330,8 +338,23 @@ namespace FileShare.Desktop
             services.AddTransient<MainWindow>(sp =>
                 new MainWindow(sp.GetRequiredService<IUiPreferencesService>()));
             services.AddTransient<MainView>();
-            services.AddTransient<HistoryView>(); 
+            services.AddTransient<HistoryView>();
             services.AddTransient<SettingsView>();
+
+            // 弹窗（仿 Prism DialogService）：显式泛型注册，无反射扫描，NativeAOT 安全
+            // SendText / ReceiveRequest / MessageReceived 是 UserControl 内容弹窗
+            // （放入 DialogWindow 宿主，仿 ShowDialog；MessageReceived 的不抢焦点由 VM 配置宿主）；
+            // About 保留 Window 形态以维持无边框浮动卡片的自定义 chrome（行为同 ShowDialogWindow）
+            services.AddDialog<SendTextView, SendTextViewModel>(SendTextViewModel.DialogKeys.DialogName);
+            services.AddDialog<ReceiveRequestView, ReceiveRequestViewModel>();
+            services.AddDialog<MessageReceivedView, MessageReceivedViewModel>();
+            services.AddDialog<AboutWindow, AboutViewModel>(activateExisting: true);
+
+            // 弹窗服务：懒取主窗口作默认 owner（解析发生在 App 初始化之后，仿 ToastService）
+            services.AddSingleton<IDialogService>(sp => new DialogService(
+                sp.GetRequiredService<DialogRegistry>(),
+                sp,
+                () => (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow));
 
             // 构建并返回容器
             return services.BuildServiceProvider();

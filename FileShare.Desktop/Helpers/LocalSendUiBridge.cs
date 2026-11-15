@@ -6,7 +6,8 @@ using FileShare.Core.Models;
 using FileShare.Core.Services;
 using FileShare.Desktop.Localization;
 using FileShare.Desktop.Services;
-using FileShare.Desktop.Views;
+using FileShare.Desktop.Services.Dialogs;
+using FileShare.Desktop.ViewModels;
 using FileShare.LocalSend;
 using System;
 using System.Threading.Tasks;
@@ -15,7 +16,7 @@ namespace FileShare.Desktop.Helpers;
 
 /// <summary>
 /// <see cref="IAppUiBridge"/> 的桌面端实现：把协议适配层 / 网页分享的通知、文案、
-/// 接收确认与传输状态转给桌面 UI。
+/// 接收确认与传输状态转给桌面 UI。弹窗统一走 <see cref="IDialogService"/>。
 /// </summary>
 public sealed class LocalSendUiBridge : ILocalSendUiBridge
 {
@@ -23,11 +24,13 @@ public sealed class LocalSendUiBridge : ILocalSendUiBridge
 
     private readonly IToastService _toastService;
     private readonly IAppSettingsService _settingsService;
+    private readonly IDialogService _dialogs;
 
-    public LocalSendUiBridge(IToastService toastService, IAppSettingsService settingsService)
+    public LocalSendUiBridge(IToastService toastService, IAppSettingsService settingsService, IDialogService dialogs)
     {
         _toastService = toastService ?? throw new ArgumentNullException(nameof(toastService));
         _settingsService = settingsService ?? throw new ArgumentNullException(nameof(settingsService));
+        _dialogs = dialogs ?? throw new ArgumentNullException(nameof(dialogs));
     }
 
     /// <inheritdoc />
@@ -40,16 +43,11 @@ public sealed class LocalSendUiBridge : ILocalSendUiBridge
         Dispatcher.UIThread.Post(() =>
         {
             var owner = (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow;
-            var window = new MessageReceivedWindow(senderName, message);
-            // 主窗口隐藏到托盘时不能作为 owner（Avalonia 要求 owner 已显示），改为独立窗口
-            if (owner is { IsVisible: true })
+            var window = _dialogs.Show<MessageReceivedViewModel>(new DialogParameters
             {
-                window.Show(owner);
-            }
-            else
-            {
-                window.Show();
-            }
+                [MessageReceivedViewModel.DialogKeys.SenderName] = senderName,
+                [MessageReceivedViewModel.DialogKeys.Message] = message
+            });
 
             // 主窗口在托盘 / 后台时补一条通知（前台时 ToastService 会自动抑制），
             // 点击通知把消息窗口唤到前面
@@ -61,7 +59,7 @@ public sealed class LocalSendUiBridge : ILocalSendUiBridge
                     () => Dispatcher.UIThread.Post(() =>
                     {
                         ActivateWindow(owner);
-                        window.Activate();
+                        window?.Activate();
                     }));
             }
         });
@@ -107,10 +105,10 @@ public sealed class LocalSendUiBridge : ILocalSendUiBridge
         var isActive = await Dispatcher.UIThread.InvokeAsync(() => owner.IsActive);
         if (isActive)
         {
-            return await ShowConfirmWindowAsync(owner, request, transfer).ConfigureAwait(false);
+            return await ShowConfirmDialogAsync(owner, request, transfer).ConfigureAwait(false);
         }
 
-        // 托盘 / 后台：只弹通知；点击通知才显示主窗口并弹确认窗（60 秒超时保留）
+        // 托盘 / 后台：只弹通知；点击通知才显示主窗口并弹确认窗（60 秒总超时保留）
         var decisionTcs = new TaskCompletionSource<ExternalReceiveDecision>(
             TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -120,7 +118,7 @@ public sealed class LocalSendUiBridge : ILocalSendUiBridge
             () => Dispatcher.UIThread.Post(async () =>
             {
                 ActivateWindow(owner);
-                var decision = await ShowConfirmWindowAsync(owner, request, transfer).ConfigureAwait(true);
+                var decision = await ShowConfirmDialogAsync(owner, request, transfer).ConfigureAwait(true);
                 decisionTcs.TrySetResult(decision);
             }));
 
@@ -130,42 +128,28 @@ public sealed class LocalSendUiBridge : ILocalSendUiBridge
             : ExternalReceiveDecision.Declined;
     }
 
-    /// <summary>在 UI 线程弹接收确认窗，并等待用户选择（最长 60 秒）。</summary>
-    private async Task<ExternalReceiveDecision> ShowConfirmWindowAsync(
+    /// <summary>弹接收确认窗（60 秒无操作由 DialogService 自动关闭），把用户选择映射为接收决策。</summary>
+    private async Task<ExternalReceiveDecision> ShowConfirmDialogAsync(
         Window owner, ExternalReceiveRequest request, FileTransferInfo transfer)
     {
-        var tcs = new TaskCompletionSource<ReceiveRequestResult?>(TaskCreationOptions.RunContinuationsAsynchronously);
-        ReceiveRequestWindow? window = null;
-
-        Dispatcher.UIThread.Post(async () =>
-        {
-            try
-            {
-                window = new ReceiveRequestWindow(transfer, request.SaveDirectory, request.SenderName);
-                tcs.TrySetResult(await window.ShowDialog<ReceiveRequestResult?>(owner));
-            }
-            catch (Exception ex)
-            {
-                tcs.TrySetException(ex);
-            }
-        });
-
-        var completed = await Task.WhenAny(tcs.Task, Task.Delay(ConfirmTimeout)).ConfigureAwait(false);
-        if (completed != tcs.Task)
-        {
-            Dispatcher.UIThread.Post(() => window?.Close(null));
-            return ExternalReceiveDecision.Declined;
-        }
-
         try
         {
-            var result = await tcs.Task.ConfigureAwait(false);
-            if (result is null)
+            var result = await _dialogs.ShowDialogAsync<ReceiveRequestViewModel>(new DialogParameters
+            {
+                [ReceiveRequestViewModel.DialogKeys.Transfer] = transfer,
+                [ReceiveRequestViewModel.DialogKeys.SaveDirectory] = request.SaveDirectory,
+                [ReceiveRequestViewModel.DialogKeys.SenderName] = request.SenderName
+            }, new DialogOptions { Owner = owner, Timeout = ConfirmTimeout }).ConfigureAwait(false);
+
+            if (result.Result != ButtonResult.Ok ||
+                !result.Parameters.TryGetValue<ReceiveRequestResult?>(
+                    ReceiveRequestViewModel.DialogKeys.Result, out var choice) ||
+                choice is null)
             {
                 return ExternalReceiveDecision.Declined;
             }
 
-            if (result.AlwaysAccept)
+            if (choice.AlwaysAccept)
             {
                 _settingsService.Update(s =>
                 {
@@ -176,7 +160,7 @@ public sealed class LocalSendUiBridge : ILocalSendUiBridge
                 });
             }
 
-            return new ExternalReceiveDecision(result.Accept, result.AlwaysAccept);
+            return new ExternalReceiveDecision(choice.Accept, choice.AlwaysAccept);
         }
         catch (Exception)
         {

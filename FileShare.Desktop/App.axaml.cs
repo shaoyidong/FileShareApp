@@ -8,6 +8,7 @@ using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using FileShare.Core.Services;
 using FileShare.Desktop.Services;
+using FileShare.Desktop.Services.Dialogs;
 using FileShare.LocalSend;
 using FileShare.Desktop.ViewModels;
 using FileShare.Desktop.Views;
@@ -123,10 +124,10 @@ namespace FileShare.Desktop
                 var provider = ServiceProvider ?? throw new InvalidOperationException("ServiceProvider not initialized");
                 DataTemplates.Add(new ViewLocator(provider));
 
-                // 解析 MainViewModel 的依赖（除了 DialogService）
-                // 因为 DialogService 需要 desktop，我们手动创建并传入
+                // 平台对话框（选择器 / MsBox）与弹窗服务都在 DI 容器中注册
                 var serviceManager = provider.GetRequiredService<FileShareServiceManager>();
-                var dialogService = new DialogService(desktop);
+                var dialogService = provider.GetRequiredService<IPlatformDialogService>();
+                var dialogs = provider.GetRequiredService<IDialogService>();
                 var syncContext = SynchronizationContext.Current ?? new SynchronizationContext();
 
                 // 托盘服务必须在拿到 lifetime 之后创建；MainViewModel 需要它来恢复窗口
@@ -136,6 +137,7 @@ namespace FileShare.Desktop
                 var viewModel = new MainViewModel(
                     serviceManager,
                     dialogService,
+                    dialogs,
                     desktop,
                     syncContext,
                     provider.GetRequiredService<ILoggerFactory>(),
@@ -244,8 +246,17 @@ namespace FileShare.Desktop
                         viewModel.CurrentView = viewModel;
                         break;
                     case 7:
-                        // 关于窗口：验证浮动卡片 XAML / 版本信息加载正常
-                        Views.AboutWindow.ShowAbout();
+                        // DialogService 弹窗自检：先开内容弹窗（UserControl + DialogWindow 宿主，
+                        // 按名称 / 按 VM 类型打开），再开关于窗口并让它保持活跃，
+                        // 供 case 8 截图 + case 9 验证失活收起
+                        var dialogs = App.ServiceProvider?.GetService<IDialogService>();
+                        dialogs?.Show(SendTextViewModel.DialogKeys.DialogName);
+                        // 非激活内容弹窗（ShowActivated=false 由 VM 配置宿主）：验证宿主配置路径
+                        dialogs?.Show<MessageReceivedViewModel>(new DialogParameters
+                        {
+                            [MessageReceivedViewModel.DialogKeys.Message] = "冒烟自检：文本消息内容弹窗"
+                        });
+                        dialogs?.Show<AboutViewModel>();
                         LogSkinState("about-shown");
                         break;
                     case 8:
@@ -263,6 +274,13 @@ namespace FileShare.Desktop
                                 ? "none"
                                 : $"{mainAfterActivate.WindowState},visible={mainAfterActivate.IsVisible}"));
                         leftover?.Close();
+
+                        // 关闭内容弹窗宿主（冒烟里打开的 SendTextDialog），保持退出干净
+                        foreach (var host in desktop.Windows.OfType<DialogWindow>().ToList())
+                        {
+                            host.Close();
+                        }
+
                         break;
                     default:
                         timer.Stop();

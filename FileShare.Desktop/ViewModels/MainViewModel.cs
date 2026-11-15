@@ -11,6 +11,7 @@ using FileShare.Core.Network;
 using FileShare.Core.Network.Discovery;
 using FileShare.Core.Services;
 using FileShare.Desktop.Services;
+using FileShare.Desktop.Services.Dialogs;
 using FileShare.Desktop.Theming;
 using FileShare.LocalSend;
 using FileShare.Desktop.Views;
@@ -36,7 +37,8 @@ namespace FileShare.Desktop.ViewModels
     public partial class MainViewModel : ViewModelBase
     {
         private readonly IFileShareServiceManager _serviceManager;
-        private readonly IDialogService _dialogService;
+        private readonly IPlatformDialogService _dialogService;
+        private readonly IDialogService _dialogs;
         private readonly IAppSettingsService _settingsService;
         private readonly IThemeService _themeService;
         private readonly IToastService? _toastService;
@@ -181,7 +183,8 @@ namespace FileShare.Desktop.ViewModels
 
         public MainViewModel(
             IFileShareServiceManager serviceManager,
-            IDialogService dialogService,
+            IPlatformDialogService dialogService,
+            IDialogService dialogs,
             IClassicDesktopStyleApplicationLifetime? appLifetime,
             SynchronizationContext uiContext,
             ILoggerFactory? loggerFactory = null,
@@ -193,6 +196,7 @@ namespace FileShare.Desktop.ViewModels
         {
             _serviceManager = serviceManager ?? throw new ArgumentNullException(nameof(serviceManager));
             _dialogService = dialogService ?? throw new ArgumentNullException(nameof(dialogService));
+            _dialogs = dialogs ?? throw new ArgumentNullException(nameof(dialogs));
             _appLifetime = appLifetime;
             _uiContext = uiContext ?? SynchronizationContext.Current ?? new SynchronizationContext();
             _logger = loggerFactory?.CreateLogger<MainViewModel>() ?? NullLogger<MainViewModel>.Instance;
@@ -282,7 +286,7 @@ namespace FileShare.Desktop.ViewModels
 
         private void ShowSettings()
         {
-            CurrentView = new SettingsViewModel(_settingsService, _themeService, _dialogService, () =>
+            CurrentView = new SettingsViewModel(_settingsService, _themeService, _dialogService, _dialogs, () =>
             {
                 CurrentView = this;
                 RefreshLocalDeviceSummary();
@@ -676,16 +680,22 @@ namespace FileShare.Desktop.ViewModels
             }
 
             var target = SelectedDevice;
-            var owner = _appLifetime?.MainWindow;
 
-            if (owner is null)
+            if (_appLifetime?.MainWindow is null)
             {
                 StatusMessage = Loc.Get("当前窗口不可用，无法打开文本编辑框");
                 return;
             }
 
-            var window = new Views.SendTextWindow(target.DeviceName);
-            var text = await window.ShowDialog<string?>(owner);
+            // 按名称打开（仿 Prism 的 ShowDialog("DialogView")，非泛型；泛型 ShowDialogAsync<TViewModel> 等价）
+            var result = await _dialogs.ShowDialogAsync(
+                SendTextViewModel.DialogKeys.DialogName,
+                new DialogParameters
+                {
+                    [SendTextViewModel.DialogKeys.TargetDeviceName] = target.DeviceName
+                });
+
+            result.Parameters.TryGetValue<string>(SendTextViewModel.DialogKeys.Text, out var text);
             if (string.IsNullOrWhiteSpace(text))
             {
                 return;
@@ -1661,17 +1671,11 @@ namespace FileShare.Desktop.ViewModels
             var senderName = Devices.FirstOrDefault(item => item.DeviceId == senderId)?.DeviceName
                              ?? senderId;
             var owner = _appLifetime?.MainWindow;
-            var window = new Views.MessageReceivedWindow(senderName, message);
-
-            // 主窗口隐藏到托盘时不能作为 owner（Avalonia 要求 owner 已显示）
-            if (owner is { IsVisible: true })
+            var window = _dialogs.Show<MessageReceivedViewModel>(new DialogParameters
             {
-                window.Show(owner);
-            }
-            else
-            {
-                window.Show();
-            }
+                [MessageReceivedViewModel.DialogKeys.SenderName] = senderName,
+                [MessageReceivedViewModel.DialogKeys.Message] = message
+            });
 
             if (owner is null)
             {
@@ -1684,7 +1688,7 @@ namespace FileShare.Desktop.ViewModels
                 () => Dispatcher.UIThread.Post(() =>
                 {
                     ActivateMainWindow();
-                    window.Activate();
+                    window?.Activate();
                 }));
         }
 
@@ -1727,24 +1731,31 @@ namespace FileShare.Desktop.ViewModels
                 var senderName = Devices.FirstOrDefault(item => item.DeviceId == info.SenderId)?.DeviceName
                                  ?? info.SenderId;
 
-                var window = new Views.ReceiveRequestWindow(info, _settingsService.Current.SaveDirectory, senderName);
-                var result = await window.ShowDialog<ReceiveRequestResult?>(owner);
+                var result = await _dialogs.ShowDialogAsync<ReceiveRequestViewModel>(new DialogParameters
+                {
+                    [ReceiveRequestViewModel.DialogKeys.Transfer] = info,
+                    [ReceiveRequestViewModel.DialogKeys.SaveDirectory] = _settingsService.Current.SaveDirectory,
+                    [ReceiveRequestViewModel.DialogKeys.SenderName] = senderName
+                }, new DialogOptions { Owner = owner });
 
-                if (result is null)
+                if (result.Result != ButtonResult.Ok ||
+                    !result.Parameters.TryGetValue<ReceiveRequestResult?>(
+                        ReceiveRequestViewModel.DialogKeys.Result, out var choice) ||
+                    choice is null)
                 {
                     return;
                 }
 
-                if (result.AlwaysAccept)
+                if (choice.AlwaysAccept)
                 {
                     // Update 会触发 Changed，由 OnSettingsChanged 统一刷新星标与排序
                     _settingsService.Update(settings => settings.ToggleFavorite(info.SenderId));
                 }
 
                 var savePath = _settingsService.Current.SaveDirectory;
-                _serviceManager.HandleTransferRequest(info.TransferId, result.Accept, savePath);
+                _serviceManager.HandleTransferRequest(info.TransferId, choice.Accept, savePath);
 
-                StatusMessage = result.Accept
+                StatusMessage = choice.Accept
                     ? Loc.F("已接受文件: {0}", info.FileName)
                     : Loc.F("已拒绝文件: {0}", info.FileName);
             }

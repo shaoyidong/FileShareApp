@@ -5,7 +5,9 @@ using System.Reflection;
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using FileShare.Desktop.Localization;
 using FileShare.Desktop.Services;
+using FileShare.Desktop.Services.Dialogs;
 
 namespace FileShare.Desktop.ViewModels;
 
@@ -20,8 +22,24 @@ namespace FileShare.Desktop.ViewModels;
 /// 3D 倾斜、关闭、窗口激活等纯视图交互。窗口关闭时调用 <see cref="Dispose"/> 退订静态事件。
 /// </para>
 /// </summary>
-public sealed partial class AboutViewModel : ViewModelBase, IDisposable
+public sealed partial class AboutViewModel : ViewModelBase, IDisposable, IDialogAware
 {
+    /// <inheritdoc />
+    public string Title => Loc.Get("关于");
+
+    /// <inheritdoc />
+    public event Action<IDialogResult>? RequestClose;
+
+    /// <inheritdoc />
+    public bool CanCloseDialog() => true;
+
+    /// <inheritdoc />
+    public void OnDialogOpened(IDialogParameters parameters)
+    {
+    }
+
+    /// <inheritdoc />
+    public void OnDialogClosed() => Dispose();
     [ObservableProperty] public partial string Developer { get; private set; }
     [ObservableProperty] public partial string Copyright { get; private set; }
     [ObservableProperty] public partial string Headline { get; private set; }
@@ -89,6 +107,10 @@ public sealed partial class AboutViewModel : ViewModelBase, IDisposable
 
     public void Dispose() =>
         AboutContentService.ContentChanged -= OnContentChanged;
+
+    /// <summary>关闭弹窗（经 DialogService 回传结果并关闭窗口）。</summary>
+    [RelayCommand]
+    private void Close() => RequestClose?.Invoke(new DialogResult(ButtonResult.Cancel));
 
     /// <summary>动态配置里的链接：用系统默认浏览器打开（只允许 http/https）。</summary>
     [RelayCommand]

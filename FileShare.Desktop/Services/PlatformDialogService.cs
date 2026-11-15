@@ -10,9 +10,9 @@ using Avalonia;
 namespace FileShare.Desktop.Services
 {
     /// <summary>
-    /// 对话框服务实现，用于生产环境
+    /// 平台对话框服务实现，用于生产环境
     /// </summary>
-    public class DialogService : IDialogService
+    public class PlatformDialogService : IPlatformDialogService
     {
         private readonly IClassicDesktopStyleApplicationLifetime _appLifetime;
 
@@ -20,7 +20,7 @@ namespace FileShare.Desktop.Services
         /// 构造函数
         /// </summary>
         /// <param name="appLifetime">应用程序生命周期</param>
-        public DialogService(IClassicDesktopStyleApplicationLifetime appLifetime)
+        public PlatformDialogService(IClassicDesktopStyleApplicationLifetime appLifetime)
         {
             _appLifetime = appLifetime;
         }

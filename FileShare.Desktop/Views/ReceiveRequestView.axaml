@@ -1,64 +1,56 @@
-<Window
-    x:Class="FileShare.Desktop.Views.ReceiveRequestWindow"
+<UserControl
+    x:Class="FileShare.Desktop.Views.ReceiveRequestView"
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:loc="using:FileShare.Desktop.Localization"
+    xmlns:vm="using:FileShare.Desktop.ViewModels"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    Title="{loc:Tr '文件传输请求'}"
+    x:DataType="vm:ReceiveRequestViewModel"
     Width="440"
-    SizeToContent="Height"
-    CanResize="False"
-    ShowInTaskbar="False"
-    WindowStartupLocation="CenterOwner"
     d:DesignWidth="440"
     mc:Ignorable="d">
 
-    <Grid RowDefinitions="Auto,*,Auto">
-
-        <Border Grid.Row="0" Classes="toolbar" Padding="10,7">
-            <TextBlock
-                VerticalAlignment="Center"
-                Classes="h1"
-                Text="{loc:Tr '收到文件传输请求'}" />
-        </Border>
+    <!--  内容弹窗（仿 Prism ShowDialog）：本视图由 DialogService 放进 DialogWindow 宿主显示，
+         标题栏由宿主窗口承担（Title = ReceiveRequestViewModel.Title），视图只保留内容与按钮栏  -->
+    <Grid RowDefinitions="*,Auto">
 
         <StackPanel
-            Grid.Row="1"
+            Grid.Row="0"
             Margin="14"
             Spacing="10">
             <TextBlock
-                x:Name="SenderText"
-                TextWrapping="Wrap" />
+                TextWrapping="Wrap"
+                Text="{Binding SenderText}" />
 
             <Border Padding="10" Classes="panel">
                 <StackPanel Spacing="4">
                     <TextBlock
-                        x:Name="FileText"
                         FontWeight="Bold"
-                        TextWrapping="Wrap" />
+                        TextWrapping="Wrap"
+                        Text="{Binding FileText}" />
                     <TextBlock
-                        x:Name="SizeText"
-                        Classes="muted" />
+                        Classes="muted"
+                        Text="{Binding SizeText}" />
                 </StackPanel>
             </Border>
 
             <StackPanel Orientation="Horizontal" Spacing="4">
                 <TextBlock Classes="label" Text="{loc:Tr '保存到'}" />
                 <TextBlock
-                    x:Name="DirectoryText"
                     VerticalAlignment="Center"
                     Classes="muted"
-                    TextWrapping="Wrap" />
+                    TextWrapping="Wrap"
+                    Text="{Binding DirectoryText}" />
             </StackPanel>
 
             <CheckBox
-                x:Name="AlwaysAcceptCheck"
+                IsChecked="{Binding AlwaysAccept}"
                 Content="{loc:Tr '以后自动接收此设备的文件（加入收藏）'}" />
         </StackPanel>
 
         <Border
-            Grid.Row="2"
+            Grid.Row="1"
             Padding="10,8"
             Classes="statusbar">
             <StackPanel
@@ -68,13 +60,13 @@
                 <Button
                     MinWidth="84"
                     Classes="accent"
-                    Click="OnAcceptClick"
+                    Command="{Binding AcceptCommand}"
                     Content="{loc:Tr '接收'}" />
                 <Button
                     MinWidth="84"
-                    Click="OnRejectClick"
+                    Command="{Binding DeclineCommand}"
                     Content="{loc:Tr '拒绝'}" />
             </StackPanel>
         </Border>
     </Grid>
-</Window>
+</UserControl>
