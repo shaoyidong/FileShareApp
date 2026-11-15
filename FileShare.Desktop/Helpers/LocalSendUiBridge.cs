@@ -156,26 +156,26 @@ public sealed class LocalSendUiBridge : ILocalSendUiBridge
                 [ReceiveRequestViewModel.DialogKeys.SenderName] = request.SenderName
             }, new DialogOptions { Owner = owner, Timeout = ConfirmTimeout }).ConfigureAwait(false);
 
-            if (result.Result != ButtonResult.Ok ||
-                !result.Parameters.TryGetValue<ReceiveRequestResult?>(
-                    ReceiveRequestViewModel.DialogKeys.Result, out var choice) ||
-                choice is null)
+            // 接受（Ok）/拒绝（No）都携带选择结果；X 关闭 / 结果缺失按拒绝处理（与自有协议路径一致）
+            if (result.Parameters.TryGetValue<ReceiveRequestResult?>(
+                    ReceiveRequestViewModel.DialogKeys.Result, out var choice) &&
+                choice is not null)
             {
-                return ExternalReceiveDecision.Declined;
-            }
-
-            if (choice.AlwaysAccept)
-            {
-                _settingsService.Update(s =>
+                if (choice.AlwaysAccept)
                 {
-                    if (!s.IsFavorite(request.SenderId))
+                    _settingsService.Update(s =>
                     {
-                        s.ToggleFavorite(request.SenderId);
-                    }
-                });
+                        if (!s.IsFavorite(request.SenderId))
+                        {
+                            s.ToggleFavorite(request.SenderId);
+                        }
+                    });
+                }
+
+                return new ExternalReceiveDecision(choice.Accept, choice.AlwaysAccept);
             }
 
-            return new ExternalReceiveDecision(choice.Accept, choice.AlwaysAccept);
+            return ExternalReceiveDecision.Declined;
         }
         catch (Exception)
         {
