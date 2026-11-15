@@ -38,6 +38,8 @@ public class LocalSendDeviceListTests
             serviceManager.Object,
             new Mock<IPlatformDialogService>().Object,
             new Mock<FileShare.Desktop.Services.Dialogs.IDialogService>().Object,
+            new Mock<FileShare.Desktop.Services.Navigation.IRegionManager>().Object,
+            new Mock<FileShare.Desktop.Services.ITransferEventBus>().Object,
             new Mock<Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime>().Object,
             new ImmediateSynchronizationContext(),
             NullLoggerFactory.Instance,

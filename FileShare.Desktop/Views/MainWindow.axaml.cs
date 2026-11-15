@@ -11,20 +11,20 @@ namespace FileShare.Desktop.Views;
 
 public partial class MainWindow : Window
 {
-    private readonly TrayService? _trayService;
+    private readonly ITrayService? _trayService;
     private readonly IUiPreferencesService? _uiPreferences;
 
     /// <summary>设计器 / XAML 预览使用的无参构造。</summary>
-    public MainWindow() : this(null)
+    public MainWindow() : this(null, null)
     {
     }
 
     /// <summary>运行时构造：托盘偏好由 DI 注入（属于桌面端 UI 设置，不再来自 Core）。</summary>
-    public MainWindow(IUiPreferencesService? uiPreferences)
+    public MainWindow(IUiPreferencesService? uiPreferences, ITrayService? trayService)
     {
         InitializeComponent();
 
-        _trayService = App.TrayService;
+        _trayService = trayService;
         _uiPreferences = uiPreferences;
 
         Opened += OnWindowOpened;

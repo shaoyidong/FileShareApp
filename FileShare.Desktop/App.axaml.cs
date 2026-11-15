@@ -9,6 +9,7 @@ using Avalonia.Threading;
 using FileShare.Core.Services;
 using FileShare.Desktop.Services;
 using FileShare.Desktop.Services.Dialogs;
+using FileShare.Desktop.Services.Navigation;
 using FileShare.LocalSend;
 using FileShare.Desktop.ViewModels;
 using FileShare.Desktop.Views;
@@ -26,13 +27,21 @@ namespace FileShare.Desktop
 {
     public partial class App : Application
     {
-        public static IServiceProvider? ServiceProvider { get; internal set; }
+        private readonly IServiceProvider? _serviceProvider;
+        private readonly ILogger<App> _logger;
 
-        /// <summary>主界面视图模型（外部协议通过 UI 桥把传输状态同步到传输列表）。</summary>
-        public static MainViewModel? MainViewModel { get; private set; }
+        /// <summary>运行时构造：容器由 Program 在启动时经 <see cref="AppBuilder.Configure{T}(Func{T})"/> 注入。</summary>
+        public App(IServiceProvider? serviceProvider)
+        {
+            _serviceProvider = serviceProvider;
+            _logger = _serviceProvider?.GetService<ILogger<App>>()
+                   ?? throw new InvalidOperationException("ServiceProvider not set");
+        }
 
-        /// <summary>系统托盘服务（在主窗口创建时初始化）。</summary>
-        public static TrayService? TrayService { get; private set; }
+        /// <summary>设计器 / 预览器使用的无参构造。</summary>
+        public App() : this(null)
+        {
+        }
 
         public override void Initialize()
         {
@@ -42,16 +51,13 @@ namespace FileShare.Desktop
             if (Design.IsDesignMode)
             {
                 return;
-            }
-
-            var logger = ServiceProvider?.GetService<ILogger<App>>()
-                    ?? throw new InvalidOperationException("ServiceProvider not set");
+            }           
 
             // 应用用户上次选择的主题。必须在窗口创建前完成，避免首帧闪烁。
             try
             {
                 var dataDirectory = FileShare.Core.Services.AppPaths.GetDataDirectory();
-                var uiPreferences = ServiceProvider?.GetService<IUiPreferencesService>();
+                var uiPreferences = _serviceProvider?.GetService<IUiPreferencesService>();
 
                 // 语言包 / 主题包都来自外部 JSON 文件（发布后可直接编辑 / 新增），
                 // 必须在任何视图加载之前初始化
@@ -64,31 +70,29 @@ namespace FileShare.Desktop
                 FileShare.Desktop.Services.AboutContentService.Initialize(dataDirectory);
                 _ = FileShare.Desktop.Services.AboutContentService.RefreshAsync();
 
-                var themeService = ServiceProvider?.GetService<IThemeService>();
+                var themeService = _serviceProvider?.GetService<IThemeService>();
                 // 摘除旧版静态声明残留的皮肤实例（窗口创建前完成）
-                if (themeService is ThemeService concreteTheme)
-                {
-                    concreteTheme.InitializeFromApplication(this);
-                }
+                themeService?.InitializeFromApplication(this);
+                
                 themeService?.Apply(uiPreferences?.Current.SkinId ?? "win7");
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "应用界面皮肤失败，沿用默认皮肤");
+                _logger.LogWarning(ex, "应用界面皮肤失败，沿用默认皮肤");
             }
 
             AppDomain.CurrentDomain.UnhandledException += (s, e) =>
             {
                 if (e.ExceptionObject is Exception ex)
-                    logger.LogCritical(ex, "Unhandled AppDomain exception");
+                    _logger.LogCritical(ex, "Unhandled AppDomain exception");
                 else
-                    logger.LogCritical("Unhandled AppDomain exception (non-Exception object): {Obj}", e.ExceptionObject);               
+                    _logger.LogCritical("Unhandled AppDomain exception (non-Exception object): {Obj}", e.ExceptionObject);               
             };
 
             Dispatcher.UIThread.UnhandledException += (s, e) =>
             {
                 e.Handled = true;
-                logger.LogError(e.Exception, "Unhandled UI thread exception");
+                _logger.LogError(e.Exception, "Unhandled UI thread exception");
             };
 
             // 3. (可选) 过滤特定UI异常
@@ -103,7 +107,7 @@ namespace FileShare.Desktop
             // 4. 捕获未观察到的Task异常
             TaskScheduler.UnobservedTaskException += (s, e) =>
             {
-                logger.LogError(e.Exception, "Unobserved task exception");
+                _logger.LogError(e.Exception, "Unobserved task exception");
                 e.SetObserved();
             };
 
@@ -117,37 +121,20 @@ namespace FileShare.Desktop
         {
             if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
             {
-                // Avoid duplicate validations from both Avalonia and the CommunityToolkit. 
+                // Avoid duplicate validations from both Avalonia and the CommunityToolkit.
                 // More info: https://docs.avaloniaui.net/docs/guides/development-guides/data-validation#manage-validationplugins
                 DisableAvaloniaDataAnnotationValidation();
 
-                var provider = ServiceProvider ?? throw new InvalidOperationException("ServiceProvider not initialized");
-                DataTemplates.Add(new ViewLocator(provider));
+                var provider = _serviceProvider
+                    ?? throw new InvalidOperationException("IServiceProvider not injected");
 
-                // 平台对话框（选择器 / MsBox）与弹窗服务都在 DI 容器中注册
-                var serviceManager = provider.GetRequiredService<FileShareServiceManager>();
-                var dialogService = provider.GetRequiredService<IPlatformDialogService>();
-                var dialogs = provider.GetRequiredService<IDialogService>();
-                var syncContext = SynchronizationContext.Current ?? new SynchronizationContext();
+                // 先解析 RegionManager：它在构造时订阅 Region.HostRegistered，
+                // 必须早于 MainWindow 的 XAML 加载（区域附加属性在 InitializeComponent 时触发注册）
+                var regionManager = provider.GetRequiredService<IRegionManager>();
 
-                // 托盘服务必须在拿到 lifetime 之后创建；MainViewModel 需要它来恢复窗口
-                TrayService = new TrayService(desktop);
-
-                // 创建 MainViewModel
-                var viewModel = new MainViewModel(
-                    serviceManager,
-                    dialogService,
-                    dialogs,
-                    desktop,
-                    syncContext,
-                    provider.GetRequiredService<ILoggerFactory>(),
-                    provider.GetRequiredService<IAppSettingsService>(),
-                    provider.GetRequiredService<IThemeService>(),
-                    provider.GetRequiredService<IToastService>(),
-                    TrayService,
-                    provider.GetRequiredService<ILocalSendInteropHost>()
-                );
-                MainViewModel = viewModel;
+                // MainViewModel 由容器构造（原手工 new + 静态 App.MainViewModel 已移除）
+                var viewModel = provider.GetRequiredService<MainViewModel>();
+                var serviceManager = provider.GetRequiredService<IFileShareServiceManager>();
 
                 // 网页分享 / LocalSend 互通（按设置启动，失败只记日志）
                 try
@@ -157,34 +144,35 @@ namespace FileShare.Desktop
                 }
                 catch (Exception ex)
                 {
-                    provider.GetRequiredService<ILogger<App>>().LogWarning(ex, "启动网页分享 / LocalSend 互通失败");
+                    _logger.LogWarning(ex, "启动网页分享 / LocalSend 互通失败");
                 }
-
 
                 var mainWindow = provider.GetRequiredService<MainWindow>();
                 mainWindow.DataContext = viewModel;
-                desktop.MainWindow = mainWindow;              
+                desktop.MainWindow = mainWindow;
+
+                var trayService = provider.GetRequiredService<ITrayService>();
+
+                // 启动导航到主界面（区域内容初始为空，必须显式导航）
+                regionManager.RequestNavigate(NavigationPages.MainRegion, NavigationPages.Main);
 
                 desktop.ShutdownRequested += (s, e) =>
                 {
-                    TrayService?.IsExiting = true;
+                    trayService.IsExiting = true;
 
-#pragma warning disable CS4014 // 由于此调用不会等待，因此在调用完成前将继续执行当前方法
                     serviceManager.StopServicesAsync();
-#pragma warning restore CS4014 // 由于此调用不会等待，因此在调用完成前将继续执行当前方法
                 };
 
                 desktop.Exit += (s, e) =>
                 {
-                    TrayService?.Dispose();
-                    TrayService = null;
+                    trayService.Dispose();
                 };
 
                 // 冒烟自检：`FileShare.Desktop.exe --smoke` 会自动把三个页面各渲染一遍后退出，
                 // 用于在没有人工点击的环境里验证 XAML / 皮肤 / 依赖注入是否正常。
                 if (desktop.Args?.Contains("--smoke") == true)
                 {
-                    RunSmokeTest(desktop, viewModel);
+                    RunSmokeTest(desktop, viewModel, provider);
                 }
             }
 
@@ -210,9 +198,10 @@ namespace FileShare.Desktop
         /// → 恢复原主题 → 回到主界面，然后以 0 退出。
         /// 用于验证 AOT / TrimMode=full 下编译期皮肤实例与 JSON 配色包都能正常工作。
         /// </summary>
-        private static void RunSmokeTest(IClassicDesktopStyleApplicationLifetime desktop, MainViewModel viewModel)
+        private static void RunSmokeTest(
+            IClassicDesktopStyleApplicationLifetime desktop, MainViewModel viewModel, IServiceProvider provider)
         {
-            var themeService = App.ServiceProvider?.GetService<IThemeService>();
+            var themeService = provider.GetService<IThemeService>();
             var originalTheme = themeService?.Current ?? "win7";
             var step = 0;
             var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1200) };
@@ -240,23 +229,24 @@ namespace FileShare.Desktop
                         LogSkinState($"reload({loaded})");
                         break;
                     case 6:
-                        // 恢复用户原本的主题，避免冒烟自检改写偏好
+                        // 恢复用户原本的主题，避免冒烟自检改写偏好；经区域导航回到主界面
                         themeService?.Apply(originalTheme);
                         LogSkinState("Restored");
-                        viewModel.CurrentView = viewModel;
+                        provider.GetRequiredService<IRegionManager>()
+                            .RequestNavigate(NavigationPages.MainRegion, NavigationPages.Main);
                         break;
                     case 7:
                         // DialogService 弹窗自检：先开内容弹窗（UserControl + DialogWindow 宿主，
                         // 按名称 / 按 VM 类型打开），再开关于窗口并让它保持活跃，
                         // 供 case 8 截图 + case 9 验证失活收起
-                        var dialogs = App.ServiceProvider?.GetService<IDialogService>();
-                        dialogs?.Show(SendTextViewModel.DialogKeys.DialogName);
+                        var dialogs = provider.GetRequiredService<IDialogService>();
+                        dialogs.Show(SendTextViewModel.DialogKeys.DialogName);
                         // 非激活内容弹窗（ShowActivated=false 由 VM 配置宿主）：验证宿主配置路径
-                        dialogs?.Show<MessageReceivedViewModel>(new DialogParameters
+                        dialogs.Show<MessageReceivedViewModel>(new DialogParameters
                         {
                             [MessageReceivedViewModel.DialogKeys.Message] = "冒烟自检：文本消息内容弹窗"
                         });
-                        dialogs?.Show<AboutViewModel>();
+                        dialogs.Show<AboutViewModel>();
                         LogSkinState("about-shown");
                         break;
                     case 8:

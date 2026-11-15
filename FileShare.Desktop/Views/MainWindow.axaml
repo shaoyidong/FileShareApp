@@ -4,6 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:nav="using:FileShare.Desktop.Services.Navigation"
     xmlns:vm="using:FileShare.Desktop.ViewModels"
     Title="{Binding WindowTitle}"
     Width="1000"
@@ -18,6 +19,7 @@
     mc:Ignorable="d">
     <!--  外观（背景、字体、按钮/输入框样式）全部由 Themes/Win7.axaml、Themes/WinXP.axaml 提供，便于统一切换皮肤  -->
     <Grid>
-        <ContentControl Content="{Binding CurrentView}" />
+        <!--  区域导航宿主（仿 Prism 的 Region.RegionName）：内容由 RegionManager 按导航切换  -->
+        <ContentControl nav:Region.RegionName="MainRegion" />
     </Grid>
 </Window>

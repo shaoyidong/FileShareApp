@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.Input;
 using FileShare.Core.Models.Entities;
 using FileShare.Core.Services;
 using FileShare.Desktop.Services;
+using FileShare.Desktop.Services.Navigation;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -22,7 +23,7 @@ namespace FileShare.Desktop.ViewModels
     {
         private readonly IFileShareServiceManager _serviceManager;
         private readonly IPlatformDialogService _dialogService;
-        private readonly Action _backAction;
+        private readonly IRegionManager _regionManager;
         private readonly List<HistoryItemViewModel> _allHistory = new();
 
         [ObservableProperty]
@@ -47,11 +48,11 @@ namespace FileShare.Desktop.ViewModels
         /// <summary>当前筛选：null = 全部，Receive = 接收，Send = 发送。</summary>
         public FileShare.Core.Models.TransferDirection? DirectionFilter { get; private set; }
 
-        public HistoryViewModel(IFileShareServiceManager serviceManager, IPlatformDialogService dialogService, Action backAction)
+        public HistoryViewModel(IFileShareServiceManager serviceManager, IPlatformDialogService dialogService, IRegionManager regionManager)
         {
             _serviceManager = serviceManager;
             _dialogService = dialogService;
-            _backAction = backAction;
+            _regionManager = regionManager ?? throw new ArgumentNullException(nameof(regionManager));
             _receiveHistory = new ObservableCollection<HistoryItemViewModel>();
 
             BackCommand = new RelayCommand(Back);
@@ -117,7 +118,7 @@ namespace FileShare.Desktop.ViewModels
 
         private void Back()
         {
-            _backAction?.Invoke();
+            _regionManager.GoBack(NavigationPages.MainRegion);
         }
 
         private async Task DeleteHistoryAsync()

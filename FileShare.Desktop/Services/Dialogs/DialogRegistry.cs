@@ -67,7 +67,7 @@ public sealed class DialogRegistry
     private readonly Dictionary<string, DialogRegistration> _byName = new(StringComparer.Ordinal);
     private readonly Dictionary<Type, DialogRegistration> _byViewModelType = new();
     private readonly Dictionary<string, Func<IServiceProvider, Window>> _hostWindows = new(StringComparer.Ordinal);
-    private Func<IServiceProvider, Window>? _defaultHostFactory;
+    private readonly Func<IServiceProvider, Window>? _defaultHostFactory;
 
     /// <summary>MEDI 会把所有 AddDialog / AddDialogWindow 注册的单例注入进来。</summary>
     public DialogRegistry(

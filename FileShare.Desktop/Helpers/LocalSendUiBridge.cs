@@ -25,12 +25,14 @@ public sealed class LocalSendUiBridge : ILocalSendUiBridge
     private readonly IToastService _toastService;
     private readonly IAppSettingsService _settingsService;
     private readonly IDialogService _dialogs;
+    private readonly ITransferEventBus _transferEvents;
 
-    public LocalSendUiBridge(IToastService toastService, IAppSettingsService settingsService, IDialogService dialogs)
+    public LocalSendUiBridge(IToastService toastService, IAppSettingsService settingsService, IDialogService dialogs, ITransferEventBus transferEvents)
     {
         _toastService = toastService ?? throw new ArgumentNullException(nameof(toastService));
         _settingsService = settingsService ?? throw new ArgumentNullException(nameof(settingsService));
         _dialogs = dialogs ?? throw new ArgumentNullException(nameof(dialogs));
+        _transferEvents = transferEvents ?? throw new ArgumentNullException(nameof(transferEvents));
     }
 
     /// <inheritdoc />
@@ -70,7 +72,7 @@ public sealed class LocalSendUiBridge : ILocalSendUiBridge
 
     /// <inheritdoc />
     public void ReportTransfer(ExternalTransferUpdate update) =>
-        App.MainViewModel?.ReportExternalTransfer(update);
+        _transferEvents.PublishExternalTransfer(update);
 
     /// <inheritdoc />
     public async Task<ExternalReceiveDecision> ConfirmReceiveAsync(ExternalReceiveRequest request)
