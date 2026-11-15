@@ -35,7 +35,6 @@
 		<EmbeddedResource Include="Localization\packs\*.json" />
 		<!-- 内置主题配色包：发布后程序会复制到数据目录 themes/，用户可直接编辑或新增 -->
 		<EmbeddedResource Include="Themes\packs\*.json" />
-		<Content Include="Themes\packs\*.json" CopyToOutputDirectory="PreserveNewest" />
 	</ItemGroup>
 
 	<ItemGroup>
