@@ -168,11 +168,22 @@ public sealed class DialogService : IDialogService
             }
         };
 
-        // ViewModel 主动关闭：把结果带给 ShowDialog / 回调
+        // ViewModel 主动关闭：把结果带给 ShowDialog / 回调。
+        // Close 不能在输入事件处理链内同步执行：点击 / 回车触发 RequestClose 时同步关窗会立刻
+        // 销毁平台实现（TopLevel.HandleClosed → PlatformImpl = null），本次手势仍会投递进来的
+        // 原始输入事件（指针抬起、捕获释放等）找不到实现，Avalonia 就打
+        // "PlatformImpl is null, couldn't handle input." 警告（见 Avalonia TopLevel.HandleInput）。
+        // 用 Background 优先级排到待处理 Input 之后：先排空输入再关窗（同 AboutWindow 失活关闭的 Post 延迟套路）。
         vm.RequestClose += result =>
         {
             delivered = result;
-            window.Close(result);
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (window.IsVisible)
+                {
+                    window.Close(result);
+                }
+            }, DispatcherPriority.Background);
         };
 
         vm.OnDialogOpened(parameters ?? new DialogParameters());

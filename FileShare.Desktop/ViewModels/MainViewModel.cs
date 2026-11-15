@@ -1747,26 +1747,32 @@ namespace FileShare.Desktop.ViewModels
                     [ReceiveRequestViewModel.DialogKeys.SenderName] = senderName
                 }, new DialogOptions { Owner = owner });
 
-                if (result.Result != ButtonResult.Ok ||
-                    !result.Parameters.TryGetValue<ReceiveRequestResult?>(
-                        ReceiveRequestViewModel.DialogKeys.Result, out var choice) ||
-                    choice is null)
+                // 接受（Ok）与拒绝（No）都会携带选择结果，二者都要回传给传输服务；
+                // 之前只认 Ok，点「拒绝」走到早退分支，HandleTransferRequest 不会被调用，
+                // 发送端只能干等 REQUEST_TIMEOUT_MS（60 秒）后被动失败，表现为「拒绝没成功」。
+                if (result.Parameters.TryGetValue<ReceiveRequestResult?>(
+                        ReceiveRequestViewModel.DialogKeys.Result, out var choice) &&
+                    choice is not null)
                 {
+                    if (choice.AlwaysAccept)
+                    {
+                        // Update 会触发 Changed，由 OnSettingsChanged 统一刷新星标与排序
+                        _settingsService.Update(settings => settings.ToggleFavorite(info.SenderId));
+                    }
+
+                    var savePath = _settingsService.Current.SaveDirectory;
+                    _serviceManager.HandleTransferRequest(info.TransferId, choice.Accept, savePath);
+
+                    StatusMessage = choice.Accept
+                        ? Loc.F("已接受文件: {0}", info.FileName)
+                        : Loc.F("已拒绝文件: {0}", info.FileName);
                     return;
                 }
 
-                if (choice.AlwaysAccept)
-                {
-                    // Update 会触发 Changed，由 OnSettingsChanged 统一刷新星标与排序
-                    _settingsService.Update(settings => settings.ToggleFavorite(info.SenderId));
-                }
-
-                var savePath = _settingsService.Current.SaveDirectory;
-                _serviceManager.HandleTransferRequest(info.TransferId, choice.Accept, savePath);
-
-                StatusMessage = choice.Accept
-                    ? Loc.F("已接受文件: {0}", info.FileName)
-                    : Loc.F("已拒绝文件: {0}", info.FileName);
+                // X 关闭 / 结果缺失：立即按拒绝回传，不等传输服务超时
+                _serviceManager.HandleTransferRequest(info.TransferId, false);
+                StatusMessage = Loc.F("已拒绝文件: {0}", info.FileName);
+                _logger.LogInformation("确认窗未给出选择，按拒绝处理: {Id}", info.TransferId);
             }
             catch (Exception ex)
             {
