@@ -38,4 +38,19 @@ public interface IDatabaseService
     /// </summary>
     /// <returns></returns>
     Task<IEnumerable<ReceiveHistoryEntity>> GetAllReceiveHistoryAsync();
+
+    /// <summary>
+    /// 分页获取历史（键集分页，按 Id 倒序 = 新的在前）。
+    /// 历史记录可能积累成千上万条，列表页应增量加载而不是一次取全表。
+    /// </summary>
+    /// <param name="pageSize">每页条数。</param>
+    /// <param name="beforeId">游标：只取 Id 小于该值的记录；null 表示从最新开始。</param>
+    /// <param name="direction">方向筛选；null 表示全部。</param>
+    Task<IReadOnlyList<ReceiveHistoryEntity>> GetReceiveHistoryPageAsync(
+        int pageSize, int? beforeId, FileShare.Core.Models.TransferDirection? direction);
+
+    /// <summary>
+    /// 统计历史总条数（可按方向筛选），供列表页显示「共 N 条」。
+    /// </summary>
+    Task<int> CountReceiveHistoryAsync(FileShare.Core.Models.TransferDirection? direction);
 }

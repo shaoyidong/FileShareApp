@@ -374,6 +374,17 @@ public class FileShareServiceManager : IFileShareServiceManager
         return _databaseService.GetAllReceiveHistoryAsync();
     }
 
+    public Task<IReadOnlyList<ReceiveHistoryEntity>> GetReceiveHistoryPageAsync(
+        int pageSize, int? beforeId, TransferDirection? direction)
+    {
+        return _databaseService.GetReceiveHistoryPageAsync(pageSize, beforeId, direction);
+    }
+
+    public Task<int> CountReceiveHistoryAsync(TransferDirection? direction)
+    {
+        return _databaseService.CountReceiveHistoryAsync(direction);
+    }
+
     /// <summary>
     /// 直接按地址连接设备：支持 <c>192.168.1.20</c>、<c>192.168.1.20:5237</c>、<c>[fe80::1]:5237</c>、主机名。
     /// <para>这是跨子网、广播被防火墙拦截、或对端不响应广播时的兜底连接方式：

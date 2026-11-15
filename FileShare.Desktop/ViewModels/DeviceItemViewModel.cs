@@ -42,8 +42,8 @@ public partial class DeviceItemViewModel : ViewModelBase
                              + (Device.SupportsTls ? Loc.Get(" · 加密") : string.Empty);
     // LocalSend 身份由列表里的蓝色徽章单独标示，副标题不再重复「· LocalSend」
 
-    /// <summary>只有本项目自有协议的设备才能收藏。</summary>
-    public bool CanFavorite => !IsLocalSend;
+    /// <summary>收藏与协议无关：LocalSend 设备同样按 DeviceId 收藏（置顶 / 免确认接收均生效）。</summary>
+    public bool CanFavorite => true;
 
     [ObservableProperty]
     private bool _isFavorite;

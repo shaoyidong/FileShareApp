@@ -14,6 +14,139 @@
     x:DataType="vm:HistoryViewModel"
     mc:Ignorable="d">
 
+    <!--  历史卡片模板：被每行左右两个卡位共享（曾为 ItemsControl.ItemTemplate）  -->
+    <UserControl.Resources>
+        <DataTemplate x:Key="HistoryCardTemplate" x:DataType="vm:HistoryItemViewModel">
+            <Border Padding="6,5" Classes="card">
+                <Grid ColumnDefinitions="Auto,*,Auto">
+                    <!--  文件图标 / 缩略图  -->
+                    <Border
+                        Grid.Column="0"
+                        Width="36"
+                        Height="36"
+                        Margin="0,0,8,0"
+                        Background="#F4F4F4"
+                        BorderBrush="#DDDDDD"
+                        BorderThickness="1"
+                        CornerRadius="2">
+                        <ContentControl
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Content="{Binding}">
+                            <ContentControl.ContentTemplate>
+                                <DataTemplate>
+                                    <Grid>
+                                        <Image
+                                            Width="32"
+                                            Height="32"
+                                            IsVisible="{Binding, Converter={x:Static converters:FileTypeToImageSourceConverter.Instance},
+                                                                 ConverterParameter=isImage}"
+                                            Source="{Binding, Converter={x:Static converters:FileTypeToImageSourceConverter.Instance}, ConverterParameter=image}"
+                                            Stretch="Uniform" />
+                                        <TextBlock
+                                            HorizontalAlignment="Center"
+                                            VerticalAlignment="Center"
+                                            FontFamily="avares://FileShare.Desktop/Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons"
+                                            FontSize="22"
+                                            Foreground="#4A7EBB"
+                                            IsVisible="{Binding, Converter={x:Static converters:FileTypeToImageSourceConverter.Instance},
+                                                                 ConverterParameter=isIcon}"
+                                            Text="{Binding, Converter={x:Static converters:FileTypeToImageSourceConverter.Instance}, ConverterParameter=icon}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ContentControl.ContentTemplate>
+                        </ContentControl>
+                    </Border>
+
+                    <!--  文件信息：三行紧凑布局（方向/状态/原因一行，标题一行，时间/大小/对端一行）  -->
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <TextBlock
+                                Classes="muted"
+                                FontSize="11"
+                                Text="{Binding Direction, Converter={x:Static converters:TransferEnumToTextConverter.Instance}, ConverterParameter=direction}" />
+                            <TextBlock
+                                Classes="accent"
+                                FontSize="11"
+                                IsVisible="{Binding IsSuccess}"
+                                Text="{Binding Status, Converter={x:Static converters:TransferEnumToTextConverter.Instance}}" />
+                            <TextBlock
+                                Classes="danger"
+                                FontSize="11"
+                                IsVisible="{Binding !IsSuccess}"
+                                Text="{Binding Status, Converter={x:Static converters:TransferEnumToTextConverter.Instance}}" />
+                            <!--  失败/取消原因与状态同行  -->
+                            <TextBlock
+                                Classes="danger"
+                                FontSize="11"
+                                IsVisible="{Binding HasError}"
+                                Text="·" />
+                            <TextBlock
+                                Classes="danger"
+                                FontSize="11"
+                                IsVisible="{Binding HasError}"
+                                Text="{Binding ErrorMessage}"
+                                TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                        <!--  唯一主标题：文件=文件名，文本消息=正文预览  -->
+                        <TextBlock
+                            Margin="0,1,0,0"
+                            FontWeight="Bold"
+                            Text="{Binding DisplayTitle}"
+                            TextTrimming="CharacterEllipsis" />
+                        <TextBlock
+                            Margin="0,1,0,0"
+                            Classes="muted"
+                            FontSize="11"
+                            TextTrimming="CharacterEllipsis">
+                            <Run Text="{Binding CreatedAtLocal, StringFormat='yyyy/MM/dd HH:mm'}" />
+                            <Run Text="  ·  " />
+                            <Run Text="{Binding FileSize, Mode=OneWay, Converter={x:Static converters:FileSizeToFormatFileSizeConverter.Instance}}" />
+                            <Run Text="  ·  " />
+                            <Run Text="{Binding PeerDisplayName}" />
+                        </TextBlock>
+                    </StackPanel>
+
+                    <!--  更多操作  -->
+                    <Button
+                        Grid.Column="2"
+                        VerticalAlignment="Center"
+                        Classes="icon"
+                        Tag="{Binding}">
+                        <TextBlock
+                            Classes="iconGlyph"
+                            Text="{x:Static fonts:FluentUI.more_vertical_24_regular}" />
+                        <Button.Flyout>
+                            <MenuFlyout>
+                                <MenuItem
+                                    Command="{Binding $parent[UserControl].DataContext.OpenFileCommand}"
+                                    CommandParameter="{Binding $parent[Button].Tag}"
+                                    Header="{loc:Tr '打开文件'}"
+                                    IsEnabled="{Binding HasFile}"
+                                    IsVisible="{Binding IsFileRecord}" />
+                                <MenuItem
+                                    Command="{Binding $parent[UserControl].DataContext.ShowInFileManagerCommand}"
+                                    CommandParameter="{Binding $parent[Button].Tag}"
+                                    Header="{loc:Tr '在文件管理器中显示'}"
+                                    IsEnabled="{Binding HasFile}"
+                                    IsVisible="{Binding IsFileRecord}" />
+                                <MenuItem
+                                    Command="{Binding $parent[UserControl].DataContext.CopyMessageCommand}"
+                                    CommandParameter="{Binding $parent[Button].Tag}"
+                                    Header="{loc:Tr '复制全文'}"
+                                    IsVisible="{Binding IsMessage}" />
+                                <MenuItem
+                                    Command="{Binding $parent[UserControl].DataContext.DeleteSingleHistoryCommand}"
+                                    CommandParameter="{Binding $parent[Button].Tag}"
+                                    Header="{loc:Tr '从历史记录中删除'}" />
+                            </MenuFlyout>
+                        </Button.Flyout>
+                    </Button>
+                </Grid>
+            </Border>
+        </DataTemplate>
+    </UserControl.Resources>
+
     <Grid RowDefinitions="Auto,*,Auto">
 
         <!--  顶部工具栏  -->
@@ -76,150 +209,45 @@
             Padding="8"
             Classes="panel">
             <Grid>
-                <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-                    <ItemsControl ItemsSource="{Binding ReceiveHistory}">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <UniformGrid
-                                    VerticalAlignment="Top"
-                                    ColumnSpacing="6"
-                                    Columns="2"
-                                    RowSpacing="6" />
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Border Padding="6,5" Classes="card">
-                                    <Grid ColumnDefinitions="Auto,*,Auto">
-                                        <!--  文件图标 / 缩略图  -->
-                                        <Border
-                                            Grid.Column="0"
-                                            Width="36"
-                                            Height="36"
-                                            Margin="0,0,8,0"
-                                            Background="#F4F4F4"
-                                            BorderBrush="#DDDDDD"
-                                            BorderThickness="1"
-                                            CornerRadius="2">
-                                            <ContentControl
-                                                HorizontalAlignment="Center"
-                                                VerticalAlignment="Center"
-                                                Content="{Binding}">
-                                                <ContentControl.ContentTemplate>
-                                                    <DataTemplate>
-                                                        <Grid>
-                                                            <Image
-                                                                Width="32"
-                                                                Height="32"
-                                                                IsVisible="{Binding, Converter={x:Static converters:FileTypeToImageSourceConverter.Instance},
-                                                                                     ConverterParameter=isImage}"
-                                                                Source="{Binding, Converter={x:Static converters:FileTypeToImageSourceConverter.Instance}, ConverterParameter=image}"
-                                                                Stretch="Uniform" />
-                                                            <TextBlock
-                                                                HorizontalAlignment="Center"
-                                                                VerticalAlignment="Center"
-                                                                FontFamily="avares://FileShare.Desktop/Assets/Fonts/FluentSystemIcons-Regular.ttf#FluentSystemIcons"
-                                                                FontSize="22"
-                                                                Foreground="#4A7EBB"
-                                                                IsVisible="{Binding, Converter={x:Static converters:FileTypeToImageSourceConverter.Instance},
-                                                                                     ConverterParameter=isIcon}"
-                                                                Text="{Binding, Converter={x:Static converters:FileTypeToImageSourceConverter.Instance}, ConverterParameter=icon}" />
-                                                        </Grid>
-                                                    </DataTemplate>
-                                                </ContentControl.ContentTemplate>
-                                            </ContentControl>
-                                        </Border>
-
-                                        <!--  文件信息：三行紧凑布局（方向/状态/原因一行，标题一行，时间/大小/对端一行）  -->
-                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                            <StackPanel Orientation="Horizontal" Spacing="4">
-                                                <TextBlock
-                                                    Classes="muted"
-                                                    FontSize="11"
-                                                    Text="{Binding Direction, Converter={x:Static converters:TransferEnumToTextConverter.Instance}, ConverterParameter=direction}" />
-                                                <TextBlock
-                                                    Classes="accent"
-                                                    FontSize="11"
-                                                    IsVisible="{Binding IsSuccess}"
-                                                    Text="{Binding Status, Converter={x:Static converters:TransferEnumToTextConverter.Instance}}" />
-                                                <TextBlock
-                                                    Classes="danger"
-                                                    FontSize="11"
-                                                    IsVisible="{Binding !IsSuccess}"
-                                                    Text="{Binding Status, Converter={x:Static converters:TransferEnumToTextConverter.Instance}}" />
-                                                <!--  失败/取消原因与状态同行  -->
-                                                <TextBlock
-                                                    Classes="danger"
-                                                    FontSize="11"
-                                                    IsVisible="{Binding HasError}"
-                                                    Text="·" />
-                                                <TextBlock
-                                                    Classes="danger"
-                                                    FontSize="11"
-                                                    IsVisible="{Binding HasError}"
-                                                    Text="{Binding ErrorMessage}"
-                                                    TextTrimming="CharacterEllipsis" />
-                                            </StackPanel>
-                                            <!--  唯一主标题：文件=文件名，文本消息=正文预览  -->
-                                            <TextBlock
-                                                Margin="0,1,0,0"
-                                                FontWeight="Bold"
-                                                Text="{Binding DisplayTitle}"
-                                                TextTrimming="CharacterEllipsis" />
-                                            <TextBlock
-                                                Margin="0,1,0,0"
-                                                Classes="muted"
-                                                FontSize="11"
-                                                TextTrimming="CharacterEllipsis">
-                                                <Run Text="{Binding CreatedAtLocal, StringFormat='yyyy/MM/dd HH:mm'}" />
-                                                <Run Text="  ·  " />
-                                                <Run Text="{Binding FileSize, Mode=OneWay, Converter={x:Static converters:FileSizeToFormatFileSizeConverter.Instance}}" />
-                                                <Run Text="  ·  " />
-                                                <Run Text="{Binding PeerDisplayName}" />
-                                            </TextBlock>
-                                        </StackPanel>
-
-                                        <!--  更多操作  -->
-                                        <Button
-                                            Grid.Column="2"
-                                            VerticalAlignment="Center"
-                                            Classes="icon"
-                                            Tag="{Binding}">
-                                            <TextBlock
-                                                Classes="iconGlyph"
-                                                Text="{x:Static fonts:FluentUI.more_vertical_24_regular}" />
-                                            <Button.Flyout>
-                                                <MenuFlyout>
-                                                    <MenuItem
-                                                        Command="{Binding $parent[UserControl].DataContext.OpenFileCommand}"
-                                                        CommandParameter="{Binding $parent[Button].Tag}"
-                                                        Header="{loc:Tr '打开文件'}"
-                                                        IsEnabled="{Binding HasFile}"
-                                                        IsVisible="{Binding IsFileRecord}" />
-                                                    <MenuItem
-                                                        Command="{Binding $parent[UserControl].DataContext.ShowInFileManagerCommand}"
-                                                        CommandParameter="{Binding $parent[Button].Tag}"
-                                                        Header="{loc:Tr '在文件管理器中显示'}"
-                                                        IsEnabled="{Binding HasFile}"
-                                                        IsVisible="{Binding IsFileRecord}" />
-                                                    <MenuItem
-                                                        Command="{Binding $parent[UserControl].DataContext.CopyMessageCommand}"
-                                                        CommandParameter="{Binding $parent[Button].Tag}"
-                                                        Header="{loc:Tr '复制全文'}"
-                                                        IsVisible="{Binding IsMessage}" />
-                                                    <MenuItem
-                                                        Command="{Binding $parent[UserControl].DataContext.DeleteSingleHistoryCommand}"
-                                                        CommandParameter="{Binding $parent[Button].Tag}"
-                                                        Header="{loc:Tr '从历史记录中删除'}" />
-                                                </MenuFlyout>
-                                            </Button.Flyout>
-                                        </Button>
-                                    </Grid>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </ScrollViewer>
+                <!--  虚拟化列表：每行左右两个卡位（保留原双列外观）。
+                      注意 ScrollViewer 必须在 ItemsControl 模板内作为 ItemsPresenter 的直接父级，
+                      VirtualizingStackPanel 才能拿到视口实现虚拟化；直接用外层 ScrollViewer 包
+                      ItemsControl 会把无限高度传给面板，所有行都会被实例化。  -->
+                <ItemsControl ItemsSource="{Binding ReceiveHistoryRows}">
+                    <ItemsControl.Template>
+                        <ControlTemplate>
+                            <ScrollViewer
+                                HorizontalScrollBarVisibility="Disabled"
+                                VerticalScrollBarVisibility="Auto"
+                                ScrollChanged="OnHistoryScrollChanged">
+                                <ItemsPresenter />
+                            </ScrollViewer>
+                        </ControlTemplate>
+                    </ItemsControl.Template>
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <VirtualizingStackPanel />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:HistoryRowViewModel">
+                            <Grid
+                                Margin="0,0,0,6"
+                                ColumnDefinitions="*,6,*">
+                                <ContentControl
+                                    Grid.Column="0"
+                                    HorizontalContentAlignment="Stretch"
+                                    Content="{Binding Left}"
+                                    ContentTemplate="{StaticResource HistoryCardTemplate}" />
+                                <ContentControl
+                                    Grid.Column="2"
+                                    HorizontalContentAlignment="Stretch"
+                                    Content="{Binding Right}"
+                                    ContentTemplate="{StaticResource HistoryCardTemplate}" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
 
                 <!--  加载遮罩  -->
                 <Border Background="#FFFFFF" IsVisible="{Binding IsLoading}" Opacity="0.75">

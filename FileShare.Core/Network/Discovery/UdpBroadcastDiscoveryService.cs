@@ -83,8 +83,12 @@ public class UdpBroadcastDiscoveryService : IDeviceDiscoveryService
     /// </summary>
     public async Task<bool> StartAsync()
     {
-        if (_isRunning || _isDisposed)
+        if (_isDisposed)
             return false;
+
+        // 幂等：已在运行视为成功，避免上层 CompositeDiscoveryService 把"重复启动"误判为失败
+        if (_isRunning)
+            return true;
 
         try
         {
@@ -385,7 +389,6 @@ public class UdpBroadcastDiscoveryService : IDeviceDiscoveryService
     private void CleanupExpiredResponseTimes()
     {
         var now = DateTime.Now;
-        var cutoff = now.AddSeconds(-DeviceExpirySeconds);
 
         // 清理过期的回应时间记录
         foreach (var kvp in _lastResponseTimes)
