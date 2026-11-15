@@ -21,7 +21,7 @@ namespace FileShare.Desktop.ViewModels
     public partial class HistoryViewModel : ViewModelBase
     {
         private readonly IFileShareServiceManager _serviceManager;
-        private readonly IDialogService _dialogService;
+        private readonly IPlatformDialogService _dialogService;
         private readonly Action _backAction;
         private readonly List<HistoryItemViewModel> _allHistory = new();
 
@@ -47,7 +47,7 @@ namespace FileShare.Desktop.ViewModels
         /// <summary>当前筛选：null = 全部，Receive = 接收，Send = 发送。</summary>
         public FileShare.Core.Models.TransferDirection? DirectionFilter { get; private set; }
 
-        public HistoryViewModel(IFileShareServiceManager serviceManager, IDialogService dialogService, Action backAction)
+        public HistoryViewModel(IFileShareServiceManager serviceManager, IPlatformDialogService dialogService, Action backAction)
         {
             _serviceManager = serviceManager;
             _dialogService = dialogService;

@@ -35,7 +35,7 @@
                 <Button
                     Grid.Column="1"
                     Classes="icon"
-                    Click="OnCloseClick"
+                    Command="{Binding CloseCommand}"
                     ToolTip.Tip="{loc:Tr '关闭'}">
                     <TextBlock
                         Classes="iconGlyph"

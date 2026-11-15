@@ -36,7 +36,8 @@ public class LocalSendDeviceListTests
 
         var viewModel = new MainViewModel(
             serviceManager.Object,
-            new Mock<IDialogService>().Object,
+            new Mock<IPlatformDialogService>().Object,
+            new Mock<FileShare.Desktop.Services.Dialogs.IDialogService>().Object,
             new Mock<Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime>().Object,
             new ImmediateSynchronizationContext(),
             NullLoggerFactory.Instance,

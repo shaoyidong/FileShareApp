@@ -7,9 +7,10 @@ using System.Threading.Tasks;
 namespace FileShare.Desktop.Services
 {
     /// <summary>
-    /// 对话框服务接口，用于抽象各种对话框功能，便于单元测试
+    /// 平台对话框服务接口：操作系统提供的文件/文件夹选择器与消息框
+    /// （区别于 Services.Dialogs.IDialogService 的自研注册弹窗），便于单元测试
     /// </summary>
-    public interface IDialogService
+    public interface IPlatformDialogService
     {
         /// <summary>
         /// 打开文件选择对话框

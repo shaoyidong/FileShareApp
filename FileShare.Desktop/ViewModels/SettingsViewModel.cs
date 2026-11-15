@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 using FileShare.Core.Models;
 using FileShare.Core.Services;
 using FileShare.Desktop.Services;
+using FileShare.Desktop.Services.Dialogs;
 using FileShare.LocalSend;
 using System;
 using System.Collections.Generic;
@@ -21,7 +22,8 @@ public partial class SettingsViewModel : ViewModelBase
 {
     private readonly IAppSettingsService _settingsService;
     private readonly IThemeService _themeService;
-    private readonly IDialogService _dialogService;
+    private readonly IPlatformDialogService _dialogService;
+    private readonly IDialogService _dialogs;
     private readonly Action _backAction;
 
     [ObservableProperty]
@@ -158,12 +160,14 @@ public partial class SettingsViewModel : ViewModelBase
     public SettingsViewModel(
         IAppSettingsService settingsService,
         IThemeService themeService,
-        IDialogService dialogService,
+        IPlatformDialogService dialogService,
+        IDialogService dialogs,
         Action backAction)
     {
         _settingsService = settingsService ?? throw new ArgumentNullException(nameof(settingsService));
         _themeService = themeService ?? throw new ArgumentNullException(nameof(themeService));
         _dialogService = dialogService ?? throw new ArgumentNullException(nameof(dialogService));
+        _dialogs = dialogs ?? throw new ArgumentNullException(nameof(dialogs));
         _backAction = backAction ?? throw new ArgumentNullException(nameof(backAction));
 
         BackCommand = new RelayCommand(Back);
@@ -177,7 +181,7 @@ public partial class SettingsViewModel : ViewModelBase
         RefreshWebShareCommand = new RelayCommand(RefreshWebShareStatus);
         ReloadLanguagesCommand = new RelayCommand(ReloadLanguages);
         ReloadThemesCommand = new RelayCommand(ReloadThemes);
-        ShowAboutCommand = new RelayCommand(Views.AboutWindow.ShowAbout);
+        ShowAboutCommand = new RelayCommand(() => _dialogs.Show<AboutViewModel>());
 
         RefreshLanguageOptions();
         RefreshThemeOptions();

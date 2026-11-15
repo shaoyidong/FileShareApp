@@ -38,11 +38,17 @@ public static class Loc
     /// <summary>
     /// 从外部语言包文件初始化。新增语言只需在「数据目录 / i18n」放入一个符合格式的 JSON 文件，
     /// 不需要改代码、也不需要重新编译（AOT 发布后同样适用）。
+    /// <para>与懒加载 <see cref="EnsurePacksLoaded"/> 共用 <see cref="_initGate"/> 互斥：
+    /// 否则并发场景下懒初始化会在显式 Initialize 之后把加载目录指回默认数据目录，
+    /// 后续 ReloadPacks 读错目录（测试套件并行时实际发生过）。</para>
     /// </summary>
     public static void Initialize(string dataDirectory)
     {
-        LanguagePackLoader.Initialize(dataDirectory);
-        _filePacksLoaded = true;
+        lock (_initGate)
+        {
+            LanguagePackLoader.Initialize(dataDirectory);
+            _filePacksLoaded = true;
+        }
     }
 
     /// <summary>懒加载语言包文件（测试 / 设计器等未显式调用 Initialize 的场景也能正常工作）。</summary>

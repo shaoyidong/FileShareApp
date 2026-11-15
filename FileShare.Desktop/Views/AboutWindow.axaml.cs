@@ -1,13 +1,11 @@
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Threading;
 using FileShare.Desktop.ViewModels;
 using System;
-using System.Linq;
 
 namespace FileShare.Desktop.Views;
 
@@ -32,7 +30,12 @@ public partial class AboutWindow : Window
     public AboutWindow()
     {
         InitializeComponent();
-        DataContext = new AboutViewModel();
+        if (Design.IsDesignMode)
+        {
+            // 预览器里没有 DialogService，直接建 VM 便于设计时绑定
+            DataContext = new AboutViewModel();
+        }
+
         TiltRoot.RenderTransform = _tiltTransform;
 
         Activated += (_, _) => _activatedOnce = true;
@@ -55,31 +58,6 @@ public partial class AboutWindow : Window
         };
         PointerExited += (_, _) => StartTiltReset();
     }
-
-    /// <summary>打开关于窗口（已打开则激活现有窗口）。</summary>
-    public static void ShowAbout()
-    {
-        var desktop = Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime;
-        var existing = desktop?.Windows.OfType<AboutWindow>().FirstOrDefault();
-        if (existing is not null)
-        {
-            existing.Activate();
-            return;
-        }
-
-        var window = new AboutWindow();
-        var owner = desktop?.MainWindow;
-        if (owner is { IsVisible: true })
-        {
-            window.Show(owner);
-        }
-        else
-        {
-            window.Show();
-        }
-    }
-
-    private void OnCloseClick(object? sender, RoutedEventArgs e) => CloseIfNotClosing();
 
     private void CloseIfNotClosing()
     {

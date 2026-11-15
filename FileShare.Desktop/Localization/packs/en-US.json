@@ -60,6 +60,7 @@
     "地址格式不正确": "Invalid address format",
     "等待中": "Pending",
     "递归发送整个文件夹，并在对端保留目录结构": "Send a whole folder recursively, keeping the directory structure",
+    "6 秒后自动关闭": "Closes in 6s",
     "点击查看（6 秒后自动关闭）": "Click to view (closes in 6s)",
     "读取失败": "Failed to read",
     "读取文件夹失败: {0}": "Failed to read folder: {0}",
