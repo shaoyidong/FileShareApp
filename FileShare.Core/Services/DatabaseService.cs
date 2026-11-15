@@ -208,11 +208,51 @@ public class DatabaseService : IDatabaseService
     {
         using var connection = new SqliteConnection(_connectionString);
         await connection.OpenAsync();
-        
+
         const string selectSql = "SELECT * FROM ReceiveHistory ORDER BY CreatedAt DESC;";
         var result = await connection.QueryAsync<ReceiveHistoryEntity>(selectSql);
-        
+
         return result;
-    }   
-    
+    }
+
+    /// <summary>
+    /// 键集分页取历史：Id 自增与 CreatedAt 递增一致，按 Id 倒序即新的在前，
+    /// 游标（beforeId）走索引区间扫描，深分页也不会像 OFFSET 那样越来越慢。
+    /// </summary>
+    public async Task<IReadOnlyList<ReceiveHistoryEntity>> GetReceiveHistoryPageAsync(
+        int pageSize, int? beforeId, FileShare.Core.Models.TransferDirection? direction)
+    {
+        using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync();
+
+        var sql = "SELECT * FROM ReceiveHistory WHERE (@BeforeId IS NULL OR Id < @BeforeId)";
+        if (direction is not null)
+        {
+            sql += " AND Direction = @Direction";
+        }
+
+        sql += " ORDER BY Id DESC LIMIT @PageSize;";
+        var result = await connection.QueryAsync<ReceiveHistoryEntity>(
+            sql, new { BeforeId = beforeId, Direction = direction, PageSize = pageSize });
+
+        return result.ToList();
+    }
+
+    /// <summary>
+    /// 统计历史总条数（可按方向筛选）。
+    /// </summary>
+    public async Task<int> CountReceiveHistoryAsync(FileShare.Core.Models.TransferDirection? direction)
+    {
+        using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync();
+
+        var sql = "SELECT COUNT(*) FROM ReceiveHistory";
+        if (direction is not null)
+        {
+            sql += " WHERE Direction = @Direction";
+        }
+
+        var count = await connection.ExecuteScalarAsync<int>(sql, new { Direction = direction });
+        return count;
+    }
 }

@@ -12,8 +12,10 @@
 #      severity 关闭；纯空白重排会产生大范围无意义 diff，故保留现状。
 # ============================================================================
 [*.cs]
+dotnet_diagnostic.IDE0017.severity = none
 dotnet_diagnostic.IDE0028.severity = none
 dotnet_diagnostic.IDE0057.severity = none
+dotnet_diagnostic.IDE0074.severity = none
 dotnet_diagnostic.IDE0290.severity = none
 dotnet_diagnostic.IDE0300.severity = none
 dotnet_diagnostic.IDE0301.severity = none

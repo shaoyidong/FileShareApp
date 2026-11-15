@@ -16,13 +16,16 @@ namespace FileShare.Core.Network
         private const int MaxDiscoveredDevices = 200;
         private readonly ILogger<CompositeDiscoveryService> _logger;
         private readonly ConcurrentDictionary<string, DeviceInfo> _devices = new();
-        private readonly IDeviceDiscoveryService? _udpMulticast;
-        private readonly IDeviceDiscoveryService? _udpBroadcast;
+        private readonly UdpMulticastDiscoveryService? _udpMulticast;
+        private readonly UdpBroadcastDiscoveryService? _udpBroadcast;
         private readonly DiscoveryOptions _discoveryOptions;
-        private readonly IDeviceDiscoveryService? _mdns;
+        private readonly MdnsService? _mdns;
         private readonly DeviceInfo _localDevice;
 
         private CancellationTokenSource? _cts;
+        // 串行化 Start/Stop：_isRunning 要等子服务全部启动完才置位，并发调用会双双通过守卫，
+        // 第二次的子服务结果还会覆盖共享的成功标记（表现为"Failed to start any discovery service"误报）
+        private readonly SemaphoreSlim _startStopLock = new(1, 1);
         private bool _mdnsSuccess;
         private bool _udpMulticastSuccess;
         private bool _udpBroadcastSuccess;
@@ -203,82 +206,98 @@ namespace FileShare.Core.Network
 
         public async Task<bool> StartAsync()
         {
-            if (_isRunning)
+            await _startStopLock.WaitAsync().ConfigureAwait(false);
+            try
             {
-                _logger.LogInformation("Discovery service is already running.");
+                if (_isRunning)
+                {
+                    _logger.LogInformation("Discovery service is already running.");
+                    return _isRunning;
+                }
+
+                if(_disposedValue)
+                {
+                    _logger.LogWarning("Discovery service has been disposed.");
+                    return false;
+                }
+
+                // 支持 Stop → Start 的循环（例如用户在设置里重启服务），重新挂上子服务事件
+                Subscribe();
+
+                var startTasks = new List<Task>();
+                if (_mdns is not null)
+                {
+                    startTasks.Add(Task.Run(async () => _mdnsSuccess = await _mdns.StartAsync()));
+                }
+                if (_udpMulticast is not null)
+                {
+                    startTasks.Add(Task.Run(async () => _udpMulticastSuccess = await _udpMulticast.StartAsync()));
+                }
+                if (_udpBroadcast is not null)
+                {
+                    startTasks.Add(Task.Run(async () => _udpBroadcastSuccess = await _udpBroadcast.StartAsync()));
+                }
+
+                if (startTasks.Count > 0)
+                {
+                    await Task.WhenAll(startTasks);
+                }
+
+                _cts = new CancellationTokenSource();
+                _ = Task.Run(() => CleanupExpiredDevicesLoopAsync(_cts.Token));
+
+                _isRunning = _mdnsSuccess || _udpMulticastSuccess || _udpBroadcastSuccess;
+
+                if (_isRunning)
+                {
+                    _logger.LogInformation("Discovery service started successfully.");
+
+                }
+                else
+                {
+                    _logger.LogWarning("Failed to start any discovery service.");
+                }
+
                 return _isRunning;
             }
-              
-            if(_disposedValue)
+            finally
             {
-                _logger.LogWarning("Discovery service has been disposed.");
-                return false;
-            }                
-
-            // 支持 Stop → Start 的循环（例如用户在设置里重启服务），重新挂上子服务事件
-            Subscribe();
-
-            var startTasks = new List<Task>();
-            if (_mdns is not null)
-            {
-                startTasks.Add(Task.Run(async () => _mdnsSuccess = await _mdns.StartAsync()));
+                _startStopLock.Release();
             }
-            if (_udpMulticast is not null)
-            {
-                startTasks.Add(Task.Run(async () => _udpMulticastSuccess = await _udpMulticast.StartAsync()));
-            }
-            if (_udpBroadcast is not null)
-            {
-                startTasks.Add(Task.Run(async () => _udpBroadcastSuccess = await _udpBroadcast.StartAsync()));
-            }
-
-            if (startTasks.Count > 0)
-            {
-                await Task.WhenAll(startTasks);
-            }
-
-            _cts = new CancellationTokenSource();
-            _ = Task.Run(() => CleanupExpiredDevicesLoopAsync(_cts.Token));
-
-            _isRunning = _mdnsSuccess || _udpMulticastSuccess || _udpBroadcastSuccess;
-
-            if (_isRunning)
-            {
-                _logger.LogInformation("Discovery service started successfully.");
-
-            }
-            else
-            {
-                _logger.LogWarning("Failed to start any discovery service.");
-            }
-
-            return _isRunning;
         }
 
         public async Task StopAsync()
         {
-            if (!_isRunning || _disposedValue) 
-                return;
+            await _startStopLock.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                if (!_isRunning || _disposedValue)
+                    return;
 
-            Stop();
+                Stop();
 
-            var stopTasks = new List<Task>();
-            if (_mdns is not null)
-            {
-                stopTasks.Add(_mdns.StopAsync());
-            }
-            if (_udpMulticast is not null)
-            {
-                stopTasks.Add(_udpMulticast.StopAsync());
-            }
-            if (_udpBroadcast is not null)
-            {
-                stopTasks.Add(_udpBroadcast.StopAsync());
-            }
+                var stopTasks = new List<Task>();
+                if (_mdns is not null)
+                {
+                    stopTasks.Add(_mdns.StopAsync());
+                }
+                if (_udpMulticast is not null)
+                {
+                    stopTasks.Add(_udpMulticast.StopAsync());
+                }
+                if (_udpBroadcast is not null)
+                {
+                    stopTasks.Add(_udpBroadcast.StopAsync());
+                }
 
-            if (stopTasks.Count > 0)
+                if (stopTasks.Count > 0)
+                {
+                    await Task.WhenAll(stopTasks);
+                }
+            }
+            finally
             {
-                await Task.WhenAll(stopTasks);
+                _startStopLock.Release();
             }
         }
 
@@ -376,12 +395,13 @@ namespace FileShare.Core.Network
             {
                 if (disposing)
                 {
-                    // TODO: 释放托管状态(托管对象)    
+                    // TODO: 释放托管状态(托管状态)
                     Stop();
                     _mdns?.Dispose();
                     _udpMulticast?.Dispose();
                     _udpBroadcast?.Dispose();
                     _cts?.Dispose();
+                    _startStopLock.Dispose();
                 }
 
                 // TODO: 释放未托管的资源(未托管的对象)并重写终结器

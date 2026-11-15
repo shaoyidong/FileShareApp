@@ -21,20 +21,38 @@ namespace FileShare.Desktop.ViewModels
 {
     public partial class HistoryViewModel : ViewModelBase
     {
+        /// <summary>每页加载条数：首屏只取一页，滚动到底部再续载，避免万条级记录一次拉全表。</summary>
+        private const int PageSize = 100;
+
         private readonly IFileShareServiceManager _serviceManager;
         private readonly IPlatformDialogService _dialogService;
         private readonly IRegionManager _regionManager;
-        private readonly List<HistoryItemViewModel> _allHistory = new();
+
+        /// <summary>当前筛选下已加载的记录（新的在前）。行的双列布局由 <see cref="RebuildRows"/> 拼装。</summary>
+        private readonly List<HistoryItemViewModel> _loadedItems = new();
+
+        /// <summary>键集分页游标：已加载记录中最小的 Id，下一页取 Id 小于它的记录。</summary>
+        private int? _lastLoadedId;
+
+        /// <summary>当前筛选下的总条数（COUNT 查询，供「共 N 条」与是否还有下一页）。</summary>
+        private int _totalCount;
+
+        /// <summary>串行化首屏 / 续载：滚动事件会高频触发 LoadMoreCommand。</summary>
+        private bool _isBusy;
+
+        /// <summary>显示用行集合：每行左右两个卡位，保留原双列卡片外观。</summary>
+        [ObservableProperty]
+        public partial ObservableCollection<HistoryRowViewModel> ReceiveHistoryRows { get; set; }
 
         [ObservableProperty]
-        private ObservableCollection<HistoryItemViewModel> _receiveHistory;
+        public partial bool IsLoading { get; set; }
 
         [ObservableProperty]
-        private bool _isLoading;
+        public partial string FilterText { get; set; } = Loc.Get("全部");
 
+        /// <summary>是否还有未加载的更早记录。</summary>
         [ObservableProperty]
-        private string _filterText = Loc.Get("全部");
-
+        public partial bool HasMore { get; set; }
         public ICommand BackCommand { get; }
         public ICommand DeleteHistoryCommand { get; }
         public ICommand OpenFileCommand { get; }
@@ -44,16 +62,22 @@ namespace FileShare.Desktop.ViewModels
         public ICommand ShowAllCommand { get; }
         public ICommand ShowReceivedCommand { get; }
         public ICommand ShowSentCommand { get; }
+        public ICommand LoadMoreCommand { get; }
 
         /// <summary>当前筛选：null = 全部，Receive = 接收，Send = 发送。</summary>
         public FileShare.Core.Models.TransferDirection? DirectionFilter { get; private set; }
+
+        /// <summary>条数文案：未加载完时附上已加载数，提示还能继续往下滚。</summary>
+        public string HistoryCountText => _totalCount > 0 && _loadedItems.Count < _totalCount
+            ? Loc.F("共 {0} 条（已加载 {1}）", _totalCount, _loadedItems.Count)
+            : Loc.F("共 {0} 条", _loadedItems.Count);
 
         public HistoryViewModel(IFileShareServiceManager serviceManager, IPlatformDialogService dialogService, IRegionManager regionManager)
         {
             _serviceManager = serviceManager;
             _dialogService = dialogService;
             _regionManager = regionManager ?? throw new ArgumentNullException(nameof(regionManager));
-            _receiveHistory = new ObservableCollection<HistoryItemViewModel>();
+            ReceiveHistoryRows = new ObservableCollection<HistoryRowViewModel>();
 
             BackCommand = new RelayCommand(Back);
             DeleteHistoryCommand = new RelayCommand(async () => await DeleteHistoryAsync());
@@ -64,47 +88,44 @@ namespace FileShare.Desktop.ViewModels
             ShowAllCommand = new RelayCommand(() => ApplyFilter(null, Loc.Get("全部")));
             ShowReceivedCommand = new RelayCommand(() => ApplyFilter(FileShare.Core.Models.TransferDirection.Receive, Loc.Get("仅接收")));
             ShowSentCommand = new RelayCommand(() => ApplyFilter(FileShare.Core.Models.TransferDirection.Send, Loc.Get("仅发送")));
+            LoadMoreCommand = new AsyncRelayCommand(LoadMoreAsync);
 
             _ = LoadHistoryAsync();
         }
 
         /// <summary>
-        /// 切换筛选条件并重建显示列表。
+        /// 切换筛选条件并按新条件重新查询（重置游标与总数）。
         /// </summary>
         private void ApplyFilter(FileShare.Core.Models.TransferDirection? direction, string filterText)
         {
             DirectionFilter = direction;
             FilterText = filterText;
-            RefreshView();
+            _ = LoadHistoryAsync();
         }
 
-        private void RefreshView()
+        private void Back()
         {
-            ReceiveHistory.Clear();
-
-            foreach (var item in _allHistory)
-            {
-                if (DirectionFilter is null || item.Direction == DirectionFilter)
-                {
-                    ReceiveHistory.Add(item);
-                }
-            }
-
-            OnPropertyChanged(nameof(HistoryCountText));
+            _regionManager.GoBack(NavigationPages.MainRegion);
         }
 
-        /// <summary>当前显示的记录条数。</summary>
-        public string HistoryCountText => Loc.F("共 {0} 条", ReceiveHistory.Count);
-
+        /// <summary>首屏：取第一页 + 总条数，重置游标。</summary>
         private async Task LoadHistoryAsync()
         {
+            if (_isBusy)
+            {
+                return;
+            }
+
+            _isBusy = true;
             IsLoading = true;
             try
             {
-                var history = await _serviceManager.GetAllReceiveHistoryAsync();
-                _allHistory.Clear();
-                _allHistory.AddRange(history.Select(HistoryItemViewModel.FromEntity));
-                RefreshView();
+                var page = await _serviceManager.GetReceiveHistoryPageAsync(PageSize, null, DirectionFilter);
+                _totalCount = await _serviceManager.CountReceiveHistoryAsync(DirectionFilter);
+
+                _loadedItems.Clear();
+                _loadedItems.AddRange(page.Select(HistoryItemViewModel.FromEntity));
+                RebuildRows();
             }
             catch (Exception ex)
             {
@@ -113,12 +134,57 @@ namespace FileShare.Desktop.ViewModels
             finally
             {
                 IsLoading = false;
+                _isBusy = false;
             }
         }
 
-        private void Back()
+        /// <summary>续载：从游标继续取下一页并追加到列表（滚动接近底部时由视图触发）。</summary>
+        private async Task LoadMoreAsync()
         {
-            _regionManager.GoBack(NavigationPages.MainRegion);
+            if (_isBusy || IsLoading || !HasMore)
+            {
+                return;
+            }
+
+            _isBusy = true;
+            try
+            {
+                var page = await _serviceManager.GetReceiveHistoryPageAsync(PageSize, _lastLoadedId, DirectionFilter);
+                if (page.Count > 0)
+                {
+                    _loadedItems.AddRange(page.Select(HistoryItemViewModel.FromEntity));
+                    RebuildRows();
+                }
+            }
+            catch (Exception ex)
+            {
+                await _dialogService.ShowInfomationDialogAsync(Loc.Get("错误"), Loc.F("加载历史记录失败: {0}", ex.Message));
+            }
+            finally
+            {
+                _isBusy = false;
+            }
+        }
+
+        /// <summary>
+        /// 把已加载记录按两个一行拼装进显示集合，并同步游标 / 是否还有更多。
+        /// 拼装是纯指针操作（复用现有 VM），万条级也只有几千行，重建开销可忽略。
+        /// </summary>
+        private void RebuildRows()
+        {
+            _lastLoadedId = _loadedItems.Count > 0 ? _loadedItems[^1].Id : null;
+            HasMore = _loadedItems.Count < _totalCount;
+
+            var rows = new ObservableCollection<HistoryRowViewModel>();
+            for (var i = 0; i < _loadedItems.Count; i += 2)
+            {
+                rows.Add(new HistoryRowViewModel(
+                    _loadedItems[i],
+                    i + 1 < _loadedItems.Count ? _loadedItems[i + 1] : null));
+            }
+
+            ReceiveHistoryRows = rows;
+            OnPropertyChanged(nameof(HistoryCountText));
         }
 
         private async Task DeleteHistoryAsync()
@@ -129,7 +195,9 @@ namespace FileShare.Desktop.ViewModels
                 try
                 {
                     await _serviceManager.ClearReceiveHistoryAsync();
-                    ReceiveHistory.Clear();
+                    _loadedItems.Clear();
+                    _totalCount = 0;
+                    RebuildRows();
                 }
                 catch (Exception ex)
                 {
@@ -197,7 +265,7 @@ namespace FileShare.Desktop.ViewModels
         }
 
         private void ShowInFileManager(HistoryItemViewModel? history)
-        {           
+        {
             if (history == null) return;
 
             var fullname = history.ResolveLocalFile();
@@ -256,7 +324,9 @@ namespace FileShare.Desktop.ViewModels
             try
             {
                 await _serviceManager.DeleteSingleReceiveHistoryAsync(history.Id);
-                ReceiveHistory.Remove(history);
+                _loadedItems.Remove(history);
+                _totalCount--;
+                RebuildRows();
             }
             catch (Exception ex)
             {

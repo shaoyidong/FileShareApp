@@ -192,4 +192,18 @@ public interface IFileShareServiceManager : IDisposable, IAsyncDisposable
     /// </summary>
     /// <returns></returns>
     Task<IEnumerable<ReceiveHistoryEntity>> GetAllReceiveHistoryAsync();
+
+    /// <summary>
+    /// 分页获取历史（键集分页，按 Id 倒序）：历史页增量加载用，避免一次取全表。
+    /// </summary>
+    /// <param name="pageSize">每页条数。</param>
+    /// <param name="beforeId">游标：只取 Id 小于该值的记录；null 表示从最新开始。</param>
+    /// <param name="direction">方向筛选；null 表示全部。</param>
+    Task<IReadOnlyList<ReceiveHistoryEntity>> GetReceiveHistoryPageAsync(
+        int pageSize, int? beforeId, FileShare.Core.Models.TransferDirection? direction);
+
+    /// <summary>
+    /// 统计历史总条数（可按方向筛选）。
+    /// </summary>
+    Task<int> CountReceiveHistoryAsync(FileShare.Core.Models.TransferDirection? direction);
 }

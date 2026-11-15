@@ -1807,7 +1807,7 @@ namespace FileShare.Desktop.ViewModels
                 SupportsTls = peer.Protocol == ProtocolTypeV2.Https
             };
 
-            Devices.Add(new DeviceItemViewModel(device, isFavorite: false, isLocalSend: true));
+            Devices.Add(new DeviceItemViewModel(device, isFavorite: _settingsService.Current.IsFavorite(peer.DeviceId), isLocalSend: true));
             _logger.LogInformation("已把 LocalSend 设备加入列表: {Name} ({Ip}:{Port}, 类型={Type})", peer.Alias, peer.IpAddress, peer.Port, device.DeviceType);
         }
 

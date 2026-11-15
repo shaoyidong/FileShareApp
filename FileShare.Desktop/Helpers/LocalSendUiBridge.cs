@@ -45,25 +45,38 @@ public sealed class LocalSendUiBridge : ILocalSendUiBridge
         Dispatcher.UIThread.Post(() =>
         {
             var owner = (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow;
-            var window = _dialogs.Show<MessageReceivedViewModel>(new DialogParameters
+            if (owner is null)
             {
-                [MessageReceivedViewModel.DialogKeys.SenderName] = senderName,
-                [MessageReceivedViewModel.DialogKeys.Message] = message
-            });
-
-            // 主窗口在托盘 / 后台时补一条通知（前台时 ToastService 会自动抑制），
-            // 点击通知把消息窗口唤到前面
-            if (owner is not null)
-            {
-                _toastService.Show(
-                    Loc.Get("收到文本消息"),
-                    message.Length > 60 ? message[..60] + "…" : message,
-                    () => Dispatcher.UIThread.Post(() =>
-                    {
-                        ActivateWindow(owner);
-                        window?.Activate();
-                    }));
+                return;
             }
+
+            void ShowMessageCard()
+            {
+                _dialogs.Show<MessageReceivedViewModel>(new DialogParameters
+                {
+                    [MessageReceivedViewModel.DialogKeys.SenderName] = senderName,
+                    [MessageReceivedViewModel.DialogKeys.Message] = message
+                });
+            }
+
+            var isActive = owner.IsActive;
+
+            // 前台：直接弹消息卡片（前台时 ToastService 自动抑制通知）
+            if (isActive)
+            {
+                ShowMessageCard();
+                return;
+            }
+
+            // 托盘 / 后台：只弹通知；点击通知才显示主窗口并弹消息卡片（与文件接收确认同策略）
+            _toastService.Show(
+                Loc.Get("收到文本消息"),
+                message.Length > 60 ? message[..60] + "…" : message,
+                () => Dispatcher.UIThread.Post(() =>
+                {
+                    ActivateWindow(owner);
+                    ShowMessageCard();
+                }));
         });
     }
 

@@ -11,7 +11,7 @@ using System.Threading;
 namespace FileShare.Desktop.Tests.ViewModels;
 
 /// <summary>
-/// LocalSend 设备并入设备列表：发现事件 → 列表项（蓝色徽章标记、不可收藏）。
+/// LocalSend 设备并入设备列表：发现事件 → 列表项（蓝色徽章标记、可收藏）。
 /// </summary>
 public class LocalSendDeviceListTests
 {
@@ -67,7 +67,8 @@ public class LocalSendDeviceListTests
         // 「双 LocalSend 徽章」优化：副标题不再重复文字，身份由蓝色徽章（IsLocalSend）标示
         Assert.DoesNotContain("LocalSend", item.MetaText);
         Assert.Contains("192.168.1.20", item.MetaText);
-        Assert.False(item.CanFavorite);
+        // 收藏与协议无关：LocalSend 设备同样显示星标（收藏后可免确认接收，见 ConfirmReceiveAsync）
+        Assert.True(item.CanFavorite);
 
         // 重复发现不应产生重复项
         host.Raise(h => h.PeerDiscovered += null, peer);

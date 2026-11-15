@@ -355,7 +355,11 @@ namespace FileShare.Desktop
             services.AddTransient<MainWindow>();            
 
             // 区域导航（仿 Prism RegionManager）：显式泛型注册页面，无反射扫描，NativeAOT 安全
-            services.AddPageForNavigation<MainView, MainViewModel>(NavigationPages.Main);
+            // 主界面 VM 必须传工厂走单例：否则扩展方法会把 MainViewModel 重注册为 Transient，
+            // App 启动（MainWindow.DataContext）与区域导航各解析出一个实例，服务被启动两遍、
+            // 事件重复订阅，从历史/设置返回主界面还会再造新实例重启服务（日志双打的根因）
+            services.AddPageForNavigation<MainView, MainViewModel>(
+                NavigationPages.Main, sp => sp.GetRequiredService<MainViewModel>());
             services.AddPageForNavigation<HistoryView, HistoryViewModel>(NavigationPages.History);
             services.AddPageForNavigation<SettingsView, SettingsViewModel>(NavigationPages.Settings);
 

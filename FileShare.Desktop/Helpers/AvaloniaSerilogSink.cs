@@ -44,6 +44,10 @@ internal sealed class AvaloniaSerilogSink : ILogSink
 
     public void Log(LogEventLevel level, string area, object? source, string messageTemplate, params object?[] propertyValues)
     {
+        if (level == LogEventLevel.Warning)
+        {
+            ;
+        }
         var log = _logger.ForContext("Area", area);
         if (source != null)
         {

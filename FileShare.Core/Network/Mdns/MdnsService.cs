@@ -60,8 +60,12 @@ public sealed class MdnsService : IDeviceDiscoveryService
     /// <summary>启动 mDNS 服务：加入多播组，发送初始公告 + 查询，开启监听</summary>
     public async Task<bool> StartAsync()
     {
-        if (_isRunning || _isDisposed) 
+        if (_isDisposed)
             return false;
+
+        // 幂等：已在运行视为成功，避免上层 CompositeDiscoveryService 把"重复启动"误判为失败
+        if (_isRunning)
+            return true;
 
         try
         {
@@ -258,8 +262,8 @@ public sealed class MdnsService : IDeviceDiscoveryService
                      rr.Name.EndsWith("." + ServiceType, StringComparison.OrdinalIgnoreCase))
             {
                 instanceName = rr.Name;
-                var srv = MdnsCodec.ParseSrv(rr.Rdata);
-                port = srv.Port;
+                var (Priority, Weight, Port, Target) = MdnsCodec.ParseSrv(rr.Rdata);
+                port = Port;
             }
             else if (rr.Type == MdnsCodec.TypeTXT &&
                      rr.Name.EndsWith("." + ServiceType, StringComparison.OrdinalIgnoreCase))
