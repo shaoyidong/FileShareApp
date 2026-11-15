@@ -15,6 +15,12 @@ public interface IThemeService
     /// <summary>所有可用主题（按注册顺序，用于生成设置页下拉框）。</summary>
     IReadOnlyList<ThemePack> AvailableThemes { get; }
 
+    /// <summary>
+    /// 在 <c>App.Initialize</c> 中、窗口创建之前调用：摘除静态声明残留的皮肤实例，
+    /// 随后 <see cref="Apply"/> 会添加唯一一套生效皮肤。
+    /// </summary>
+    void InitializeFromApplication(Avalonia.Application application);
+
     /// <summary>应用指定主题；id 未注册时回退到内置 win7。</summary>
     void Apply(string themeId);
 

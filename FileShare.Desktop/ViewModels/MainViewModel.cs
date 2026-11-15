@@ -12,6 +12,7 @@ using FileShare.Core.Network.Discovery;
 using FileShare.Core.Services;
 using FileShare.Desktop.Services;
 using FileShare.Desktop.Services.Dialogs;
+using FileShare.Desktop.Services.Navigation;
 using FileShare.Desktop.Theming;
 using FileShare.LocalSend;
 using FileShare.Desktop.Views;
@@ -28,17 +29,19 @@ using System.Windows.Input;
 using FileShare.Desktop.Localization;
 using LocalSend.Core.Http.DtoV2;
 using FileShare.Desktop.Helpers;
+using Avalonia;
 
 namespace FileShare.Desktop.ViewModels
 {
     /// <summary>
     /// 主界面视图模型：设备发现、手动 IP 直连、网段扫描、文件发送与传输任务管理。
     /// </summary>
-    public partial class MainViewModel : ViewModelBase
+    public partial class MainViewModel : ViewModelBase, INavigationAware
     {
         private readonly IFileShareServiceManager _serviceManager;
         private readonly IPlatformDialogService _dialogService;
         private readonly IDialogService _dialogs;
+        private readonly IRegionManager _regionManager;
         private readonly IAppSettingsService _settingsService;
         private readonly IThemeService _themeService;
         private readonly IToastService? _toastService;
@@ -80,9 +83,6 @@ namespace FileShare.Desktop.ViewModels
 
         [ObservableProperty]
         public partial string StatusMessage { get; set; } = Loc.Get("准备就绪");
-
-        [ObservableProperty]
-        public partial object? CurrentView { get; set; }
 
         private DeviceItemViewModel? _selectedItem;
 
@@ -185,6 +185,8 @@ namespace FileShare.Desktop.ViewModels
             IFileShareServiceManager serviceManager,
             IPlatformDialogService dialogService,
             IDialogService dialogs,
+            IRegionManager regionManager,
+            ITransferEventBus transferEvents,
             IClassicDesktopStyleApplicationLifetime? appLifetime,
             SynchronizationContext uiContext,
             ILoggerFactory? loggerFactory = null,
@@ -197,6 +199,7 @@ namespace FileShare.Desktop.ViewModels
             _serviceManager = serviceManager ?? throw new ArgumentNullException(nameof(serviceManager));
             _dialogService = dialogService ?? throw new ArgumentNullException(nameof(dialogService));
             _dialogs = dialogs ?? throw new ArgumentNullException(nameof(dialogs));
+            _regionManager = regionManager ?? throw new ArgumentNullException(nameof(regionManager));
             _appLifetime = appLifetime;
             _uiContext = uiContext ?? SynchronizationContext.Current ?? new SynchronizationContext();
             _logger = loggerFactory?.CreateLogger<MainViewModel>() ?? NullLogger<MainViewModel>.Instance;
@@ -249,6 +252,9 @@ namespace FileShare.Desktop.ViewModels
             _serviceManager.OnFirstUseTrusted += OnFirstUseTrusted;
             _serviceManager.OnFingerprintMismatch += OnFingerprintMismatch;
 
+            // 外部协议（LocalSend / 网页分享）的传输更新经事件总线进入传输列表
+            transferEvents.ExternalTransferReceived += ReportExternalTransfer;
+
             RefreshDevicesCommand = new RelayCommand(async () => await RefreshDevicesAsync());
             SendFileCommand = new RelayCommand(async () => await SendFileAsync());
             SendFilesCommand = new RelayCommand(async () => await SendFilesAsync());
@@ -274,23 +280,26 @@ namespace FileShare.Desktop.ViewModels
             RemoveQueueItemCommand = new RelayCommand<SendQueueItemViewModel>(RemoveQueueItem);
             ClearQueueCommand = new RelayCommand(ClearQueue);
 
-            CurrentView = this;
-
             _ = InitializeAsync();
+        }
+
+        /// <summary>导航进入主界面时刷新本机摘要（设置页改设备名后返回即更新）。</summary>
+        public bool IsNavigationTarget(NavigationContext context) => true;
+
+        public void OnNavigatedTo(NavigationContext context) => RefreshLocalDeviceSummary();
+
+        public void OnNavigatedFrom(NavigationContext context)
+        {
         }
 
         private void ShowHistory()
         {
-            CurrentView = new HistoryViewModel(_serviceManager, _dialogService, () => CurrentView = this);
+            _regionManager.RequestNavigate(NavigationPages.MainRegion, NavigationPages.History);
         }
 
         private void ShowSettings()
         {
-            CurrentView = new SettingsViewModel(_settingsService, _themeService, _dialogService, _dialogs, () =>
-            {
-                CurrentView = this;
-                RefreshLocalDeviceSummary();
-            });
+            _regionManager.RequestNavigate(NavigationPages.MainRegion, NavigationPages.Settings);
         }
 
         private void RefreshLocalDeviceSummary()
@@ -1865,10 +1874,16 @@ namespace FileShare.Desktop.ViewModels
                     LocalDeviceSummary = Loc.F("本机：{0} · {1}:{2}", LocalDevice.DeviceName, LocalDevice.IpAddress, LocalDevice.Port);
                 }
 
-                // 清空再设回，强制 ViewLocator 重新创建视图，从而重新求值所有 {loc:Tr}
-                var previous = CurrentView;
-                CurrentView = null;
-                CurrentView = previous is SettingsViewModel ? this : previous ?? this;
+                // 语言切换后重建当前页视图（保留 VM），{loc:Tr} 重新求值；
+                // 设置页保留原有行为：切语言后回主界面
+                if (_regionManager.GetActivePage(NavigationPages.MainRegion) == NavigationPages.Settings)
+                {
+                    _regionManager.RequestNavigate(NavigationPages.MainRegion, NavigationPages.Main);
+                }
+                else
+                {
+                    _regionManager.Refresh(NavigationPages.MainRegion);
+                }
 
                 StatusMessage = Loc.Get("语言已切换");
             });
@@ -2113,6 +2128,8 @@ namespace FileShare.Desktop.ViewModels
         public IReadOnlyList<ThemePack> AvailableThemes => Array.Empty<ThemePack>();
 
         public void Apply(string themeId) => Current = string.IsNullOrWhiteSpace(themeId) ? ThemePack.DefaultId : themeId;
+
+        public void InitializeFromApplication(Application application) { }      
 
         public int ReloadThemes() => 0;
     }

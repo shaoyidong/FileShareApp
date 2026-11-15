@@ -4,6 +4,7 @@ using FileShare.Core.Models;
 using FileShare.Core.Services;
 using FileShare.Desktop.Services;
 using FileShare.Desktop.Services.Dialogs;
+using FileShare.Desktop.Services.Navigation;
 using FileShare.LocalSend;
 using System;
 using System.Collections.Generic;
@@ -24,7 +25,12 @@ public partial class SettingsViewModel : ViewModelBase
     private readonly IThemeService _themeService;
     private readonly IPlatformDialogService _dialogService;
     private readonly IDialogService _dialogs;
-    private readonly Action _backAction;
+    private readonly IRegionManager _regionManager;
+    private readonly IFileShareServiceManager _serviceManager;
+    private readonly ILocalSendInteropHost _localSendHost;
+    private readonly IUiPreferencesService _uiPreferences;
+    private readonly IWebShareHost _webShareHost;
+    private readonly ITrayService _trayService;
 
     [ObservableProperty]
     public partial string DeviceName { get; set; } = string.Empty;
@@ -162,13 +168,23 @@ public partial class SettingsViewModel : ViewModelBase
         IThemeService themeService,
         IPlatformDialogService dialogService,
         IDialogService dialogs,
-        Action backAction)
+        IRegionManager regionManager,
+        IFileShareServiceManager serviceManager,
+        ILocalSendInteropHost localSendHost,
+        IUiPreferencesService uiPreferences,
+        IWebShareHost webShareHost,
+        ITrayService trayService)
     {
         _settingsService = settingsService ?? throw new ArgumentNullException(nameof(settingsService));
         _themeService = themeService ?? throw new ArgumentNullException(nameof(themeService));
         _dialogService = dialogService ?? throw new ArgumentNullException(nameof(dialogService));
         _dialogs = dialogs ?? throw new ArgumentNullException(nameof(dialogs));
-        _backAction = backAction ?? throw new ArgumentNullException(nameof(backAction));
+        _regionManager = regionManager ?? throw new ArgumentNullException(nameof(regionManager));
+        _serviceManager = serviceManager ?? throw new ArgumentNullException(nameof(serviceManager));
+        _localSendHost = localSendHost ?? throw new ArgumentNullException(nameof(localSendHost));
+        _uiPreferences = uiPreferences ?? throw new ArgumentNullException(nameof(uiPreferences));
+        _webShareHost = webShareHost ?? throw new ArgumentNullException(nameof(webShareHost));
+        _trayService = trayService ?? throw new ArgumentNullException(nameof(trayService));
 
         BackCommand = new RelayCommand(Back);
         SaveCommand = new RelayCommand(Save);
@@ -230,7 +246,7 @@ public partial class SettingsViewModel : ViewModelBase
         SelectedDeviceType = FindOption(settings.DeviceType);
         OverwriteExisting = settings.ConflictPolicy == FileNameConflictPolicy.Overwrite;
         // 托盘行为属于桌面端 UI 偏好，不再从 Core 的 AppSettings 读取
-        var uiPreferences = ResolveUiPreferences()?.Current;
+        var uiPreferences = _uiPreferences.Current;
         MinimizeToTray = uiPreferences?.MinimizeToTray ?? false;
         CloseToTray = uiPreferences?.CloseToTray ?? false;
         EnableMdns = settings.EnableMdns;
@@ -370,21 +386,17 @@ public partial class SettingsViewModel : ViewModelBase
 
 
         // LocalSend 互通：与网页分享同一时机立即应用
-        ResolveLocalSendHost()?.Apply();
+        _localSendHost.Apply();
         RefreshLocalSendStatus();
         // 托盘开关即时生效，其余（设备名/端口/加密/发现方式/同名策略）在重启后生效
-        App.TrayService?.SetVisible(MinimizeToTray || CloseToTray);
-        var uiPreferences = ResolveUiPreferences();
-        if (uiPreferences is not null)
-        {
-            uiPreferences.SetTrayPreferences(MinimizeToTray, CloseToTray);
-            uiPreferences.SetLanguage(SelectedLanguageCode);
+        _trayService.SetVisible(MinimizeToTray || CloseToTray);
+        _uiPreferences.SetTrayPreferences(MinimizeToTray, CloseToTray);
+        _uiPreferences.SetLanguage(SelectedLanguageCode);
 
-            // 立即生效（会触发 Loc.LanguageChanged → 主界面重建）
-            Loc.SetLanguage(SelectedLanguageCode);
-        }
+        // 立即生效（会触发 Loc.LanguageChanged → 区域导航重建当前页）
+        Loc.SetLanguage(SelectedLanguageCode);
 
-        ResolveWebShareHost()?.Apply();
+        _webShareHost.Apply();
         RefreshWebShareStatus();
 
         StatusMessage = Loc.Get("设置已保存。设备名称 / 端口 / 加密 / 发现方式 / 同名策略需要重启生效。");
@@ -407,53 +419,29 @@ public partial class SettingsViewModel : ViewModelBase
         SaveDirectory = uri.IsAbsoluteUri && uri.Scheme == Uri.UriSchemeFile ? uri.LocalPath : uri.OriginalString;
     }
 
-        /// <summary>LocalSend 互通宿主。</summary>
-        private static ILocalSendInteropHost? ResolveLocalSendHost()
-        {
-            return App.ServiceProvider?.GetService(typeof(ILocalSendInteropHost)) as ILocalSendInteropHost;
-        }
-
         private void RefreshLocalSendStatus()
         {
-            var host = ResolveLocalSendHost();
-            LocalSendEndpointText = host is { IsRunning: true, Endpoint: { } endpoint }
+            LocalSendEndpointText = _localSendHost is { IsRunning: true, Endpoint: { } endpoint }
                 ? endpoint
                 : Loc.Get("（未启用）");
-        }
-        /// <summary>桌面端 UI 偏好服务（皮肤 / 语言）。</summary>
-        private static IUiPreferencesService? ResolveUiPreferences()
-        {
-            return App.ServiceProvider?.GetService(typeof(IUiPreferencesService)) as IUiPreferencesService;
-        }
-        /// <summary>获取网页分享宿主（未注册时返回 null，设计器/测试环境安全）。</summary>
-        private static IWebShareHost? ResolveWebShareHost()
-        {
-            return App.ServiceProvider?.GetService(typeof(IWebShareHost)) as IWebShareHost;
         }
 
         private void RefreshWebShareStatus()
         {
-            var host = ResolveWebShareHost();
-            if (host is null || string.IsNullOrEmpty(host.Url))
+            if (string.IsNullOrEmpty(_webShareHost.Url))
             {
                 WebShareUrlText = Loc.Get("（未启用）");
                 WebSharePinText = "-";
                 return;
             }
 
-            WebShareUrlText = host.Url;
-            WebSharePinText = host.Pin;
+            WebShareUrlText = _webShareHost.Url;
+            WebSharePinText = _webShareHost.Pin;
         }
 
         private void RegenerateWebSharePin()
         {
-            var host = ResolveWebShareHost();
-            if (host is null)
-            {
-                return;
-            }
-
-            var pin = host.RegeneratePin();
+            var pin = _webShareHost.RegeneratePin();
             RefreshWebShareStatus();
             StatusMessage = WebShareEnabled
                 ? Loc.F("已生成新 PIN：{0}（旧链接立即失效）", pin)
@@ -462,8 +450,7 @@ public partial class SettingsViewModel : ViewModelBase
 
         private void OpenWebShare()
         {
-            var host = ResolveWebShareHost();
-            var url = host?.Url;
+            var url = _webShareHost.Url;
             if (string.IsNullOrEmpty(url))
             {
                 StatusMessage = Loc.Get("网页分享未启用，请先勾选「启用网页分享」并保存");
@@ -488,18 +475,7 @@ public partial class SettingsViewModel : ViewModelBase
     {
         try
         {
-            var trusted = App.ServiceProvider is null
-                ? null
-                : (App.ServiceProvider.GetService(typeof(FileShare.Core.Services.FileShareServiceManager))
-                    as FileShare.Core.Services.FileShareServiceManager);
-
-            if (trusted is null)
-            {
-                TrustedDeviceCountText = Loc.Get("未启用加密");
-                return;
-            }
-
-            var count = trusted.GetTrustedDevices().Count;
+            var count = _serviceManager.GetTrustedDevices().Count;
             TrustedDeviceCountText = count == 0 ? Loc.Get("暂无信任记录") : Loc.F("已信任 {0} 台设备", count);
         }
         catch (Exception)
@@ -519,11 +495,7 @@ public partial class SettingsViewModel : ViewModelBase
             return;
         }
 
-        if (App.ServiceProvider?.GetService(typeof(FileShare.Core.Services.FileShareServiceManager))
-            is FileShare.Core.Services.FileShareServiceManager manager)
-        {
-            manager.ClearTrustedDevices();
-        }
+        _serviceManager.ClearTrustedDevices();
 
         RefreshTrustedDevices();
         StatusMessage = Loc.Get("已清除全部信任记录。");
@@ -531,6 +503,6 @@ public partial class SettingsViewModel : ViewModelBase
 
     private void Back()
     {
-        _backAction();
+        _regionManager.GoBack(NavigationPages.MainRegion);
     }
 }

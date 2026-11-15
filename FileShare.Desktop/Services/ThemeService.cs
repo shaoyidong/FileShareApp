@@ -36,11 +36,7 @@ public sealed class ThemeService : IThemeService
 
     /// <inheritdoc />
     public IReadOnlyList<ThemePack> AvailableThemes => ThemePackLoader.Packs;
-
-    /// <summary>
-    /// 在 <c>App.Initialize</c> 中、窗口创建之前调用：摘除静态声明残留的皮肤实例，
-    /// 随后 <see cref="Apply"/> 会添加唯一一套生效皮肤。
-    /// </summary>
+    
     public void InitializeFromApplication(Application application)
     {
         if (application is null)

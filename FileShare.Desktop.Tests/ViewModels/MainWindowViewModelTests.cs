@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.Threading;
 using FileShare.Desktop.Services;
 using FileShare.Desktop.Services.Dialogs;
+using FileShare.Desktop.Services.Navigation;
 using Avalonia.Platform.Storage;
 
 namespace FileShare.Desktop.Tests.ViewModels
@@ -18,6 +19,8 @@ namespace FileShare.Desktop.Tests.ViewModels
         private readonly Mock<IClassicDesktopStyleApplicationLifetime> _mockAppLifetime;
         private readonly Mock<IPlatformDialogService> _mockDialogService;
         private readonly Mock<IDialogService> _mockDialogs;
+        private readonly Mock<IRegionManager> _mockRegionManager;
+        private readonly Mock<ITransferEventBus> _mockTransferEvents;
         private readonly Mock<IAppSettingsService> _mockSettingsService;
         private readonly Mock<IThemeService> _mockThemeService;
         private readonly MainViewModel _viewModel;
@@ -34,6 +37,8 @@ namespace FileShare.Desktop.Tests.ViewModels
             _mockAppLifetime = new Mock<IClassicDesktopStyleApplicationLifetime>();
             _mockDialogService = new Mock<IPlatformDialogService>();
             _mockDialogs = new Mock<IDialogService>();
+            _mockRegionManager = new Mock<IRegionManager>();
+            _mockTransferEvents = new Mock<ITransferEventBus>();
             _mockSettingsService = new Mock<IAppSettingsService>();
             _mockThemeService = new Mock<IThemeService>();
             _mockSettingsService.SetupGet(s => s.Current).Returns(new AppSettings());
@@ -54,6 +59,8 @@ namespace FileShare.Desktop.Tests.ViewModels
                 _mockServiceManager.Object,
                 _mockDialogService.Object,
                 _mockDialogs.Object,
+                _mockRegionManager.Object,
+                _mockTransferEvents.Object,
                 _mockAppLifetime.Object,
                 _testSynchronizationContext,
                 Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance,

@@ -8,6 +8,7 @@ using FileShare.Core.Services;
 using FileShare.Desktop.Helpers;
 using FileShare.Desktop.Services;
 using FileShare.Desktop.Services.Dialogs;
+using FileShare.Desktop.Services.Navigation;
 using FileShare.LocalSend;
 using FileShare.Desktop.ViewModels;
 using FileShare.Desktop.Views;
@@ -21,6 +22,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Threading;
 
 namespace FileShare.Desktop
 {
@@ -36,12 +38,11 @@ namespace FileShare.Desktop
             ExtractAndLoadNativeLibs();
 
             var serviceProvider = BuildServiceProvider();
-            App.ServiceProvider = serviceProvider;           
             var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
-            // 第二步：再构建Avalonia应用
+            // 第二步：再构建Avalonia应用（容器通过 App 构造函数注入，不经静态变量）
             try
             {
-                BuildAvaloniaApp()
+                BuildAvaloniaApp(serviceProvider)
                     .StartWithClassicDesktopLifetime(args);
             }
             catch (Exception ex)
@@ -56,7 +57,7 @@ namespace FileShare.Desktop
         }
 
         // Avalonia configuration, don't remove; also used by visual designer.
-        public static AppBuilder BuildAvaloniaApp()
+        public static AppBuilder BuildAvaloniaApp(IServiceProvider? serviceProvider = null)
         {
             var fontOptions = new FontManagerOptions();
 
@@ -84,7 +85,7 @@ namespace FileShare.Desktop
                 // 其他操作系统的默认配置
                 fontOptions.DefaultFamilyName = "PingFang SC"; // macOS 上的苹方
             }
-            var builder = AppBuilder.Configure<App>()
+            var builder = AppBuilder.Configure(() => new App(serviceProvider))
                 .UsePlatformDetect()
                 .With(fontOptions);
 
@@ -275,7 +276,8 @@ namespace FileShare.Desktop
             services.AddSingleton<ILocalSendUiBridge>(sp => new LocalSendUiBridge(
                 sp.GetRequiredService<IToastService>(),
                 sp.GetRequiredService<IAppSettingsService>(),
-                sp.GetRequiredService<IDialogService>()));
+                sp.GetRequiredService<IDialogService>(),
+                sp.GetRequiredService<ITransferEventBus>()));
             services.AddSingleton<IAppUiBridge>(sp => sp.GetRequiredService<ILocalSendUiBridge>());
 
             // 通知卡片（懒解析 lifetime：解析发生在 App 初始化之后）
@@ -304,14 +306,29 @@ namespace FileShare.Desktop
             // 平台服务
             services.AddSingleton<IPlatformDirectoryService, DesktopDirectoryService>();
 
-            // 平台对话框（选择器 / MsBox）：lifetime 在 App 初始化时才就绪，
-            // 工厂在解析时（App.OnFrameworkInitializationCompleted）才取
-            services.AddSingleton<IPlatformDialogService>(_ => new PlatformDialogService(
+            // Avalonia 生命周期与 UI 线程上下文（App 初始化时才就绪，工厂在解析时才取）
+            services.AddSingleton<IClassicDesktopStyleApplicationLifetime>(sp =>
                 (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)
-                ?? throw new InvalidOperationException("ApplicationLifetime 未初始化")));
+                ?? throw new InvalidOperationException("ApplicationLifetime 未初始化"));
+            services.AddSingleton<SynchronizationContext>(sp =>
+                SynchronizationContext.Current ?? new SynchronizationContext());
+
+            // 平台对话框（选择器 / MsBox）
+            services.AddSingleton<IPlatformDialogService>(sp => new PlatformDialogService(
+                sp.GetRequiredService<IClassicDesktopStyleApplicationLifetime>()));
+
+            // 托盘（MainViewModel / MainWindow / SettingsViewModel 都注入使用）
+            services.AddSingleton<ITrayService>(sp => new TrayService(
+                sp.GetRequiredService<IClassicDesktopStyleApplicationLifetime>()));
+
+            // 外部协议传输事件总线（解耦协议桥与主 ViewModel，避免循环依赖）
+            services.AddSingleton<ITransferEventBus, TransferEventBus>();
+
+            // 主 ViewModel：完全由容器构造（原 App 手工 new + 静态 App.MainViewModel 已移除）
+            services.AddSingleton<MainViewModel>();
 
             // 核心服务管理器
-            services.AddSingleton<FileShareServiceManager>(sp =>
+            services.AddSingleton<IFileShareServiceManager>(sp =>
             {
                 var dirSvc = sp.GetRequiredService<IPlatformDirectoryService>();
                 var dbSvc = sp.GetRequiredService<IDatabaseService>();                
@@ -332,14 +349,15 @@ namespace FileShare.Desktop
                     loggerFactory: fac,
                     conflictPolicy: settings.ConflictPolicy,
                     uploadLimitKBps: settings.UploadLimitKBps);
-            });
+            });            
 
-            // 注册视图（以便 ViewLocator 能从 DI 解析）
-            services.AddTransient<MainWindow>(sp =>
-                new MainWindow(sp.GetRequiredService<IUiPreferencesService>()));
-            services.AddTransient<MainView>();
-            services.AddTransient<HistoryView>();
-            services.AddTransient<SettingsView>();
+            // 注册视图（供区域导航 / ViewLocator 类机制从 DI 解析）
+            services.AddTransient<MainWindow>();            
+
+            // 区域导航（仿 Prism RegionManager）：显式泛型注册页面，无反射扫描，NativeAOT 安全
+            services.AddPageForNavigation<MainView, MainViewModel>(NavigationPages.Main);
+            services.AddPageForNavigation<HistoryView, HistoryViewModel>(NavigationPages.History);
+            services.AddPageForNavigation<SettingsView, SettingsViewModel>(NavigationPages.Settings);
 
             // 弹窗（仿 Prism DialogService）：显式泛型注册，无反射扫描，NativeAOT 安全
             // SendText / ReceiveRequest / MessageReceived 是 UserControl 内容弹窗
