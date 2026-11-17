@@ -2,6 +2,8 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using System;
 using System.IO;
 
+using Shyd.Prism.Mvvm;
+
 namespace FileShare.Desktop.ViewModels;
 
 /// <summary>

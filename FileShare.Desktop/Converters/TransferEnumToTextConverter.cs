@@ -1,6 +1,6 @@
 ﻿using Avalonia.Data.Converters;
 using FileShare.Core.Models;
-using FileShare.Desktop.Localization;
+using Shyd.Prism.Localization;
 using System;
 using System.Globalization;
 
@@ -15,7 +15,7 @@ public sealed class TransferEnumToTextConverter : IValueConverter
 
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
-        var purpose = parameter as string ?? "status";
+        _ = parameter as string ?? "status";
 
         if (value is TransferDirection direction)
         {

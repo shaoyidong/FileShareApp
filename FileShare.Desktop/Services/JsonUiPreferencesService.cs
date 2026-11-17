@@ -6,7 +6,7 @@ using System.Text.Json.Serialization;
 using System.Threading;
 using FileShare.Core.Services;
 using FileShare.Desktop.Helpers;
-using FileShare.Desktop.Localization;
+using Shyd.Prism.Localization;
 using FileShare.Desktop.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;

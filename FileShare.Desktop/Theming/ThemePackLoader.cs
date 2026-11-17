@@ -10,7 +10,7 @@ using FileShare.Core.Services;
 namespace FileShare.Desktop.Theming;
 
 /// <summary>
-/// 主题配色包加载器（镜像 <see cref="FileShare.Desktop.Localization.LanguagePackLoader"/> 的 i18n 模式）。
+/// 主题配色包加载器（镜像 <see cref="Shyd.Prism.Localization.LanguagePackLoader"/> 的 i18n 模式）。
 /// <para>
 /// 主题存放于「应用数据目录 / themes / *.json」，内置主题以嵌入资源随程序发布，
 /// 首次启动复制到数据目录且不覆盖用户已修改过的文件。发布后直接改 JSON 改颜色，

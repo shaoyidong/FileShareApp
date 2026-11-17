@@ -1,7 +1,9 @@
 using CommunityToolkit.Mvvm.Input;
-using FileShare.Desktop.Localization;
-using FileShare.Desktop.Services.Dialogs;
+using Shyd.Prism.Localization;
+using Shyd.Prism.Dialogs;
 using System;
+
+using Shyd.Prism.Mvvm;
 
 namespace FileShare.Desktop.ViewModels;
 

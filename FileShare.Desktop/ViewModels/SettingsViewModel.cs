@@ -3,15 +3,18 @@ using CommunityToolkit.Mvvm.Input;
 using FileShare.Core.Models;
 using FileShare.Core.Services;
 using FileShare.Desktop.Services;
-using FileShare.Desktop.Services.Dialogs;
-using FileShare.Desktop.Services.Navigation;
+using Shyd.Prism.Dialogs;
+using Shyd.Prism.Regions;
 using FileShare.LocalSend;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Input;
-using FileShare.Desktop.Localization;
+using Shyd.Prism.Localization;
+
+using Shyd.Prism.Mvvm;
+using FileShare.Desktop.Helpers;
 
 namespace FileShare.Desktop.ViewModels;
 

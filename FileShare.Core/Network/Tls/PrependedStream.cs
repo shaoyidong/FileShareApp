@@ -48,7 +48,7 @@ internal sealed class PrependedStream : Stream
             _prefixPos += n;
             return n;
         }
-        return await _inner.ReadAsync(buffer, offset, count, cancellationToken).ConfigureAwait(false);
+        return await _inner.ReadAsync(buffer.AsMemory(offset, count), cancellationToken).ConfigureAwait(false);
     }
 
     public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)

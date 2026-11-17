@@ -1,4 +1,6 @@
 using FileShare.Desktop.Services;
+using Shyd.Prism.Localization;
+using Shyd.Prism.Events;
 
 namespace FileShare.Desktop.Tests.Services;
 
@@ -18,6 +20,10 @@ public class UiPreferencesMigrationTests
         {
             File.WriteAllText(Path.Combine(dir, "desktop-ui.json"),
                 $"{{\"Skin\":{legacySkin},\"Language\":1,\"MinimizeToTray\":true}}");
+
+            // 语言迁移会对照 Loc.Packs 校验代码合法性：框架不内置翻译内容，测试环境自行注册 en-US
+            Loc.Register(new JsonLanguagePack("en-US", "English",
+                new Dictionary<string, string>()));
 
             var service = new JsonUiPreferencesService(dir);
             Assert.Equal(expectedId, service.Current.SkinId);

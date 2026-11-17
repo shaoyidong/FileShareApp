@@ -1,6 +1,8 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using FileShare.Core.Models;
-using FileShare.Desktop.Localization;
+using Shyd.Prism.Localization;
+
+using Shyd.Prism.Mvvm;
 
 namespace FileShare.Desktop.ViewModels
 {
@@ -10,15 +12,15 @@ namespace FileShare.Desktop.ViewModels
         /// 传输ID
         /// </summary>
         [ObservableProperty]
-        private string? _transferId;
+        public partial string? TransferId { get; set; }
 
         /// <summary>是否为原生文本消息（气泡显示全文 + 复制，隐藏进度/大小/重试）。</summary>
         [ObservableProperty]
-        private bool _isMessage;
+        public partial bool IsMessage { get; set; }
 
         /// <summary>文本消息全文。</summary>
         [ObservableProperty]
-        private string? _messageText;
+        public partial string? MessageText { get; set; }
 
         /// <summary>消息分支切换后刷新依赖 IsMessage 的可见性属性。</summary>
         partial void OnIsMessageChanged(bool value)
@@ -35,7 +37,7 @@ namespace FileShare.Desktop.ViewModels
         /// 文件名
         /// </summary>
         [ObservableProperty]
-        private string? _fileName;
+        public partial string? FileName { get; set; }
 
         private long _fileSize;
 
@@ -69,10 +71,10 @@ namespace FileShare.Desktop.ViewModels
         }
 
         // 格式化的文件大小显示（如1.2MB）
-        public string FormattedFileSize => FormatFileSize(_fileSize);
+        public string FormattedFileSize => FileTransferViewModel.FormatFileSize(_fileSize);
 
         // 格式化的已传输大小显示
-        public string FormattedTransferredSize => FormatFileSize(_transferredSize);
+        public string FormattedTransferredSize => FileTransferViewModel.FormatFileSize(_transferredSize);
 
         private long _speedBytesPerSecond;
 
@@ -93,7 +95,7 @@ namespace FileShare.Desktop.ViewModels
         }
 
         /// <summary>速率文本，如 "12.3MB/s"。</summary>
-        public string SpeedText => $"{FormatFileSize(_speedBytesPerSecond)}/s";
+        public string SpeedText => $"{FileTransferViewModel.FormatFileSize(_speedBytesPerSecond)}/s";
 
         /// <summary>是否显示速率（仅在传输中且有采样时显示）。</summary>
         public bool ShowSpeed => _speedBytesPerSecond > 0 && Status == TransferStatus.Transferring;
@@ -141,14 +143,13 @@ namespace FileShare.Desktop.ViewModels
         public string? ReceiverId { get; set; }
 
         [ObservableProperty]
-        // 传输进度百分比
-        private double _progressPercentage;
+        public partial double ProgressPercentage { get; set; }
 
         /// <summary>
         /// 文件保存路径
         /// </summary>
         [ObservableProperty]
-        private string? _savePath;
+        public partial string? SavePath { get; set; }
 
         // 状态文本显示
         public string StatusText => Status switch
@@ -195,7 +196,7 @@ namespace FileShare.Desktop.ViewModels
             OnPropertyChanged(nameof(CanRetry));
         }
         // 格式化文件大小的辅助方法
-        private string FormatFileSize(long size)
+        private static string FormatFileSize(long size)
         {
             string[] suffixes = { "B", "KB", "MB", "GB", "TB" };
             int index = 0;

@@ -80,10 +80,10 @@ public interface IFileShareServiceManager : IDisposable, IAsyncDisposable
     Task<bool> SendFilesAsync(
         IReadOnlyList<string> filePaths,
         DeviceInfo targetDevice,
-        IProgress<FileSendProgress>? progress = null,
-        CancellationToken cancellationToken = default,
+        IProgress<FileSendProgress>? progress = null,       
         int parallelism = 1,
-        TransferQueueControl? queue = null);
+        TransferQueueControl? queue = null,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 发送整个文件夹（递归，保留目录结构）。
@@ -96,10 +96,10 @@ public interface IFileShareServiceManager : IDisposable, IAsyncDisposable
     Task<bool> SendFolderAsync(
         string folderPath,
         DeviceInfo targetDevice,
-        IProgress<FileSendProgress>? progress = null,
-        CancellationToken cancellationToken = default,
+        IProgress<FileSendProgress>? progress = null,        
         int parallelism = 1,
-        TransferQueueControl? queue = null);
+        TransferQueueControl? queue = null,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 发送一条原生文本消息（对端显示为可复制的消息，不落盘）。

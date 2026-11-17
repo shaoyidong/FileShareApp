@@ -6,14 +6,14 @@ using System.Text;
 
 namespace FileShare.Core.Services
 {
-    public class DesktopDirectoryService : IPlatformDirectoryService
+    public partial class DesktopDirectoryService : IPlatformDirectoryService
     {
         // 下载文件夹的GUID标识符[citation:1]
         private static readonly Guid FolderDownloads = new Guid("374DE290-123F-4565-9164-39C4925E467B");
 
-        [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
-        private static extern int SHGetKnownFolderPath(
-           [MarshalAs(UnmanagedType.LPStruct)] Guid rfid,
+        [LibraryImport("shell32.dll", StringMarshalling = StringMarshalling.Utf16)]
+        private static partial int SHGetKnownFolderPath(
+           in Guid rfid,
            uint dwFlags,
            IntPtr hToken,
            out string ppszPath
@@ -21,8 +21,7 @@ namespace FileShare.Core.Services
 
         private string GetDownloadsPathWindows()
         {
-            string path;
-            SHGetKnownFolderPath(FolderDownloads, 0, IntPtr.Zero, out path);
+            SHGetKnownFolderPath(FolderDownloads, 0, IntPtr.Zero, out string path);
             return path;
         }
 

@@ -452,10 +452,10 @@ public class FileShareServiceManager : IFileShareServiceManager
     public async Task<bool> SendFilesAsync(
         IReadOnlyList<string> filePaths,
         DeviceInfo targetDevice,
-        IProgress<FileSendProgress>? progress = null,
-        CancellationToken cancellationToken = default,
+        IProgress<FileSendProgress>? progress = null,       
         int parallelism = 1,
-        TransferQueueControl? queue = null)
+        TransferQueueControl? queue = null,
+        CancellationToken cancellationToken = default)
     {
         if (filePaths is null || filePaths.Count == 0)
         {
@@ -481,10 +481,10 @@ public class FileShareServiceManager : IFileShareServiceManager
     public async Task<bool> SendFolderAsync(
         string folderPath,
         DeviceInfo targetDevice,
-        IProgress<FileSendProgress>? progress = null,
-        CancellationToken cancellationToken = default,
+        IProgress<FileSendProgress>? progress = null,        
         int parallelism = 1,
-        TransferQueueControl? queue = null)
+        TransferQueueControl? queue = null,
+        CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(folderPath) || !Directory.Exists(folderPath))
         {

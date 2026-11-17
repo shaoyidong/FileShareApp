@@ -28,7 +28,7 @@ public interface IBatchDeviceProbeService
     /// <param name="addresses">待探测的地址。</param>
     /// <param name="progress">进度上报；可为 null。</param>
     /// <param name="cancellationToken">取消令牌。</param>
-    Task<IReadOnlyList<DeviceInfo>> ProbeBatchAsync(
+    Task<DeviceInfo[]> ProbeBatchAsync(
         IReadOnlyList<IPAddress> addresses,
         IProgress<SubnetScanProgress>? progress,
         CancellationToken cancellationToken);

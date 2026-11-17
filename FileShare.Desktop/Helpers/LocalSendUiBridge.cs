@@ -4,9 +4,11 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Threading;
 using FileShare.Core.Models;
 using FileShare.Core.Services;
-using FileShare.Desktop.Localization;
+using Shyd.Prism.Localization;
 using FileShare.Desktop.Services;
-using FileShare.Desktop.Services.Dialogs;
+using Shyd.Prism.Notifications;
+using Shyd.Prism.Events;
+using Shyd.Prism.Dialogs;
 using FileShare.Desktop.ViewModels;
 using FileShare.LocalSend;
 using System;
@@ -25,19 +27,20 @@ public sealed class LocalSendUiBridge : ILocalSendUiBridge
     private readonly IToastService _toastService;
     private readonly IAppSettingsService _settingsService;
     private readonly IDialogService _dialogs;
-    private readonly ITransferEventBus _transferEvents;
+    private readonly IEventAggregator _events;
 
-    public LocalSendUiBridge(IToastService toastService, IAppSettingsService settingsService, IDialogService dialogs, ITransferEventBus transferEvents)
+    public LocalSendUiBridge(IToastService toastService, IAppSettingsService settingsService, IDialogService dialogs, IEventAggregator events)
     {
         _toastService = toastService ?? throw new ArgumentNullException(nameof(toastService));
         _settingsService = settingsService ?? throw new ArgumentNullException(nameof(settingsService));
         _dialogs = dialogs ?? throw new ArgumentNullException(nameof(dialogs));
-        _transferEvents = transferEvents ?? throw new ArgumentNullException(nameof(transferEvents));
+        _events = events ?? throw new ArgumentNullException(nameof(events));
     }
 
     /// <inheritdoc />
     public void ShowToast(string title, string message, Action? onClick = null) =>
-        _toastService.Show(title, message, onClick);
+        _toastService.Show(title, message, onClick,
+            Loc.Get(onClick is null ? "6 秒后自动关闭" : "点击查看（6 秒后自动关闭）"));
 
     /// <inheritdoc />
     public void ShowTextMessage(string senderName, string message)
@@ -76,7 +79,8 @@ public sealed class LocalSendUiBridge : ILocalSendUiBridge
                 {
                     ActivateWindow(owner);
                     ShowMessageCard();
-                }));
+                }),
+                Loc.Get("点击查看（6 秒后自动关闭）"));
         });
     }
 
@@ -85,7 +89,7 @@ public sealed class LocalSendUiBridge : ILocalSendUiBridge
 
     /// <inheritdoc />
     public void ReportTransfer(ExternalTransferUpdate update) =>
-        _transferEvents.PublishExternalTransfer(update);
+        _events.Publish(update);
 
     /// <inheritdoc />
     public async Task<ExternalReceiveDecision> ConfirmReceiveAsync(ExternalReceiveRequest request)
@@ -135,7 +139,8 @@ public sealed class LocalSendUiBridge : ILocalSendUiBridge
                 ActivateWindow(owner);
                 var decision = await ShowConfirmDialogAsync(owner, request, transfer).ConfigureAwait(true);
                 decisionTcs.TrySetResult(decision);
-            }));
+            }),
+            Loc.Get("点击查看（6 秒后自动关闭）"));
 
         var completed = await Task.WhenAny(decisionTcs.Task, Task.Delay(ConfirmTimeout)).ConfigureAwait(false);
         return completed == decisionTcs.Task

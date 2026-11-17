@@ -1,6 +1,7 @@
 using FileShare.Core.Models;
 using FileShare.Core.Services;
 using FileShare.Desktop.Services;
+using Shyd.Prism.Events;
 using FileShare.LocalSend;
 using FileShare.Desktop.ViewModels;
 using LocalSend.Core.Http.DtoV2;
@@ -37,9 +38,9 @@ public class LocalSendDeviceListTests
         var viewModel = new MainViewModel(
             serviceManager.Object,
             new Mock<IPlatformDialogService>().Object,
-            new Mock<FileShare.Desktop.Services.Dialogs.IDialogService>().Object,
-            new Mock<FileShare.Desktop.Services.Navigation.IRegionManager>().Object,
-            new Mock<FileShare.Desktop.Services.ITransferEventBus>().Object,
+            new Mock<Shyd.Prism.Dialogs.IDialogService>().Object,
+            new Mock<Shyd.Prism.Regions.IRegionManager>().Object,
+            new Mock<Shyd.Prism.Events.IEventAggregator>().Object,
             new Mock<Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime>().Object,
             new ImmediateSynchronizationContext(),
             NullLoggerFactory.Instance,

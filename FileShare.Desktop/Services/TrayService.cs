@@ -4,7 +4,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Platform;
 using System;
 using System.IO;
-using FileShare.Desktop.Localization;
+using Shyd.Prism.Localization;
 using FileShare.Desktop.Helpers;
 
 namespace FileShare.Desktop.Services;
@@ -90,10 +90,7 @@ public sealed class TrayService : ITrayService
     /// <inheritdoc />
     public void SetVisible(bool visible)
     {
-        if (_trayIcon is not null)
-        {
-            _trayIcon.IsVisible = visible;
-        }
+        _trayIcon?.IsVisible = visible;
     }
 
     /// <inheritdoc />
@@ -125,16 +122,10 @@ public sealed class TrayService : ITrayService
     {
         IsExiting = true;
 
-        if (_trayIcon is not null)
-        {
-            _trayIcon.IsVisible = false;
-        }
+        _trayIcon?.IsVisible = false;
 
         // Hide 之后再 Shutdown，避免关闭确认逻辑把应用又藏起来
-        if (_window is not null)
-        {
-            _window.Hide();
-        }
+        _window?.Hide();
 
         _lifetime.Shutdown();
     }
