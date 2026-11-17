@@ -244,7 +244,7 @@ public sealed class DeviceProbeService : IDeviceProbeService, IBatchDeviceProbeS
     private const int ProbeFinalWindowMs = 300;
 
     /// <inheritdoc />
-    public Task<IReadOnlyList<DeviceInfo>> ProbeBatchAsync(
+    public Task<DeviceInfo[]> ProbeBatchAsync(
         IReadOnlyList<IPAddress> addresses,
         IProgress<SubnetScanProgress>? progress,
         CancellationToken cancellationToken)
@@ -260,7 +260,7 @@ public sealed class DeviceProbeService : IDeviceProbeService, IBatchDeviceProbeS
             TaskScheduler.Default);
     }
 
-    private IReadOnlyList<DeviceInfo> ProbeBatchCore(
+    private DeviceInfo[] ProbeBatchCore(
         IReadOnlyList<IPAddress> addresses,
         IProgress<SubnetScanProgress>? progress,
         CancellationToken cancellationToken)

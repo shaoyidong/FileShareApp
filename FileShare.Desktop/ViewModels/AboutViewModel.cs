@@ -5,9 +5,11 @@ using System.Reflection;
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using FileShare.Desktop.Localization;
+using Shyd.Prism.Localization;
 using FileShare.Desktop.Services;
-using FileShare.Desktop.Services.Dialogs;
+using Shyd.Prism.Dialogs;
+
+using Shyd.Prism.Mvvm;
 
 namespace FileShare.Desktop.ViewModels;
 

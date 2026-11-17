@@ -1,4 +1,4 @@
-namespace FileShare.Desktop.Services.Navigation;
+namespace FileShare.Desktop.Helpers;
 
 /// <summary>
 /// 区域与页面名称常量。

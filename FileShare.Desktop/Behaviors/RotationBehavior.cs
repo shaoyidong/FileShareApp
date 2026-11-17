@@ -44,9 +44,9 @@ namespace FileShare.Desktop.Behaviors
             StopSpin(control);
 
             // 确保有 RenderTransform
-            if (control.RenderTransform is not RotateTransform rotateTransform)
+            if (control.RenderTransform is not RotateTransform)
             {
-                rotateTransform = new RotateTransform(0);
+                RotateTransform rotateTransform = new RotateTransform(0);
                 control.RenderTransform = rotateTransform;
                 // 设置旋转中心为控件中心（默认已是 50%,50%）
             }

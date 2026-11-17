@@ -7,8 +7,10 @@ using FileShare.Core.Network.Tls;
 using FileShare.Core.Services;
 using FileShare.Desktop.Helpers;
 using FileShare.Desktop.Services;
-using FileShare.Desktop.Services.Dialogs;
-using FileShare.Desktop.Services.Navigation;
+using Shyd.Prism.Notifications;
+using Shyd.Prism.Events;
+using Shyd.Prism.Dialogs;
+using Shyd.Prism.Regions;
 using FileShare.LocalSend;
 using FileShare.Desktop.ViewModels;
 using FileShare.Desktop.Views;
@@ -277,7 +279,7 @@ namespace FileShare.Desktop
                 sp.GetRequiredService<IToastService>(),
                 sp.GetRequiredService<IAppSettingsService>(),
                 sp.GetRequiredService<IDialogService>(),
-                sp.GetRequiredService<ITransferEventBus>()));
+                sp.GetRequiredService<IEventAggregator>()));
             services.AddSingleton<IAppUiBridge>(sp => sp.GetRequiredService<ILocalSendUiBridge>());
 
             // 通知卡片（懒解析 lifetime：解析发生在 App 初始化之后）
@@ -322,7 +324,7 @@ namespace FileShare.Desktop
                 sp.GetRequiredService<IClassicDesktopStyleApplicationLifetime>()));
 
             // 外部协议传输事件总线（解耦协议桥与主 ViewModel，避免循环依赖）
-            services.AddSingleton<ITransferEventBus, TransferEventBus>();
+            services.AddSingleton<IEventAggregator, EventAggregator>();
 
             // 主 ViewModel：完全由容器构造（原 App 手工 new + 静态 App.MainViewModel 已移除）
             services.AddSingleton<MainViewModel>();

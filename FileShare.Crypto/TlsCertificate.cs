@@ -228,7 +228,7 @@ namespace FileShare.Crypto
             }
         }
 
-        private static AsymmetricKeyParameter ParsePkcs1(byte[] content)
+        private static RsaPrivateCrtKeyParameters ParsePkcs1(byte[] content)
         {
             var seq = Asn1Sequence.GetInstance(content);
             var rsaKey = RsaPrivateKeyStructure.GetInstance(seq);

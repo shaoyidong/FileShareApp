@@ -105,6 +105,9 @@
 		<ProjectReference Include="..\FileShare.Core\FileShare.Core.csproj" />
 		<ProjectReference Include="..\LocalSend.Core\LocalSend.Core.csproj" />
 		<ProjectReference Include="..\FileShare.LocalSend\FileShare.LocalSend.csproj" />
+		<!-- 框架层（仿 Prism 精简 AOT 版，NuGet 包：MVVM 基座 / 参数 / 事件 / i18n 机制 + 弹窗 / 区域导航 / loc:Tr / Toast） -->
+		<PackageReference Include="Shyd.Prism.Core" Version="1.0.1" />
+		<PackageReference Include="Shyd.Prism.Avalonia" Version="1.0.1" />
 	</ItemGroup>
 
 	<ItemGroup>

@@ -11,8 +11,10 @@ using FileShare.Core.Network;
 using FileShare.Core.Network.Discovery;
 using FileShare.Core.Services;
 using FileShare.Desktop.Services;
-using FileShare.Desktop.Services.Dialogs;
-using FileShare.Desktop.Services.Navigation;
+using Shyd.Prism.Notifications;
+using Shyd.Prism.Events;
+using Shyd.Prism.Dialogs;
+using Shyd.Prism.Regions;
 using FileShare.Desktop.Theming;
 using FileShare.LocalSend;
 using FileShare.Desktop.Views;
@@ -26,10 +28,12 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Input;
-using FileShare.Desktop.Localization;
+using Shyd.Prism.Localization;
 using LocalSend.Core.Http.DtoV2;
 using FileShare.Desktop.Helpers;
 using Avalonia;
+
+using Shyd.Prism.Mvvm;
 
 namespace FileShare.Desktop.ViewModels
 {
@@ -186,7 +190,7 @@ namespace FileShare.Desktop.ViewModels
             IPlatformDialogService dialogService,
             IDialogService dialogs,
             IRegionManager regionManager,
-            ITransferEventBus transferEvents,
+            IEventAggregator events,
             IClassicDesktopStyleApplicationLifetime? appLifetime,
             SynchronizationContext uiContext,
             ILoggerFactory? loggerFactory = null,
@@ -253,7 +257,7 @@ namespace FileShare.Desktop.ViewModels
             _serviceManager.OnFingerprintMismatch += OnFingerprintMismatch;
 
             // 外部协议（LocalSend / 网页分享）的传输更新经事件总线进入传输列表
-            transferEvents.ExternalTransferReceived += ReportExternalTransfer;
+            events.Subscribe<ExternalTransferUpdate>(ReportExternalTransfer);
 
             RefreshDevicesCommand = new RelayCommand(async () => await RefreshDevicesAsync());
             SendFileCommand = new RelayCommand(async () => await SendFileAsync());
@@ -1698,7 +1702,8 @@ namespace FileShare.Desktop.ViewModels
                 {
                     ActivateMainWindow();
                     window?.Activate();
-                }));
+                }),
+                Loc.Get("点击查看（6 秒后自动关闭）"));
         }
 
         /// <summary>
@@ -1725,7 +1730,8 @@ namespace FileShare.Desktop.ViewModels
                     {
                         ActivateMainWindow();
                         _ = ShowReceiveRequestDialogCoreAsync(owner, info);
-                    });
+                    },
+                    Loc.Get("点击查看（6 秒后自动关闭）"));
                 return Task.CompletedTask;
             }
 
@@ -2025,7 +2031,8 @@ namespace FileShare.Desktop.ViewModels
                         StatusMessage = Loc.F("文件传输完成: {0}", updatedInfo.FileName);
                         if (_appLifetime?.MainWindow is { IsActive: false })
                         {
-                            _toastService?.Show(Loc.Get("传输完成"), updatedInfo.FileName, ActivateMainWindow);
+                            _toastService?.Show(Loc.Get("传输完成"), updatedInfo.FileName, ActivateMainWindow,
+                                Loc.Get("点击查看（6 秒后自动关闭）"));
                         }
                         _logger.LogInformation("文件传输完成: {File} ({Id})", updatedInfo.FileName, updatedInfo.TransferId);
                         break;

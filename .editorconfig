@@ -16,6 +16,7 @@ dotnet_diagnostic.IDE0017.severity = none
 dotnet_diagnostic.IDE0028.severity = none
 dotnet_diagnostic.IDE0057.severity = none
 dotnet_diagnostic.IDE0074.severity = none
+dotnet_diagnostic.IDE0090.severity = none
 dotnet_diagnostic.IDE0290.severity = none
 dotnet_diagnostic.IDE0300.severity = none
 dotnet_diagnostic.IDE0301.severity = none
@@ -23,6 +24,7 @@ dotnet_diagnostic.IDE0305.severity = none
 dotnet_diagnostic.IDE0306.severity = none
 dotnet_diagnostic.IDE1006.severity = none
 
+dotnet_diagnostic.CA1822.severity = none
 # 类别：性能-误报。日志均为结构化模板 + 廉价属性/局部变量，加 IsEnabled 守卫
 #       只会多一次分支并让日志代码膨胀，无实际收益。
 dotnet_diagnostic.CA1873.severity = none

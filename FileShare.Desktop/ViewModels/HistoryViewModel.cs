@@ -5,7 +5,7 @@ using CommunityToolkit.Mvvm.Input;
 using FileShare.Core.Models.Entities;
 using FileShare.Core.Services;
 using FileShare.Desktop.Services;
-using FileShare.Desktop.Services.Navigation;
+using Shyd.Prism.Regions;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -15,7 +15,10 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows.Input;
-using FileShare.Desktop.Localization;
+using Shyd.Prism.Localization;
+
+using Shyd.Prism.Mvvm;
+using FileShare.Desktop.Helpers;
 
 namespace FileShare.Desktop.ViewModels
 {

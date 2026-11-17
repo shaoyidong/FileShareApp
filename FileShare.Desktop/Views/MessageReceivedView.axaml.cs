@@ -1,6 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Interactivity;
-using FileShare.Desktop.Localization;
+using Shyd.Prism.Localization;
 using FileShare.Desktop.ViewModels;
 using System;
 

@@ -20,6 +20,15 @@ internal sealed class AvaloniaSerilogSink : ILogSink
     private const string CompositorCommitTimeoutMessage =
         "ICompositor5.RequestCommitAsync timed out, force-triggering next tick";
 
+    /// <summary>
+    /// Avalonia 11.3.7+ 原生 Popup 回归（上游 issue #19892）：点击 ComboBox 下拉 / 菜单项后，
+    /// PopupRoot 在本手势的输入事件处理完之前被销毁，PlatformImpl 置空；随后到达的尾巴
+    /// 原始输入事件被 Avalonia 丢弃并只打这一条 Warning，不抛异常、Click/Command 已执行。
+    /// 仅精确过滤这一条 Warning；其他警告和错误一律原样保留。
+    /// </summary>
+    private const string NullPlatformImplInputMessage =
+        "PlatformImpl is null, couldn't handle input.";
+
     private readonly ILogger _logger;
 
     public AvaloniaSerilogSink(ILogger logger)
@@ -44,10 +53,13 @@ internal sealed class AvaloniaSerilogSink : ILogSink
 
     public void Log(LogEventLevel level, string area, object? source, string messageTemplate, params object?[] propertyValues)
     {
-        if (level == LogEventLevel.Warning)
+        // 精确过滤：仅 Warning + 完全匹配这一条消息；Error / 其他 Warning 不受影响
+        if (level == LogEventLevel.Warning &&
+            string.Equals(messageTemplate, NullPlatformImplInputMessage, StringComparison.Ordinal))
         {
-            ;
+            return;
         }
+
         var log = _logger.ForContext("Area", area);
         if (source != null)
         {

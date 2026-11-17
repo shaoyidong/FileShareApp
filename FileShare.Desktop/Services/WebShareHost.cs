@@ -3,11 +3,12 @@ using FileShare.Core.Services;
 using FileShare.Core.Web;
 using FileShare.LocalSend;
 using Microsoft.Extensions.Logging;
+using Shyd.Prism.Notifications;
 using System;
 using System.IO;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
-using FileShare.Desktop.Localization;
+using Shyd.Prism.Localization;
 
 namespace FileShare.Desktop.Services;
 

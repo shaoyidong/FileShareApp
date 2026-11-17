@@ -1,5 +1,5 @@
 using FileShare.Core.Models;
-using FileShare.Desktop.Services.Dialogs;
+using Shyd.Prism.Dialogs;
 using FileShare.Desktop.ViewModels;
 using System.Collections.Generic;
 using Xunit;

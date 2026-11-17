@@ -1,6 +1,8 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using FileShare.Core.Models;
-using FileShare.Desktop.Localization;
+using Shyd.Prism.Localization;
+
+using Shyd.Prism.Mvvm;
 
 namespace FileShare.Desktop.ViewModels;
 
@@ -13,7 +15,7 @@ public partial class DeviceItemViewModel : ViewModelBase
     public DeviceItemViewModel(DeviceInfo device, bool isFavorite = false, bool isLocalSend = false)
     {
         Device = device;
-        _isFavorite = isFavorite;
+        IsFavorite = isFavorite;
         IsLocalSend = isLocalSend;
     }
 
@@ -46,7 +48,7 @@ public partial class DeviceItemViewModel : ViewModelBase
     public bool CanFavorite => true;
 
     [ObservableProperty]
-    private bool _isFavorite;
+    public partial bool IsFavorite { get; set; }
 
     public bool IsNotFavorite => !IsFavorite;
 

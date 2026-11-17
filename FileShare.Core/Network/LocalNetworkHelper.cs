@@ -113,7 +113,7 @@ public static class LocalNetworkHelper
         StartBackgroundRefresh();
     }
 
-    private static IReadOnlyList<(IPAddress Address, IPAddress Mask)> EnumerateIPv4Interfaces()
+    private static List<(IPAddress Address, IPAddress Mask)> EnumerateIPv4Interfaces()
     {
         var resultRank = new List<(IPAddress Address, IPAddress Mask, int rank)>();
         try

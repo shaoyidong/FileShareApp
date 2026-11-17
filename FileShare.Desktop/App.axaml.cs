@@ -8,8 +8,9 @@ using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using FileShare.Core.Services;
 using FileShare.Desktop.Services;
-using FileShare.Desktop.Services.Dialogs;
-using FileShare.Desktop.Services.Navigation;
+using Shyd.Prism.Dialogs;
+using Shyd.Prism.Regions;
+using Shyd.Prism.Localization;
 using FileShare.LocalSend;
 using FileShare.Desktop.ViewModels;
 using FileShare.Desktop.Views;
@@ -22,6 +23,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using FileShare.Desktop.Helpers;
 
 namespace FileShare.Desktop
 {
@@ -61,8 +63,8 @@ namespace FileShare.Desktop
 
                 // 语言包 / 主题包都来自外部 JSON 文件（发布后可直接编辑 / 新增），
                 // 必须在任何视图加载之前初始化
-                FileShare.Desktop.Localization.Loc.Initialize(dataDirectory);
-                FileShare.Desktop.Localization.Loc.SetLanguage(uiPreferences?.Current.LanguageCode ?? "zh-CN");
+                Loc.Initialize(dataDirectory, FileShare.Desktop.Localization.AppLanguagePacks.BuiltIn);
+                Loc.SetLanguage(uiPreferences?.Current.LanguageCode ?? "zh-CN");
                 FileShare.Desktop.Theming.ThemePackLoader.Initialize(dataDirectory);
 
                 // 关于窗口内容同样来自外部配置：内置默认 -> 数据目录 about.json -> 远程 JSON。

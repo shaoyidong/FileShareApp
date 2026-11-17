@@ -3,6 +3,7 @@ using Avalonia.Controls.Templates;
 using FileShare.Desktop.ViewModels;
 using FileShare.Desktop.Views;
 using Microsoft.Extensions.DependencyInjection;
+using Shyd.Prism.Mvvm;
 using System;
 using System.Diagnostics.CodeAnalysis;
 

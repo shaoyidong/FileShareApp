@@ -23,7 +23,7 @@ namespace FileShare.Crypto
             // 先用标准 Base64 编码，再替换字母表并去掉填充，
             // 这样可以避免自己实现位操作，降低出错概率。
             char[] chars = new char[baseLen];
-            if (!Convert.TryToBase64Chars(data, chars, out int written, Base64FormattingOptions.None))
+            if (!Convert.TryToBase64Chars(data, chars, out _, Base64FormattingOptions.None))
             {
                 // 仅在缓冲区过小时失败，这里已按理论最大长度分配。
                 throw new InvalidOperationException("Base64 encoding failed.");
