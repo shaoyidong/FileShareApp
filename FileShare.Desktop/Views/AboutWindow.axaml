@@ -46,6 +46,7 @@
             <!--  产品标识：Logo / 名称 / 版本 / 构建日期  -->
             <StackPanel Grid.Row="1" VerticalAlignment="Center">
                 <Image
+                    x:Name="LogoImage"
                     Width="72"
                     Height="72"
                     HorizontalAlignment="Center"

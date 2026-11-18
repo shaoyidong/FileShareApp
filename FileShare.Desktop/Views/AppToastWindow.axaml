@@ -1,0 +1,55 @@
+<Window
+    x:Class="FileShare.Desktop.Views.AppToastWindow"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:prism="using:Shyd.Prism.Notifications"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    x:DataType="prism:ToastWindowBase"
+    Width="360"
+    SizeToContent="Height"
+    CanResize="False"
+    ShowInTaskbar="False"
+    ShowActivated="False"
+    SystemDecorations="None"
+    Topmost="True"
+    d:DesignWidth="360"
+    mc:Ignorable="d"
+    WindowStartupLocation="Manual">
+
+    <!--  皮肤主题化通知卡片：DynamicResource 绑定皮肤 Fs* 资源，随主题切换即时换肤；
+         内容绑定基类规定的 ToastTitle / ToastMessage / ToastHint（内容注入与点击行为都在框架），
+         文字次级样式直接用皮肤提供的 TextBlock.muted 类  -->
+    <Border
+        Padding="12"
+        Background="{DynamicResource FsSurfaceBrush}"
+        BorderBrush="{DynamicResource FsAccentBrush}"
+        BorderThickness="1"
+        CornerRadius="3">
+        <Grid ColumnDefinitions="Auto,*">
+            <Border
+                Grid.Column="0"
+                Width="3"
+                Margin="0,2,8,2"
+                Background="{DynamicResource FsAccentBrush}" />
+            <StackPanel Grid.Column="1" Spacing="4">
+                <TextBlock
+                    FontWeight="Bold"
+                    Foreground="{DynamicResource FsTextBrush}"
+                    TextWrapping="Wrap"
+                    Text="{Binding ToastTitle}" />
+                <TextBlock
+                    Classes="muted"
+                    FontSize="12"
+                    MaxHeight="80"
+                    TextWrapping="Wrap"
+                    Text="{Binding ToastMessage}" />
+                <TextBlock
+                    Classes="muted"
+                    FontSize="12"
+                    IsVisible="{Binding HasHint}"
+                    Text="{Binding ToastHint}" />
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>
