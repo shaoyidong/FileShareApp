@@ -19,11 +19,26 @@ public partial class AboutWindow : Window
     /// <summary>最大倾斜角（度）。</summary>
     private const double MaxTiltDegrees = 1.5;
 
+    /// <summary>Logo 自转速度（度/秒），约 12 秒一圈。</summary>
+    private const double LogoRotationDegreesPerSecond = 30;
+
+    /// <summary>悬停 / 移开时转速过渡的时间常数（秒）：越大越绵长，越小越跟手。</summary>
+    private const double LogoRotationEaseSeconds = 0.35;
+
+    /// <summary>旋转推进间隔，与倾斜复位动画一致。</summary>
+    private static readonly TimeSpan LogoRotationInterval = TimeSpan.FromMilliseconds(16);
+
     /// <summary>倾斜复位动画的步进间隔。</summary>
     private static readonly TimeSpan TiltResetInterval = TimeSpan.FromMilliseconds(16);
 
     private readonly Rotate3DTransform _tiltTransform = new(0, 0, 0, 0, 0, 0, 600);
+    private readonly RotateTransform _logoRotation = new();
     private DispatcherTimer? _tiltResetTimer;
+    private readonly DispatcherTimer? _logoRotationTimer;
+    private long _logoRotationLastTicks;
+    private double _logoRotationSpeed = 1;
+    private double _logoRotationAngle;
+    private bool _logoHovered;
     private bool _activatedOnce;
     private bool _closing;
 
@@ -38,10 +53,22 @@ public partial class AboutWindow : Window
 
         TiltRoot.RenderTransform = _tiltTransform;
 
+        // Logo 自转：RenderTransform 不参与布局，72×72 的尺寸 / 位置与原有交互都不变；
+        // 仅在 Logo 自身挂悬停事件，卡片的 3D 倾斜与窗口失活收起逻辑完全不受影响。
+        LogoImage.RenderTransform = _logoRotation;
+        LogoImage.RenderTransformOrigin = new RelativePoint(0.5, 0.5, RelativeUnit.Relative);
+        LogoImage.PointerEntered += (_, _) => _logoHovered = true;
+        LogoImage.PointerExited += (_, _) => _logoHovered = false;
+        _logoRotationLastTicks = Environment.TickCount64;
+        _logoRotationTimer = new DispatcherTimer { Interval = LogoRotationInterval };
+        _logoRotationTimer.Tick += OnLogoTick;
+        _logoRotationTimer.Start();
+
         Activated += (_, _) => _activatedOnce = true;
         Closed += (_, _) =>
         {
             _tiltResetTimer?.Stop();
+            _logoRotationTimer?.Stop();
             // VM 持有静态事件订阅，窗口关闭时释放，避免窗口被静态事件持有
             (DataContext as IDisposable)?.Dispose();
         };
@@ -68,6 +95,42 @@ public partial class AboutWindow : Window
 
         _closing = true;
         Close();
+    }
+
+    /// <summary>
+    /// 按真实经过时间推进 Logo 角度；转速用指数缓动逼近目标（悬停 0 / 常态 1），
+    /// 与帧率无关，掉帧也不会抖；角度取模 360，长时间运行不会有浮点精度漂移。
+    /// </summary>
+    private void OnLogoTick(object? sender, EventArgs e)
+    {
+        var now = Environment.TickCount64;
+        var elapsed = (now - _logoRotationLastTicks) / 1000.0;
+        _logoRotationLastTicks = now;
+
+        // 窗口从后台恢复 / 调试暂停后跳过的巨大步进不参与推进，避免图标瞬移
+        if (elapsed <= 0 || elapsed > 0.25)
+        {
+            return;
+        }
+
+        var target = _logoHovered ? 0.0 : 1.0;
+        var ease = 1.0 - Math.Exp(-elapsed / LogoRotationEaseSeconds);
+        _logoRotationSpeed += (target - _logoRotationSpeed) * ease;
+
+        // 足够接近目标就吸附：悬停时真正停住，移开后回到满速
+        if (Math.Abs(_logoRotationSpeed - target) < 0.001)
+        {
+            _logoRotationSpeed = target;
+        }
+
+        if (_logoRotationSpeed <= 0)
+        {
+            return;
+        }
+
+        _logoRotationAngle =
+            (_logoRotationAngle + LogoRotationDegreesPerSecond * _logoRotationSpeed * elapsed) % 360.0;
+        _logoRotation.Angle = _logoRotationAngle;
     }
 
     /// <summary>

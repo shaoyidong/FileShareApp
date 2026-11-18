@@ -62,8 +62,10 @@ namespace FileShare.Desktop
                 var uiPreferences = _serviceProvider?.GetService<IUiPreferencesService>();
 
                 // 语言包 / 主题包都来自外部 JSON 文件（发布后可直接编辑 / 新增），
-                // 必须在任何视图加载之前初始化
-                Loc.Initialize(dataDirectory, FileShare.Desktop.Localization.AppLanguagePacks.BuiltIn);
+                // 必须在任何视图加载之前初始化；
+                // 源语言声明为 zh-CN：代码里的 loc:Tr / Loc.Get key 都是中文原文，其它语言按 key 提供译文
+                Loc.Initialize(dataDirectory, FileShare.Desktop.Localization.AppLanguagePacks.BuiltIn,
+                    new SourceLanguage("zh-CN", "简体中文"));
                 Loc.SetLanguage(uiPreferences?.Current.LanguageCode ?? "zh-CN");
                 FileShare.Desktop.Theming.ThemePackLoader.Initialize(dataDirectory);
 

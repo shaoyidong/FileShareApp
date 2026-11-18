@@ -298,8 +298,11 @@ namespace FileShare.Desktop
                 sp.GetRequiredService<IDatabaseService>(),
                 sp.GetRequiredService<IAppUiBridge>()));
 
-            services.AddSingleton<IToastService>(_ => new ToastService(() =>
-                (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow));
+            // 通知卡片：用应用侧皮肤主题化的 AppToastWindow（DynamicResource 绑定 Fs* 资源，随皮肤换肤）；
+            // 内容注入与点击行为由框架的 ToastWindowBase 负责，工厂只需提供窗口
+            services.AddSingleton<IToastService>(_ => new ToastService(
+                () => (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow,
+                () => new Views.AppToastWindow()));
 
             // 数据库
             services.AddSingleton<IDatabaseService>(sp =>
