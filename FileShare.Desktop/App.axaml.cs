@@ -59,13 +59,17 @@ namespace FileShare.Desktop
             try
             {
                 var dataDirectory = FileShare.Core.Services.AppPaths.GetDataDirectory();
-                var uiPreferences = _serviceProvider?.GetService<IUiPreferencesService>();
 
                 // 语言包 / 主题包都来自外部 JSON 文件（发布后可直接编辑 / 新增），
                 // 必须在任何视图加载之前初始化；
-                // 源语言声明为 zh-CN：代码里的 loc:Tr / Loc.Get key 都是中文原文，其它语言按 key 提供译文
+                // 源语言声明为 zh-CN：代码里的 loc:Tr / Loc.Get key 都是中文原文，其它语言按 key 提供译文。
+                // 关键顺序：Loc.Initialize 必须早于任何解析 / 访问 Loc 的代码——
+                // IUiPreferencesService 构造时会调用 Loc.Packs 校验语言代码，若它先于 Initialize
+                // 触发 Loc 的懒加载，兜底目录就是程序基目录，会在应用根目录建出空 i18n 文件夹。
                 Loc.Initialize(dataDirectory, FileShare.Desktop.Localization.AppLanguagePacks.BuiltIn,
                     new SourceLanguage("zh-CN", "简体中文"));
+
+                var uiPreferences = _serviceProvider?.GetService<IUiPreferencesService>();
                 Loc.SetLanguage(uiPreferences?.Current.LanguageCode ?? "zh-CN");
                 FileShare.Desktop.Theming.ThemePackLoader.Initialize(dataDirectory);
 

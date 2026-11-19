@@ -14,7 +14,7 @@
 		<!-- 构建时间戳：关于窗口展示「构建日期」用（每次编译自动刷新） -->
 		<AssemblyAttribute Include="System.Reflection.AssemblyMetadata">
 			<_Parameter1>BuildDate</_Parameter1>
-			<_Parameter2>$([System.DateTime]::Now.ToString(&quot;yyyy-MM-dd&quot;))</_Parameter2>
+			<_Parameter2>$([System.DateTime]::Now.ToString("yyyy-MM-dd"))</_Parameter2>
 		</AssemblyAttribute>
 	</ItemGroup>
 
@@ -27,6 +27,7 @@
 	<PropertyGroup Label="Avalonia">
 		<AvaloniaNameGeneratorAttachDevTools>False</AvaloniaNameGeneratorAttachDevTools>
 		<ApplicationIcon>Assets\logo.ico</ApplicationIcon>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -87,13 +88,11 @@
 	<ItemGroup>
 		<PackageReference Include="Avalonia" Version="11.3.23" />
 		<PackageReference Include="Avalonia.Desktop" Version="11.3.23" />
-		<PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.23" />
 		<!--  基础主题改用 Simple：模板更少、内置动画/圆角/资源硬编码更少，最适合被经典皮肤整体覆盖  -->
 		<PackageReference Include="Avalonia.Themes.Simple" Version="11.3.23" />
-		<PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
 		<PackageReference Include="Microsoft.Extensions.Logging" Version="11.0.0" />
 		<PackageReference Include="Serilog" Version="4.4.0" />
-		<PackageReference Include="Serilog.Extensions.Logging" Version="10.0.0" />
+		<PackageReference Include="Serilog.Extensions.Logging" Version="11.0.0" />
 		<PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
 		<PackageReference Include="Serilog.Sinks.Debug" Version="3.0.0" />
 		<PackageReference Include="MessageBox.Avalonia" Version="3.3.1.1" />
@@ -106,8 +105,8 @@
 		<ProjectReference Include="..\LocalSend.Core\LocalSend.Core.csproj" />
 		<ProjectReference Include="..\FileShare.LocalSend\FileShare.LocalSend.csproj" />
 		<!-- 框架层（仿 Prism 精简 AOT 版，NuGet 包：MVVM 基座 / 参数 / 事件 / i18n 机制 + 弹窗 / 区域导航 / loc:Tr / Toast） -->
-		<PackageReference Include="Shyd.Prism.Core" Version="1.0.2" />
-		<PackageReference Include="Shyd.Prism.Avalonia" Version="1.0.2" />
+		<PackageReference Include="Shyd.Prism.Core" Version="1.0.4" />
+		<PackageReference Include="Shyd.Prism.Avalonia" Version="1.0.4" />
 	</ItemGroup>
 
 	<ItemGroup>
