@@ -35,7 +35,26 @@ namespace FileShare.Desktop
         // yet and stuff might break.
         [STAThread]
         public static void Main(string[] args)
-        {    
+        {
+            // 第零步：单实例检测——必须在任何初始化（本地库提取、日志、IoC、端口占用）之前。
+            // 第二个实例在这里就弹原生提示并退出，绝不往下走，避免抢端口 / 重复托盘图标。
+            // using 让守卫活到 Main 结束：正常 Shutdown、启动异常 thrown 两条路径都会释放 Mutex。
+            // 崩溃 / 强杀则由 OS 在进程终止时回收句柄，不留下需要清理的状态文件。
+            using var singleInstance = new SingleInstanceGuard();
+            try
+            {
+                if (!singleInstance.TryAcquire())
+                {
+                    SingleInstanceNotice.Show();
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                // 检测本身出意外时放行启动（可用性优先），仅写 stderr。
+                Console.Error.WriteLine($"[SingleInstance] 检测失败，放行启动: {ex.Message}");
+            }
+
             // 第一步：先加载所有本地库
             ExtractAndLoadNativeLibs();
 
