@@ -1,6 +1,5 @@
 using FileShare.Desktop.Services;
 using Shyd.Prism.Localization;
-using Shyd.Prism.Events;
 
 namespace FileShare.Desktop.Tests.Services;
 

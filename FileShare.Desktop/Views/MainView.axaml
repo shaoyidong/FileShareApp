@@ -388,8 +388,10 @@
                                                 <Grid ColumnDefinitions="*,Auto">
                                                     <TextBlock
                                                         VerticalAlignment="Center"
-                                                        Text="{Binding MessageText}"
-                                                        TextWrapping="Wrap" />
+                                                        Text="{Binding MessagePreview}"
+                                                        TextTrimming="CharacterEllipsis"
+                                                        TextWrapping="NoWrap"
+                                                        ToolTip.Tip="{Binding MessageText}" />
                                                     <Button
                                                         Grid.Column="1"
                                                         MinWidth="56"

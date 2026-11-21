@@ -1,5 +1,9 @@
 ﻿using FileShare.Core.Crypto;
+using FileShare.Core.Network;
 using FileShare.Crypto;
+using System.ComponentModel;
+using System.Net.Sockets;
+using System.Security.Authentication;
 
 namespace FileShare.Core.Tests.Network;
 
@@ -61,5 +65,36 @@ public class TlsHandshakeDiagnosticTests
         Assert.Equal(first, second);
         // SHA-256 十六进制长度固定为 64
         Assert.Equal(64, first.Length);
+    }
+
+    /// <summary>
+    /// 证书重建导致 TOFU 指纹不匹配时，接收端会读到 SChannel 解密失败；
+    /// 这类异常必须被识别为 TLS 通道失效，否则读循环会反复记错误日志。
+    /// </summary>
+    [Fact]
+    public void IsTlsChannelFailure_RecognizesCertificateRejection()
+    {
+        var decryptionFailed = new IOException(
+            "The decryption operation failed, see inner exception.",
+            new Win32Exception(unchecked((int)0x80090327)));
+        Assert.True(TcpFileTransferService.IsTlsChannelFailure(decryptionFailed));
+
+        var corruptedFrame = new IOException(
+            "The read operation failed, see inner exception.",
+            new AuthenticationException("Cannot determine the frame size or a corrupted frame was received."));
+        Assert.True(TcpFileTransferService.IsTlsChannelFailure(corruptedFrame));
+        Assert.True(TcpFileTransferService.IsTlsChannelFailure(
+            new AuthenticationException("The remote certificate was rejected by the provided RemoteCertificateValidationCallback.")));
+    }
+
+    [Fact]
+    public void IsTlsChannelFailure_DoesNotSwallowPlainTcpErrors()
+    {
+        var connectionReset = new IOException(
+            "The read operation failed, see inner exception.",
+            new SocketException((int)SocketError.ConnectionReset));
+
+        Assert.False(TcpFileTransferService.IsTlsChannelFailure(connectionReset));
+        Assert.False(TcpFileTransferService.IsTlsChannelFailure(null));
     }
 }

@@ -6,13 +6,13 @@ using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
 using FileShare.Core.Models;
 using FileShare.Core.Network;
 using FileShare.Core.Network.Discovery;
 using FileShare.Core.Services;
 using FileShare.Desktop.Services;
 using Shyd.Prism.Notifications;
-using Shyd.Prism.Events;
 using Shyd.Prism.Dialogs;
 using Shyd.Prism.Regions;
 using FileShare.Desktop.Theming;
@@ -46,6 +46,7 @@ namespace FileShare.Desktop.ViewModels
         private readonly IPlatformDialogService _dialogService;
         private readonly IDialogService _dialogs;
         private readonly IRegionManager _regionManager;
+        private readonly IMessenger _messenger;
         private readonly IAppSettingsService _settingsService;
         private readonly IThemeService _themeService;
         private readonly IToastService? _toastService;
@@ -190,7 +191,7 @@ namespace FileShare.Desktop.ViewModels
             IPlatformDialogService dialogService,
             IDialogService dialogs,
             IRegionManager regionManager,
-            IEventAggregator events,
+            IMessenger messenger,
             IClassicDesktopStyleApplicationLifetime? appLifetime,
             SynchronizationContext uiContext,
             ILoggerFactory? loggerFactory = null,
@@ -204,6 +205,7 @@ namespace FileShare.Desktop.ViewModels
             _dialogService = dialogService ?? throw new ArgumentNullException(nameof(dialogService));
             _dialogs = dialogs ?? throw new ArgumentNullException(nameof(dialogs));
             _regionManager = regionManager ?? throw new ArgumentNullException(nameof(regionManager));
+            _messenger = messenger ?? throw new ArgumentNullException(nameof(messenger));
             _appLifetime = appLifetime;
             _uiContext = uiContext ?? SynchronizationContext.Current ?? new SynchronizationContext();
             _logger = loggerFactory?.CreateLogger<MainViewModel>() ?? NullLogger<MainViewModel>.Instance;
@@ -256,8 +258,12 @@ namespace FileShare.Desktop.ViewModels
             _serviceManager.OnFirstUseTrusted += OnFirstUseTrusted;
             _serviceManager.OnFingerprintMismatch += OnFingerprintMismatch;
 
-            // 外部协议（LocalSend / 网页分享）的传输更新经事件总线进入传输列表
-            events.Subscribe<ExternalTransferUpdate>(ReportExternalTransfer);
+            // 外部协议（LocalSend / 网页分享）的传输更新经 WeakReferenceMessenger 进入传输列表。
+            // 用 static 处理器 + this 作为 recipient：消息总线只弱引用 ViewModel，
+            // 处理器不捕获 this，即便忘记退订也不会把 ViewModel 钉在内存里（Dispose 仍显式退订）。
+            _messenger.Register<ExternalTransferUpdate>(
+                this,
+                static (recipient, update) => ((MainViewModel)recipient).ReportExternalTransfer(update));
 
             RefreshDevicesCommand = new RelayCommand(async () => await RefreshDevicesAsync());
             SendFileCommand = new RelayCommand(async () => await SendFileAsync());
@@ -1413,7 +1419,8 @@ namespace FileShare.Desktop.ViewModels
         }
 
         /// <summary>
-        /// 重试一次失败的发送。接收端会保留未完成的 .part，因此可自动续传。
+        /// 重试一次失败的发送。直接移除旧失败项，发送服务会照常新建一条传输行，
+        /// 因此不需要在 UI 层把新旧 TransferId 做映射。接收端保留 .part，可自动续传。
         /// </summary>
         private async void RetryTransfer(FileTransferViewModel? model)
         {
@@ -1430,21 +1437,19 @@ namespace FileShare.Desktop.ViewModels
 
             if (_localSendPeers.TryGetValue(model.TargetDeviceId, out var localSendPeer) && _localSendHost is not null)
             {
+                // 真正发起发送时才移除旧行：紧接着上报的 Transferring 会生成新的传输行
+                RemoveTransferFromLists(model);
+                StatusMessage = Loc.F("准备发送文件: {0}", model.FileName);
                 try
                 {
-                    model.Status = TransferStatus.Pending;
-                    StatusMessage = Loc.F("准备发送文件: {0}", model.FileName);
-
                     var localResult = await _localSendHost.SendFileAsync(localSendPeer, model.SourcePath, null, null);
                     if (!localResult.Success)
                     {
-                        model.Status = TransferStatus.Failed;
                         StatusMessage = Loc.F("发送失败: {0}", localResult.Error ?? string.Empty);
                     }
                 }
                 catch (Exception ex)
                 {
-                    model.Status = TransferStatus.Failed;
                     StatusMessage = Loc.F("发送文件失败: {0}", ex.Message);
                     _logger.LogError(ex, "重试发送（LocalSend）失败: {Path}", model.SourcePath);
                 }
@@ -1463,22 +1468,18 @@ namespace FileShare.Desktop.ViewModels
                 return;
             }
 
+            RemoveTransferFromLists(model);
+            StatusMessage = Loc.F("准备发送文件: {0}", model.FileName);
             try
             {
-                model.Status = TransferStatus.Pending;
-                StatusMessage = Loc.F("准备发送文件: {0}", model.FileName);
-
                 var success = await _serviceManager.SendSingleAsync(model.SourcePath, target, null, null);
-
                 if (!success)
                 {
-                    model.Status = TransferStatus.Failed;
                     StatusMessage = Loc.Get("文件发送失败");
                 }
             }
             catch (Exception ex)
             {
-                model.Status = TransferStatus.Failed;
                 StatusMessage = Loc.F("发送文件失败: {0}", ex.Message);
                 _logger.LogError(ex, "重试发送失败: {Path}", model.SourcePath);
             }
@@ -1579,6 +1580,15 @@ namespace FileShare.Desktop.ViewModels
                     }
                 }
 
+                // 方向列表同样只保留一份
+                var directionTasks = update.Direction == TransferDirection.Send
+                    ? SentTransferTasks
+                    : ReceivedTransferTasks;
+                if (!directionTasks.Contains(vm))
+                {
+                    directionTasks.Insert(0, vm);
+                }
+
                 if (vm.FileSize > 0)
                 {
                     vm.ProgressPercentage = Math.Min(100d, (double)vm.TransferredSize / vm.FileSize * 100d);
@@ -1614,21 +1624,27 @@ namespace FileShare.Desktop.ViewModels
 
         private void OnTransferRequestSendAndReceive(FileTransferInfo info)
         {
-            var transferViewModel = FileTransferViewModel.FromModel(info);
-
             RunOnUiThread(() =>
             {
+                var transferViewModel = FileTransferViewModel.FromModel(info);
                 TransferTasks.Insert(0, transferViewModel);
+
+                // 每条传输在方向列表里也只保留一份（文本消息原先会在这里重复插入）
+                var directionTasks = info.SenderId == _localDeviceId
+                    ? SentTransferTasks
+                    : ReceivedTransferTasks;
+                if (!directionTasks.Contains(transferViewModel))
+                {
+                    directionTasks.Insert(0, transferViewModel);
+                }
 
                 if (info.SenderId == _localDeviceId)
                 {
-                    SentTransferTasks.Insert(0, transferViewModel);
                     StatusMessage = Loc.F("准备发送文件: {0}", info.FileName);
                     _logger.LogInformation("准备发送文件: {File} ({Id})", info.FileName, info.TransferId);
                 }
                 else
                 {
-                    ReceivedTransferTasks.Insert(0, transferViewModel);
                     StatusMessage = Loc.F("收到文件传输请求: {0}", info.FileName);
                     _logger.LogInformation("收到文件传输请求: {File} ({Id})", info.FileName, info.TransferId);
                 }
@@ -1639,10 +1655,6 @@ namespace FileShare.Desktop.ViewModels
             {
                 RunOnUiThread(() =>
                 {
-                    (info.Direction == TransferDirection.Send
-                        ? SentTransferTasks
-                        : ReceivedTransferTasks).Insert(0, transferViewModel);
-
                     StatusMessage = info.Direction == TransferDirection.Send
                         ? Loc.Get("正在发送文本消息...")
                         : Loc.Get("收到文本消息");
@@ -1676,22 +1688,39 @@ namespace FileShare.Desktop.ViewModels
         }
 
         /// <summary>
-        /// 收到原生文本消息时弹出展示窗口（全文 + 复制全文），不阻塞、不抢焦点。
-        /// 主窗口在托盘时补一条通知，点击通知才把消息窗口唤到前面。
+        /// 收到原生文本消息时展示消息卡片（全文 + 复制全文），不阻塞。
+        /// 与 LocalSend 路径保持一致：主窗口可见时（包括被其他窗口挡住）只弹卡片；
+        /// 只有主窗口隐藏到托盘或最小化时才弹通知，点击通知才激活主窗口并弹卡片。
         /// </summary>
         private void ShowReceivedMessageWindow(string senderId, string message)
         {
             var senderName = Devices.FirstOrDefault(item => item.DeviceId == senderId)?.DeviceName
                              ?? senderId;
             var owner = _appLifetime?.MainWindow;
-            var window = _dialogs.Show<MessageReceivedViewModel>(new DialogParameters
-            {
-                [MessageReceivedViewModel.DialogKeys.SenderName] = senderName,
-                [MessageReceivedViewModel.DialogKeys.Message] = message
-            });
 
+            void ShowMessageCard()
+            {
+                _dialogs.Show<MessageReceivedViewModel>(new DialogParameters
+                {
+                    [MessageReceivedViewModel.DialogKeys.SenderName] = senderName,
+                    [MessageReceivedViewModel.DialogKeys.Message] = message
+                });
+            }
+
+            // 无主窗口（测试 / 无界面场景）：直接弹卡片，不发通知
             if (owner is null)
             {
+                ShowMessageCard();
+                return;
+            }
+
+            // IsActive 在主窗口被其他窗口遮挡时也是 false，不能用来判断是否退到后台。
+            // 托盘隐藏后 IsVisible=false（WindowState 可能仍是 Normal），最小化则为 Minimized。
+            var isBackground = IsBackgroundWindow(owner.IsVisible, owner.WindowState);
+            if (!isBackground)
+            {
+                ActivateMainWindow();
+                ShowMessageCard();
                 return;
             }
 
@@ -1701,10 +1730,10 @@ namespace FileShare.Desktop.ViewModels
                 () => Dispatcher.UIThread.Post(() =>
                 {
                     ActivateMainWindow();
-                    window?.Activate();
+                    ShowMessageCard();
                 }),
                 Loc.Get("点击查看（6 秒后自动关闭）"));
-        }
+        }      
 
         /// <summary>
         /// 显示接收确认窗口，并在用户选择后把结果回传给传输服务。
@@ -2029,7 +2058,10 @@ namespace FileShare.Desktop.ViewModels
                 {
                     case TransferStatus.Completed:
                         StatusMessage = Loc.F("文件传输完成: {0}", updatedInfo.FileName);
-                        if (_appLifetime?.MainWindow is { IsActive: false })
+                        // 文本消息已有自己的「收到文本消息」通知（托盘时点击它才会弹消息卡片）。
+                        // 这里再弹一条「传输完成」会覆盖单例 toast，导致点击后只有主窗口、没有消息弹窗。
+                        if (ShouldShowCompletionToast(updatedInfo.IsMessage,
+                                _appLifetime?.MainWindow is { IsActive: false }))
                         {
                             _toastService?.Show(Loc.Get("传输完成"), updatedInfo.FileName, ActivateMainWindow,
                                 Loc.Get("点击查看（6 秒后自动关闭）"));
@@ -2050,6 +2082,19 @@ namespace FileShare.Desktop.ViewModels
                 }
             });
         }
+
+        /// <summary>
+        /// 是否应把文本消息作为后台通知处理：只有隐藏到托盘或最小化才算后台。
+        /// 主窗口被其他窗口遮挡时 IsVisible 仍为 true、WindowState 仍为 Normal，应直接弹消息卡片。
+        /// </summary>
+        internal static bool IsBackgroundWindow(bool isVisible, Avalonia.Controls.WindowState windowState) =>
+            !isVisible || windowState == Avalonia.Controls.WindowState.Minimized;
+
+        /// <summary>
+        /// 文本消息有自己的通知，完成事件不能再弹一条「传输完成」覆盖掉它。
+        /// </summary>
+        internal static bool ShouldShowCompletionToast(bool isMessage, bool mainWindowInactive) =>
+            !isMessage && mainWindowInactive;
 
         /// <summary>
         /// 把操作投递到 UI 线程执行（异步，不阻塞调用线程）。
@@ -2090,6 +2135,9 @@ namespace FileShare.Desktop.ViewModels
 
         public void Dispose()
         {
+            // 显式退订（弱引用之外的双保险：让处理器立即停止、也可被 GC 回收）
+            _messenger.Unregister<ExternalTransferUpdate>(this);
+
             _serviceManager.OnDeviceDiscovered -= OnDeviceDiscovered;
             _serviceManager.OnDeviceRemoved -= OnDeviceRemoved;
             _serviceManager.OnTransferRequestSendAndReceive -= OnTransferRequestSendAndReceive;

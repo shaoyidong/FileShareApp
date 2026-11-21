@@ -47,7 +47,7 @@ public class SubnetScannerBatchPathTests
             return Task.FromResult<DeviceInfo?>(null);
         }
 
-        public Task<IReadOnlyList<DeviceInfo>> ProbeBatchAsync(
+        public Task<DeviceInfo[]> ProbeBatchAsync(
             IReadOnlyList<IPAddress> addresses,
             IProgress<SubnetScanProgress>? progress,
             CancellationToken cancellationToken)
@@ -61,7 +61,7 @@ public class SubnetScannerBatchPathTests
                     i + 1, addresses.Count, addresses[i].ToString(), null));
             }
 
-            return Task.FromResult(_devices);
+            return Task.FromResult(_devices.ToArray());
         }
     }
 
@@ -261,7 +261,7 @@ public class SubnetScannerBatchPathTests
         public Task<DeviceInfo?> ProbeAsync(IPAddress a, int p, CancellationToken ct = default)
             => Task.FromResult<DeviceInfo?>(null);
 
-        public Task<IReadOnlyList<DeviceInfo>> ProbeBatchAsync(
+        public Task<DeviceInfo[]> ProbeBatchAsync(
             IReadOnlyList<IPAddress> addresses,
             IProgress<SubnetScanProgress>? progress,
             CancellationToken cancellationToken)
@@ -272,7 +272,7 @@ public class SubnetScannerBatchPathTests
                     i + 1, addresses.Count, addresses[i].ToString(), null));
             }
 
-            return Task.FromResult<IReadOnlyList<DeviceInfo>>(Array.Empty<DeviceInfo>());
+            return Task.FromResult(Array.Empty<DeviceInfo>());
         }
     }
 

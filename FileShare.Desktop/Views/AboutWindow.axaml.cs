@@ -5,6 +5,8 @@ using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Threading;
 using FileShare.Desktop.ViewModels;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using System;
 
 namespace FileShare.Desktop.Views;
@@ -31,6 +33,7 @@ public partial class AboutWindow : Window
     /// <summary>倾斜复位动画的步进间隔。</summary>
     private static readonly TimeSpan TiltResetInterval = TimeSpan.FromMilliseconds(16);
 
+    private readonly ILogger<AboutWindow> _logger;
     private readonly Rotate3DTransform _tiltTransform = new(0, 0, 0, 0, 0, 0, 600);
     private readonly RotateTransform _logoRotation = new();
     private DispatcherTimer? _tiltResetTimer;
@@ -41,9 +44,15 @@ public partial class AboutWindow : Window
     private bool _logoHovered;
     private bool _activatedOnce;
     private bool _closing;
+    private LayeredWindowRenderer? _layeredRenderer;
 
-    public AboutWindow()
+    public AboutWindow() : this(NullLogger<AboutWindow>.Instance)
     {
+    }
+
+    public AboutWindow(ILogger<AboutWindow> logger)
+    {
+        _logger = logger;
         InitializeComponent();
         if (Design.IsDesignMode)
         {
@@ -65,10 +74,22 @@ public partial class AboutWindow : Window
         _logoRotationTimer.Start();
 
         Activated += (_, _) => _activatedOnce = true;
+        Opened += (_, _) =>
+        {
+            // Win7 拿不到 Avalonia 透明窗口，改用分层窗口自行合成；其余平台继续走原生透明
+            if (!TryEnableLayeredMode())
+            {
+                ApplyOpaqueCardFallbackIfNeeded();
+            }
+        };
+        // 动态内容（Headline/二维码/链接）完成布局后需要重新抓一帧
+        LayoutUpdated += (_, _) => _layeredRenderer?.RequestUpdate();
         Closed += (_, _) =>
         {
             _tiltResetTimer?.Stop();
             _logoRotationTimer?.Stop();
+            _layeredRenderer?.Dispose();
+            _layeredRenderer = null;
             // VM 持有静态事件订阅，窗口关闭时释放，避免窗口被静态事件持有
             (DataContext as IDisposable)?.Dispose();
         };
@@ -84,6 +105,77 @@ public partial class AboutWindow : Window
             }
         };
         PointerExited += (_, _) => StartTiltReset();
+    }
+
+    /// <summary>
+    /// Win7 等拿不到 Avalonia 透明窗口的 Windows 上，改用 Win32 分层窗口按逐像素 alpha 合成；
+    /// Win10/11（DWM/DComp）和 Linux（合成器）原生透明可用时完全不走这里。
+    /// 诊断开关：FILESHARE_ABOUT_LAYERED=1 强制启用，=0 强制关闭。
+    /// </summary>
+    private bool TryEnableLayeredMode()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return false;
+        }
+
+        var forced = Environment.GetEnvironmentVariable("FILESHARE_ABOUT_LAYERED");
+        if (forced == "0")
+        {
+            return false;
+        }
+
+        if (forced != "1" && ActualTransparencyLevel == WindowTransparencyLevel.Transparent)
+        {
+            return false;
+        }
+
+        var renderer = new LayeredWindowRenderer(this, _logger);
+        if (!renderer.TryEnable())
+        {
+            renderer.Dispose();
+            _logger.LogWarning("分层窗口不可用，回退为不透明卡片");
+            return false;
+        }
+
+        _layeredRenderer = renderer;
+        _logger.LogInformation(
+            "已启用分层窗口逐像素透明（ActualTransparencyLevel={Level}）",
+            ActualTransparencyLevel);
+        return true;
+    }
+
+    /// <summary>
+    /// Win7 及更早系统（或任何无法提供窗口级透明的平台）上，TransparencyLevelHint 会退化，
+    /// 窗口底色的白色便从圆角卡片四周露出来，表现为「外延一圈白边」。
+    /// 这种情况直接让窗口本体充当不透明卡片：同色背景 + 去掉四周留白与圆角，白边自然消失。
+    /// </summary>
+    private void ApplyOpaqueCardFallbackIfNeeded()
+    {
+        // 平台确实拿不到透明窗口时才降级（Win7 上属性会退化为 None）
+        if (ActualTransparencyLevel == WindowTransparencyLevel.Transparent)
+        {
+            return;
+        }
+
+        TransparencyLevelHint = new[] { WindowTransparencyLevel.None };
+
+        try
+        {
+            Background = Avalonia.Controls.ResourceNodeExtensions.TryFindResource(
+                this, "FsSurfaceBrush", out var brush) && brush is IBrush resourceBrush
+                ? resourceBrush
+                : Brushes.White;
+        }
+        catch (Exception)
+        {
+            Background = Brushes.White;
+        }
+
+        TiltRoot.Margin = new Thickness(0);
+        TiltRoot.CornerRadius = new CornerRadius(0);
+        // 阴影在非透明窗口上会被裁掉，留着只会在卡片边缘留下脏边
+        TiltRoot.ClearValue(Border.BoxShadowProperty);
     }
 
     private void CloseIfNotClosing()
@@ -131,6 +223,7 @@ public partial class AboutWindow : Window
         _logoRotationAngle =
             (_logoRotationAngle + LogoRotationDegreesPerSecond * _logoRotationSpeed * elapsed) % 360.0;
         _logoRotation.Angle = _logoRotationAngle;
+        _layeredRenderer?.RequestUpdate();
     }
 
     /// <summary>
@@ -155,6 +248,7 @@ public partial class AboutWindow : Window
         //_tiltTransform.CenterY = bounds.Height / 2;
         _tiltTransform.AngleY = nx * MaxTiltDegrees;  // 鼠标在右 → 右缘向后倾
         _tiltTransform.AngleX = -ny * MaxTiltDegrees; // 鼠标在下 → 底缘向后倾
+        _layeredRenderer?.RequestUpdate();
     }
 
     /// <summary>指针离开后用简单的阻尼步进把倾斜角归零。</summary>
@@ -171,12 +265,14 @@ public partial class AboutWindow : Window
                 {
                     _tiltTransform.AngleX = 0;
                     _tiltTransform.AngleY = 0;
+                    _layeredRenderer?.RequestUpdate();
                     _tiltResetTimer.Stop();
                     return;
                 }
 
                 _tiltTransform.AngleX = x * 0.8;
                 _tiltTransform.AngleY = y * 0.8;
+                _layeredRenderer?.RequestUpdate();
             };
         }
 
