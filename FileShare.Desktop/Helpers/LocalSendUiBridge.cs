@@ -4,10 +4,10 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Threading;
 using FileShare.Core.Models;
 using FileShare.Core.Services;
+using CommunityToolkit.Mvvm.Messaging;
 using Shyd.Prism.Localization;
 using FileShare.Desktop.Services;
 using Shyd.Prism.Notifications;
-using Shyd.Prism.Events;
 using Shyd.Prism.Dialogs;
 using FileShare.Desktop.ViewModels;
 using FileShare.LocalSend;
@@ -27,14 +27,14 @@ public sealed class LocalSendUiBridge : ILocalSendUiBridge
     private readonly IToastService _toastService;
     private readonly IAppSettingsService _settingsService;
     private readonly IDialogService _dialogs;
-    private readonly IEventAggregator _events;
+    private readonly IMessenger _messenger;
 
-    public LocalSendUiBridge(IToastService toastService, IAppSettingsService settingsService, IDialogService dialogs, IEventAggregator events)
+    public LocalSendUiBridge(IToastService toastService, IAppSettingsService settingsService, IDialogService dialogs, IMessenger messenger)
     {
         _toastService = toastService ?? throw new ArgumentNullException(nameof(toastService));
         _settingsService = settingsService ?? throw new ArgumentNullException(nameof(settingsService));
         _dialogs = dialogs ?? throw new ArgumentNullException(nameof(dialogs));
-        _events = events ?? throw new ArgumentNullException(nameof(events));
+        _messenger = messenger ?? throw new ArgumentNullException(nameof(messenger));
     }
 
     /// <inheritdoc />
@@ -62,11 +62,12 @@ public sealed class LocalSendUiBridge : ILocalSendUiBridge
                 });
             }
 
-            var isActive = owner.IsActive;
-
-            // 前台：直接弹消息卡片（前台时 ToastService 自动抑制通知）
-            if (isActive)
+            // IsActive 在主窗口被其他窗口遮挡时也是 false，不适合判断是否退到后台。
+            // 托盘隐藏 → IsVisible=false（WindowState 可能仍是 Normal），最小化 → WindowState.Minimized。
+            var isBackground = !owner.IsVisible || owner.WindowState == WindowState.Minimized;
+            if (!isBackground)
             {
+                ActivateWindow(owner);
                 ShowMessageCard();
                 return;
             }
@@ -89,7 +90,7 @@ public sealed class LocalSendUiBridge : ILocalSendUiBridge
 
     /// <inheritdoc />
     public void ReportTransfer(ExternalTransferUpdate update) =>
-        _events.Publish(update);
+        _messenger.Send(update);
 
     /// <inheritdoc />
     public async Task<ExternalReceiveDecision> ConfirmReceiveAsync(ExternalReceiveRequest request)

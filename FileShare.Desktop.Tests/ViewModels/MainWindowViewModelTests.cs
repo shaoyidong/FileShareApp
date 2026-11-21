@@ -7,7 +7,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using System.Collections.Generic;
 using System.Threading;
 using FileShare.Desktop.Services;
-using Shyd.Prism.Events;
+using CommunityToolkit.Mvvm.Messaging;
 using Shyd.Prism.Dialogs;
 using Shyd.Prism.Regions;
 using Avalonia.Platform.Storage;
@@ -21,7 +21,7 @@ namespace FileShare.Desktop.Tests.ViewModels
         private readonly Mock<IPlatformDialogService> _mockDialogService;
         private readonly Mock<IDialogService> _mockDialogs;
         private readonly Mock<IRegionManager> _mockRegionManager;
-        private readonly Mock<IEventAggregator> _mockTransferEvents;
+        private readonly IMessenger _messenger;
         private readonly Mock<IAppSettingsService> _mockSettingsService;
         private readonly Mock<IThemeService> _mockThemeService;
         private readonly MainViewModel _viewModel;
@@ -39,7 +39,8 @@ namespace FileShare.Desktop.Tests.ViewModels
             _mockDialogService = new Mock<IPlatformDialogService>();
             _mockDialogs = new Mock<IDialogService>();
             _mockRegionManager = new Mock<IRegionManager>();
-            _mockTransferEvents = new Mock<IEventAggregator>();
+            // 每个测试用独立实例，避免全局单例 WeakReferenceMessenger.Default 在测试间串扰
+            _messenger = new WeakReferenceMessenger();
             _mockSettingsService = new Mock<IAppSettingsService>();
             _mockThemeService = new Mock<IThemeService>();
             _mockSettingsService.SetupGet(s => s.Current).Returns(new AppSettings());
@@ -61,7 +62,7 @@ namespace FileShare.Desktop.Tests.ViewModels
                 _mockDialogService.Object,
                 _mockDialogs.Object,
                 _mockRegionManager.Object,
-                _mockTransferEvents.Object,
+                _messenger,
                 _mockAppLifetime.Object,
                 _testSynchronizationContext,
                 Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance,
@@ -499,6 +500,247 @@ namespace FileShare.Desktop.Tests.ViewModels
 
             // Assert
             Assert.Equal("文件传输失败: 网络错误", _viewModel.StatusMessage);
+        }
+
+        [Fact]
+        public void RetryTransfer_RemovesFailedItem_AndLetsNewTransferAppear()
+        {
+            var path = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(), "fs-retry-" + Guid.NewGuid().ToString("N") + ".txt");
+            System.IO.File.WriteAllText(path, "retry content");
+
+            try
+            {
+                var failed = new FileTransferInfo
+                {
+                    TransferId = "old-transfer",
+                    FileName = "retry.txt",
+                    FileSize = 14,
+                    Status = TransferStatus.Failed,
+                    Direction = TransferDirection.Send,
+                    SenderId = "test-device-id",
+                    ReceiverId = "test-device-id",
+                    FilePath = path
+                };
+                _mockServiceManager.Raise(m => m.OnTransferRequestSendAndReceive += null, failed);
+                var failedItem = Assert.Single(_viewModel.TransferTasks);
+
+                _mockServiceManager
+                    .Setup(m => m.SendSingleAsync(
+                        path, It.IsAny<DeviceInfo>(), null, null, It.IsAny<CancellationToken>()))
+                    .Returns(() =>
+                    {
+                        var retried = new FileTransferInfo
+                        {
+                            TransferId = "new-transfer",
+                            FileName = "retry.txt",
+                            FileSize = 14,
+                            Status = TransferStatus.Pending,
+                            Direction = TransferDirection.Send,
+                            SenderId = "test-device-id",
+                            ReceiverId = "test-device-id",
+                            FilePath = path
+                        };
+                        var completed = new FileTransferInfo
+                        {
+                            TransferId = "new-transfer",
+                            FileName = "retry.txt",
+                            FileSize = 14,
+                            TransferredSize = 14,
+                            Status = TransferStatus.Completed,
+                            Direction = TransferDirection.Send,
+                            SenderId = "test-device-id",
+                            ReceiverId = "test-device-id",
+                            FilePath = path
+                        };
+                        _mockServiceManager.Raise(m => m.OnTransferRequestSendAndReceive += null, retried);
+                        _mockServiceManager.Raise(m => m.OnTransferCompleted += null, completed, null);
+                        return Task.FromResult(true);
+                    });
+
+                _viewModel.RetryTransferCommand.Execute(failedItem);
+
+                var item = Assert.Single(_viewModel.TransferTasks);
+                Assert.NotSame(failedItem, item);
+                Assert.DoesNotContain(failedItem, _viewModel.TransferTasks);
+                Assert.DoesNotContain(failedItem, _viewModel.SentTransferTasks);
+                Assert.Equal("new-transfer", item.TransferId);
+                Assert.Equal(TransferStatus.Completed, item.Status);
+                Assert.Single(_viewModel.SentTransferTasks);
+                Assert.Same(item, Assert.Single(_viewModel.SentTransferTasks));
+            }
+            finally
+            {
+                if (System.IO.File.Exists(path))
+                {
+                    System.IO.File.Delete(path);
+                }
+            }
+        }
+
+        [Fact]
+        public void TextMessage_StillAppearsInTransferLists_OncePerDirection()
+        {
+            var sent = new FileTransferInfo
+            {
+                TransferId = "msg-send",
+                FileName = "文本摘要",
+                FileSize = 10,
+                Status = TransferStatus.Completed,
+                Direction = TransferDirection.Send,
+                SenderId = "test-device-id",
+                ReceiverId = "remote-device-1",
+                IsMessage = true,
+                MessageText = "hello"
+            };
+            _mockServiceManager.Raise(m => m.OnTransferRequestSendAndReceive += null, sent);
+
+            Assert.Single(_viewModel.TransferTasks);
+            Assert.Single(_viewModel.SentTransferTasks);
+            Assert.Empty(_viewModel.ReceivedTransferTasks);
+            Assert.True(_viewModel.TransferTasks[0].IsMessage);
+            Assert.Equal("hello", _viewModel.TransferTasks[0].MessageText);
+
+            var received = new FileTransferInfo
+            {
+                TransferId = "msg-receive",
+                FileName = "文本摘要",
+                FileSize = 10,
+                Status = TransferStatus.Completed,
+                Direction = TransferDirection.Receive,
+                SenderId = "remote-device-1",
+                ReceiverId = "test-device-id",
+                IsMessage = true,
+                MessageText = "world"
+            };
+            _mockServiceManager.Raise(m => m.OnTransferRequestSendAndReceive += null, received);
+
+            Assert.Equal(2, _viewModel.TransferTasks.Count);
+            Assert.Single(_viewModel.SentTransferTasks);
+            Assert.Single(_viewModel.ReceivedTransferTasks);
+        }
+
+        [Fact]
+        public void ConcurrentRetries_ReplaceTheirOwnFailedItems_WithoutCrossTalk()
+        {
+            var pathA = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(), "fs-retry-a-" + Guid.NewGuid().ToString("N") + ".txt");
+            var pathB = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(), "fs-retry-b-" + Guid.NewGuid().ToString("N") + ".txt");
+            System.IO.File.WriteAllText(pathA, "a");
+            System.IO.File.WriteAllText(pathB, "b");
+
+            try
+            {
+                var failA = new FileTransferInfo
+                {
+                    TransferId = "fail-a", FileName = "a.txt", FileSize = 1,
+                    Status = TransferStatus.Failed, Direction = TransferDirection.Send,
+                    SenderId = "test-device-id", ReceiverId = "device-A", FilePath = pathA
+                };
+                var failB = new FileTransferInfo
+                {
+                    TransferId = "fail-b", FileName = "b.txt", FileSize = 1,
+                    Status = TransferStatus.Failed, Direction = TransferDirection.Send,
+                    SenderId = "test-device-id", ReceiverId = "device-B", FilePath = pathB
+                };
+                _mockServiceManager.Raise(m => m.OnTransferRequestSendAndReceive += null, failA);
+                _mockServiceManager.Raise(m => m.OnTransferRequestSendAndReceive += null, failB);
+                _mockServiceManager.Raise(m => m.OnDeviceDiscovered += null, new DeviceInfo
+                {
+                    DeviceId = "device-A", DeviceName = "A", DeviceType = DeviceType.Desktop,
+                    IpAddress = "192.168.1.10", Port = 5237
+                });
+                _mockServiceManager.Raise(m => m.OnDeviceDiscovered += null, new DeviceInfo
+                {
+                    DeviceId = "device-B", DeviceName = "B", DeviceType = DeviceType.Desktop,
+                    IpAddress = "192.168.1.11", Port = 5237
+                });
+                var itemA = _viewModel.TransferTasks.Single(t => t.FileName == "a.txt");
+                var itemB = _viewModel.TransferTasks.Single(t => t.FileName == "b.txt");
+
+                _mockServiceManager
+                    .Setup(m => m.SendSingleAsync(
+                        pathA, It.IsAny<DeviceInfo>(), null, null, It.IsAny<CancellationToken>()))
+                    .Returns(() =>
+                    {
+                        RaiseRetrySucceeded("new-a", "a.txt", "device-A", pathA);
+                        return Task.FromResult(true);
+                    });
+                _mockServiceManager
+                    .Setup(m => m.SendSingleAsync(
+                        pathB, It.IsAny<DeviceInfo>(), null, null, It.IsAny<CancellationToken>()))
+                    .Returns(() =>
+                    {
+                        RaiseRetrySucceeded("new-b", "b.txt", "device-B", pathB);
+                        return Task.FromResult(true);
+                    });
+
+                _viewModel.RetryTransferCommand.Execute(itemA);
+                _viewModel.RetryTransferCommand.Execute(itemB);
+
+                Assert.Equal(2, _viewModel.TransferTasks.Count);
+                Assert.DoesNotContain(itemA, _viewModel.TransferTasks);
+                Assert.DoesNotContain(itemB, _viewModel.TransferTasks);
+                var newA = _viewModel.TransferTasks.Single(t => t.FileName == "a.txt");
+                var newB = _viewModel.TransferTasks.Single(t => t.FileName == "b.txt");
+                Assert.NotSame(itemA, newA);
+                Assert.NotSame(itemB, newB);
+                Assert.Equal("new-a", newA.TransferId);
+                Assert.Equal("new-b", newB.TransferId);
+                Assert.Equal(TransferStatus.Completed, newA.Status);
+                Assert.Equal(TransferStatus.Completed, newB.Status);
+                Assert.Equal(2, _viewModel.SentTransferTasks.Count);
+                Assert.DoesNotContain(itemA, _viewModel.SentTransferTasks);
+                Assert.DoesNotContain(itemB, _viewModel.SentTransferTasks);
+            }
+            finally
+            {
+                foreach (var path in new[] { pathA, pathB })
+                {
+                    if (System.IO.File.Exists(path))
+                    {
+                        System.IO.File.Delete(path);
+                    }
+                }
+            }
+
+            void RaiseRetrySucceeded(string id, string fileName, string receiverId, string path)
+            {
+                var request = new FileTransferInfo
+                {
+                    TransferId = id, FileName = fileName, FileSize = 1,
+                    Status = TransferStatus.Transferring, Direction = TransferDirection.Send,
+                    SenderId = "test-device-id", ReceiverId = receiverId, FilePath = path
+                };
+                var completed = new FileTransferInfo
+                {
+                    TransferId = id, FileName = fileName, FileSize = 1, TransferredSize = 1,
+                    Status = TransferStatus.Completed, Direction = TransferDirection.Send,
+                    SenderId = "test-device-id", ReceiverId = receiverId, FilePath = path
+                };
+                _mockServiceManager.Raise(m => m.OnTransferRequestSendAndReceive += null, request);
+                _mockServiceManager.Raise(m => m.OnTransferCompleted += null, completed, null);
+            }
+        }
+
+        [Theory]
+        [InlineData(true, Avalonia.Controls.WindowState.Normal, false)]
+        [InlineData(true, Avalonia.Controls.WindowState.Minimized, true)]
+        [InlineData(false, Avalonia.Controls.WindowState.Normal, true)]
+        [InlineData(false, Avalonia.Controls.WindowState.Minimized, true)]
+        public void IsBackgroundWindow_OnlyTrayOrMinimizedCounts(
+            bool isVisible, Avalonia.Controls.WindowState state, bool expected)
+        {
+            Assert.Equal(expected, MainViewModel.IsBackgroundWindow(isVisible, state));
+        }
+
+        [Fact]
+        public void ShouldShowCompletionToast_SkipsTextMessages()
+        {
+            Assert.False(MainViewModel.ShouldShowCompletionToast(true, true));
+            Assert.True(MainViewModel.ShouldShowCompletionToast(false, true));
+            Assert.False(MainViewModel.ShouldShowCompletionToast(false, false));
         }
     }
 }

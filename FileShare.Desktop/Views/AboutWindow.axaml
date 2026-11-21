@@ -13,6 +13,7 @@
     CanResize="False"
     SystemDecorations="None"
     TransparencyLevelHint="Transparent"
+    TransparencyBackgroundFallback="Transparent"
     Background="Transparent"
     WindowStartupLocation="CenterOwner"
     d:DesignHeight="600"

@@ -22,6 +22,31 @@ namespace FileShare.Desktop.ViewModels
         [ObservableProperty]
         public partial string? MessageText { get; set; }
 
+        partial void OnMessageTextChanged(string? value) => OnPropertyChanged(nameof(MessagePreview));
+
+        /// <summary>
+        /// 传输列表里的文本消息预览：压平换行、限制长度，超长以省略号结尾。
+        /// 全文仍保留在 <see cref="MessageText"/> 中供复制 / 详情查看。
+        /// </summary>
+        public string MessagePreview
+        {
+            get
+            {
+                if (string.IsNullOrWhiteSpace(MessageText))
+                {
+                    return string.Empty;
+                }
+
+                var singleLine = MessageText
+                    .Replace('\r', ' ')
+                    .Replace('\n', ' ')
+                    .Replace('\t', ' ')
+                    .Trim();
+
+                return singleLine.Length > 60 ? singleLine[..60] + "…" : singleLine;
+            }
+        }
+
         /// <summary>消息分支切换后刷新依赖 IsMessage 的可见性属性。</summary>
         partial void OnIsMessageChanged(bool value)
         {

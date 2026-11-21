@@ -1,5 +1,4 @@
 using FileShare.Desktop.Services;
-using Shyd.Prism.Events;
 using FileShare.LocalSend;
 using Microsoft.Extensions.Logging.Abstractions;
 

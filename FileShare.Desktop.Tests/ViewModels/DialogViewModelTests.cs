@@ -185,4 +185,21 @@ public class DialogViewModelTests
             Assert.True(viewModel.CanCloseDialog());
         }
     }
+
+    [Fact]
+    public void FileTransferViewModel_LongMessage_HasSingleLinePreviewWithEllipsis()
+    {
+        var viewModel = new FileTransferViewModel
+        {
+            IsMessage = true,
+            MessageText = new string('长', 30) + "\n" + new string('文', 40)
+        };
+
+        Assert.DoesNotContain('\n', viewModel.MessagePreview);
+        Assert.DoesNotContain('\r', viewModel.MessagePreview);
+        Assert.EndsWith("…", viewModel.MessagePreview);
+        Assert.Equal(61, viewModel.MessagePreview.Length);
+        // 预览截断不能破坏全文（复制仍使用全文）
+        Assert.Equal(71, viewModel.MessageText!.Length);
+    }
 }

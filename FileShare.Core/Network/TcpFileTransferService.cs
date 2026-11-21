@@ -10,6 +10,7 @@ using Org.BouncyCastle.Crypto.Digests;
 using System;
 using System.Buffers;
 using System.Collections.Concurrent;
+using System.ComponentModel;
 using System.IO;
 using System.Net;
 using System.Net.Security;
@@ -505,6 +506,13 @@ public class TcpFileTransferService : IDisposable
                             _logger.LogInformation("处理请求被取消");
                             break;
                         }                       
+                        catch (Exception ex) when (IsTlsChannelFailure(ex))
+                        {
+                            // 证书不匹配 / TLS 记录损坏后，SslStream 已经不可恢复：
+                            // 只记一条简洁告警，不再尝试写错误响应、也不继续读，避免同一连接刷屏。
+                            _logger.LogWarning("TLS 通道已失效，关闭连接: {Reason}", TlsFailureReason(ex));
+                            break;
+                        }
                         catch (Exception ex)
                         {
                             _logger.LogError(ex, "处理请求失败");
@@ -537,6 +545,19 @@ public class TcpFileTransferService : IDisposable
                         await rawStream.DisposeAsync().ConfigureAwait(false);
 
                     _logger.LogDebug("释放连接Stream");
+                }
+            }
+        }
+        catch (Exception ex) when (IsTlsChannelFailure(ex))
+        {
+            // 握手阶段被对端拒绝（典型：对端证书指纹不匹配）属于预期拒绝，不再输出完整堆栈
+            _logger.LogWarning("TLS 握手被拒绝或通道失效: {Reason}", TlsFailureReason(ex));
+            if (!string.IsNullOrEmpty(transferId))
+            {
+                if (_incomingTransfers.TryRemove(transferId, out var transfer))
+                {
+                    transfer.Status = TransferStatus.Failed;
+                    OnTransferCompleted?.Invoke(transfer, "TLS 握手被拒绝或通道失效");
                 }
             }
         }
@@ -607,6 +628,40 @@ public class TcpFileTransferService : IDisposable
                 socketEx.SocketErrorCode == SocketError.ConnectionAborted ||
                 socketEx.SocketErrorCode == SocketError.Shutdown);
     }
+
+    /// <summary>
+    /// 判断异常是否属于 TLS 通道已失效（对端拒绝证书、握手被中止、TLS 记录损坏）。
+    /// <para>典型场景：接收端证书被删除重建后，发送端 TOFU 指纹校验失败并中止握手；
+    /// 接收端随后只会从 SslStream 读到解密失败 / 帧损坏，继续循环读会刷出大量相同异常。</para>
+    /// </summary>
+    internal static bool IsTlsChannelFailure(Exception? ex)
+    {
+        for (var current = ex; current is not null; current = current.InnerException)
+        {
+            // 证书被 RemoteCertificateValidationCallback 拒绝时抛 AuthenticationException
+            if (current is AuthenticationException)
+            {
+                return true;
+            }
+
+            // Windows SChannel：SEC_E_UNKNOWN_CREDENTIALS（0x80090327，处理证书时出错）
+            if (current is Win32Exception win32 && win32.NativeErrorCode == unchecked((int)0x80090327))
+            {
+                return true;
+            }
+
+            if (current is IOException &&
+                current.Message.Contains("decryption operation failed", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>TLS 通道失效只写一行摘要，避免把完整的 SslStream 调用栈刷进日志。</summary>
+    private static string TlsFailureReason(Exception ex) => ex.GetBaseException().Message;
 
     #region TLS 可选加密升级
 
@@ -1597,6 +1652,15 @@ public class TcpFileTransferService : IDisposable
             OnTransferCompleted?.Invoke(info, "发送文本消息已取消或超时");
             return false;
         }
+        catch (AuthenticationException ex)
+        {
+            // TOFU 指纹不匹配时 SslStream 会拒绝远端证书；UI 已收到「证书指纹不一致」告警，
+            // 这里只补一条简短日志，不再把整段握手调用栈写进日志。
+            _logger.LogWarning("与目标 {Device} 的 TLS 证书校验失败: {Reason}", targetDevice.DeviceId, ex.Message);
+            info.Status = TransferStatus.Failed;
+            OnTransferCompleted?.Invoke(info, "TLS 证书校验失败");
+            return false;
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "发送文本消息失败");
@@ -1794,6 +1858,17 @@ public class TcpFileTransferService : IDisposable
             {
                 transferInfo.Status = TransferStatus.Failed;
                 OnTransferCompleted?.Invoke(transferInfo, "连接被接收方中断");
+            }
+            return false;
+        }
+        catch (AuthenticationException ex)
+        {
+            // 同上：证书不匹配属于「已向用户告警」的预期拒绝，避免重复的错误堆栈
+            _logger.LogWarning("与目标 {Device} 的 TLS 证书校验失败: {Reason}", targetDevice.DeviceId, ex.Message);
+            if (transferInfo is not null)
+            {
+                transferInfo.Status = TransferStatus.Failed;
+                OnTransferCompleted?.Invoke(transferInfo, "TLS 证书校验失败");
             }
             return false;
         }

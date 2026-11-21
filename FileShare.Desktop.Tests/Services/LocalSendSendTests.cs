@@ -1,6 +1,5 @@
 using FileShare.Core.Services;
 using FileShare.Desktop.Services;
-using Shyd.Prism.Events;
 using FileShare.LocalSend;
 using FileShare.Crypto;
 using LocalSend.Core.Http.DtoV2;
