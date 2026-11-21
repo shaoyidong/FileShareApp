@@ -75,8 +75,10 @@ namespace FileShare.Desktop
 
                 // 关于窗口内容同样来自外部配置：内置默认 -> 数据目录 about.json -> 远程 JSON。
                 // 后台拉取失败会静默沿用旧内容，不阻塞启动。
-                FileShare.Desktop.Services.AboutContentService.Initialize(dataDirectory);
-                _ = FileShare.Desktop.Services.AboutContentService.RefreshAsync();
+                var aboutContentService = _serviceProvider?.GetService<IAboutContentService>();
+                aboutContentService?.Initialize(
+                    dataDirectory);                   
+                _ = aboutContentService?.RefreshAsync();
 
                 var themeService = _serviceProvider?.GetService<IThemeService>();
                 // 摘除旧版静态声明残留的皮肤实例（窗口创建前完成）

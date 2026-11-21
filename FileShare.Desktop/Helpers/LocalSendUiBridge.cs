@@ -1,7 +1,5 @@
-using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
-using Avalonia.Threading;
 using FileShare.Core.Models;
 using FileShare.Core.Services;
 using CommunityToolkit.Mvvm.Messaging;
@@ -12,6 +10,7 @@ using Shyd.Prism.Dialogs;
 using FileShare.Desktop.ViewModels;
 using FileShare.LocalSend;
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace FileShare.Desktop.Helpers;
@@ -28,13 +27,23 @@ public sealed class LocalSendUiBridge : ILocalSendUiBridge
     private readonly IAppSettingsService _settingsService;
     private readonly IDialogService _dialogs;
     private readonly IMessenger _messenger;
+    private readonly IClassicDesktopStyleApplicationLifetime _appLifetime;
+    private readonly SynchronizationContext _uiContext;
 
-    public LocalSendUiBridge(IToastService toastService, IAppSettingsService settingsService, IDialogService dialogs, IMessenger messenger)
+    public LocalSendUiBridge(
+        IToastService toastService,
+        IAppSettingsService settingsService,
+        IDialogService dialogs,
+        IMessenger messenger,
+        IClassicDesktopStyleApplicationLifetime appLifetime,
+        SynchronizationContext uiContext)
     {
         _toastService = toastService ?? throw new ArgumentNullException(nameof(toastService));
         _settingsService = settingsService ?? throw new ArgumentNullException(nameof(settingsService));
         _dialogs = dialogs ?? throw new ArgumentNullException(nameof(dialogs));
         _messenger = messenger ?? throw new ArgumentNullException(nameof(messenger));
+        _appLifetime = appLifetime ?? throw new ArgumentNullException(nameof(appLifetime));
+        _uiContext = uiContext ?? throw new ArgumentNullException(nameof(uiContext));
     }
 
     /// <inheritdoc />
@@ -45,9 +54,9 @@ public sealed class LocalSendUiBridge : ILocalSendUiBridge
     /// <inheritdoc />
     public void ShowTextMessage(string senderName, string message)
     {
-        Dispatcher.UIThread.Post(() =>
+        _uiContext.Post(_ =>
         {
-            var owner = (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow;
+            var owner = _appLifetime.MainWindow;
             if (owner is null)
             {
                 return;
@@ -76,13 +85,13 @@ public sealed class LocalSendUiBridge : ILocalSendUiBridge
             _toastService.Show(
                 Loc.Get("收到文本消息"),
                 message.Length > 60 ? message[..60] + "…" : message,
-                () => Dispatcher.UIThread.Post(() =>
+                () => _uiContext.Post(_ =>
                 {
                     ActivateWindow(owner);
                     ShowMessageCard();
-                }),
+                }, null),
                 Loc.Get("点击查看（6 秒后自动关闭）"));
-        });
+        }, null);
     }
 
     /// <inheritdoc />
@@ -103,7 +112,7 @@ public sealed class LocalSendUiBridge : ILocalSendUiBridge
             return ExternalReceiveDecision.AcceptOnce;
         }
 
-        var owner = (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow;
+        var owner = await InvokeOnUiAsync(() => _appLifetime.MainWindow).ConfigureAwait(false);
         if (owner is null)
         {
             // 没有主窗口（无界面场景）：保守拒绝，不静默接收
@@ -122,7 +131,7 @@ public sealed class LocalSendUiBridge : ILocalSendUiBridge
         };
 
         // 窗口活跃：直接弹确认窗，不再无条件 Show()+Activate() 抢焦点
-        var isActive = await Dispatcher.UIThread.InvokeAsync(() => owner.IsActive);
+        var isActive = await InvokeOnUiAsync(() => owner.IsActive).ConfigureAwait(false);
         if (isActive)
         {
             return await ShowConfirmDialogAsync(owner, request, transfer).ConfigureAwait(false);
@@ -135,12 +144,12 @@ public sealed class LocalSendUiBridge : ILocalSendUiBridge
         _toastService.Show(
             Loc.Get("收到文件传输请求"),
             Loc.F("{0} 想发送：{1}", request.SenderName, request.FileName),
-            () => Dispatcher.UIThread.Post(async () =>
+            () => _uiContext.Post(async _ =>
             {
                 ActivateWindow(owner);
                 var decision = await ShowConfirmDialogAsync(owner, request, transfer).ConfigureAwait(true);
                 decisionTcs.TrySetResult(decision);
-            }),
+            }, null),
             Loc.Get("点击查看（6 秒后自动关闭）"));
 
         var completed = await Task.WhenAny(decisionTcs.Task, Task.Delay(ConfirmTimeout)).ConfigureAwait(false);
@@ -187,6 +196,29 @@ public sealed class LocalSendUiBridge : ILocalSendUiBridge
         {
             return ExternalReceiveDecision.Declined;
         }
+    }
+
+    /// <summary>把返回值/异常的读取投递到 UI 线程；已在该上下文时直接执行。</summary>
+    private Task<T> InvokeOnUiAsync<T>(Func<T> func)
+    {
+        if (SynchronizationContext.Current == _uiContext)
+        {
+            return Task.FromResult(func());
+        }
+
+        var tcs = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _uiContext.Post(_ =>
+        {
+            try
+            {
+                tcs.SetResult(func());
+            }
+            catch (Exception ex)
+            {
+                tcs.SetException(ex);
+            }
+        }, null);
+        return tcs.Task;
     }
 
     private static void ActivateWindow(Window owner)

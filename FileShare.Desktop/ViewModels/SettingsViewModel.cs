@@ -34,6 +34,7 @@ public partial class SettingsViewModel : ViewModelBase
     private readonly IUiPreferencesService _uiPreferences;
     private readonly IWebShareHost _webShareHost;
     private readonly ITrayService _trayService;
+    private readonly IShellService _shellService;
 
     [ObservableProperty]
     public partial string DeviceName { get; set; } = string.Empty;
@@ -176,7 +177,8 @@ public partial class SettingsViewModel : ViewModelBase
         ILocalSendInteropHost localSendHost,
         IUiPreferencesService uiPreferences,
         IWebShareHost webShareHost,
-        ITrayService trayService)
+        ITrayService trayService,
+        IShellService shellService)
     {
         _settingsService = settingsService ?? throw new ArgumentNullException(nameof(settingsService));
         _themeService = themeService ?? throw new ArgumentNullException(nameof(themeService));
@@ -188,6 +190,7 @@ public partial class SettingsViewModel : ViewModelBase
         _uiPreferences = uiPreferences ?? throw new ArgumentNullException(nameof(uiPreferences));
         _webShareHost = webShareHost ?? throw new ArgumentNullException(nameof(webShareHost));
         _trayService = trayService ?? throw new ArgumentNullException(nameof(trayService));
+        _shellService = shellService ?? throw new ArgumentNullException(nameof(shellService));
 
         BackCommand = new RelayCommand(Back);
         SaveCommand = new RelayCommand(Save);
@@ -462,11 +465,7 @@ public partial class SettingsViewModel : ViewModelBase
 
             try
             {
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = url,
-                    UseShellExecute = true
-                });
+                _shellService.OpenUrl(url);
             }
             catch (Exception ex)
             {

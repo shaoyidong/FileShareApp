@@ -1,8 +1,4 @@
 using Avalonia.Controls.ApplicationLifetimes;
-using Avalonia.Input;
-using Avalonia.Input.Platform;
-using Avalonia.Media.Imaging;
-using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -55,6 +51,7 @@ namespace FileShare.Desktop.ViewModels
         private readonly Dictionary<string, LocalSendPeer> _localSendPeers = new();
         private readonly SynchronizationContext _uiContext;
         private readonly IClassicDesktopStyleApplicationLifetime? _appLifetime;
+        private readonly IClipboardService _clipboardService;
         private readonly ILogger<MainViewModel> _logger;
         private readonly string _localDeviceId;
 
@@ -199,7 +196,8 @@ namespace FileShare.Desktop.ViewModels
             IThemeService? themeService = null,
             IToastService? toastService = null,
             ITrayService? trayService = null,
-        ILocalSendInteropHost? localSendHost = null)
+            ILocalSendInteropHost? localSendHost = null,
+            IClipboardService? clipboardService = null)
         {
             _serviceManager = serviceManager ?? throw new ArgumentNullException(nameof(serviceManager));
             _dialogService = dialogService ?? throw new ArgumentNullException(nameof(dialogService));
@@ -216,6 +214,7 @@ namespace FileShare.Desktop.ViewModels
             _toastService = toastService;
             _trayService = trayService;
             _localSendHost = localSendHost;
+            _clipboardService = clipboardService ?? NullClipboardService.Instance;
 
             Devices = new ObservableCollection<DeviceItemViewModel>();
             TransferTasks = new ObservableCollection<FileTransferViewModel>();
@@ -734,157 +733,50 @@ namespace FileShare.Desktop.ViewModels
                 return;
             }
 
-            var clipboard = _appLifetime?.MainWindow?.Clipboard;
-            if (clipboard is null)
-            {
-                StatusMessage = Loc.Get("剪贴板不可用");
-                return;
-            }
-
             try
             {
-                // ① 文件（或文件夹）：走现有批量发送队列
-                var paths = await ReadClipboardFilePathsAsync(clipboard).ConfigureAwait(true);
-                if (paths.Count > 0)
+                var content = await _clipboardService.ReadAsync().ConfigureAwait(true);
+                if (content is null)
                 {
-                    StatusMessage = Loc.F("剪贴板中有 {0} 个文件，正在发送...", paths.Count);
-                    await SendPathsAsync(paths);
+                    StatusMessage = Loc.Get("剪贴板不可用");
                     return;
                 }
 
-                // ② 图片：截图通常在剪贴板里是位图，另存为 PNG 再发送
-                var imagePath = await SaveClipboardImageAsync(clipboard).ConfigureAwait(true);
-                if (imagePath is not null)
+                switch (content.Kind)
                 {
-                    try
-                    {
-                        StatusMessage = Loc.Get("正在发送剪贴板图片...");
-                        await SendPathsAsync(new[] { imagePath });
-                    }
-                    finally
-                    {
-                        TryDeleteQuietly(imagePath);
-                    }
-                    return;
-                }
+                    // ① 文件（或文件夹）：走现有批量发送队列
+                    case ClipboardContentKind.Files:
+                        StatusMessage = Loc.F("剪贴板中有 {0} 个文件，正在发送...", content.FilePaths.Count);
+                        await SendPathsAsync(content.FilePaths);
+                        return;
 
-                // ③ 文本兜底：作为原生文本消息发送
-                var text = await clipboard.TryGetTextAsync().ConfigureAwait(true);
-                if (string.IsNullOrWhiteSpace(text))
-                {
-                    StatusMessage = Loc.Get("剪贴板中没有可发送的内容");
-                    return;
-                }
+                    // ② 图片：截图通常在剪贴板里是位图，由服务另存为 PNG 后发送
+                    case ClipboardContentKind.Image when content.ImagePath is { } imagePath:
+                        try
+                        {
+                            StatusMessage = Loc.Get("正在发送剪贴板图片...");
+                            await SendPathsAsync(new[] { imagePath });
+                        }
+                        finally
+                        {
+                            TryDeleteQuietly(imagePath);
+                        }
+                        return;
 
-                await SendTextCoreAsync(text);
+                    // ③ 文本兜底：作为原生文本消息发送
+                    case ClipboardContentKind.Text when !string.IsNullOrWhiteSpace(content.Text):
+                        await SendTextCoreAsync(content.Text);
+                        return;
+
+                    default:
+                        StatusMessage = Loc.Get("剪贴板中没有可发送的内容");
+                        return;
+                }
             }
             catch (Exception ex)
             {
                 StatusMessage = Loc.F("读取剪贴板失败: {0}", ex.Message);
                 _logger.LogWarning(ex, "读取剪贴板失败");
-            }
-        }
-
-        /// <summary>读取剪贴板里的文件 / 文件夹路径（新 API 优先，旧 DataFormats 兜底）。</summary>
-        private static async Task<IReadOnlyList<string>> ReadClipboardFilePathsAsync(IClipboard clipboard)
-        {
-            var paths = new List<string>();
-
-            void AddPath(string? path)
-            {
-                if (string.IsNullOrWhiteSpace(path))
-                {
-                    return;
-                }
-
-                if (File.Exists(path))
-                {
-                    paths.Add(path);
-                }
-                else if (Directory.Exists(path))
-                {
-                    paths.AddRange(Directory.GetFiles(path, "*", SearchOption.AllDirectories));
-                }
-            }
-
-            try
-            {
-                var items = await clipboard.TryGetFilesAsync();
-                if (items is { Length: > 0 })
-                {
-                    foreach (var item in items)
-                    {
-                        AddPath(item.Path.IsAbsoluteUri ? item.Path.LocalPath : item.Path.OriginalString);
-                    }
-                }
-            }
-            catch (Exception)
-            {
-                // 平台未实现该格式时走下面的兜底
-            }
-
-            if (paths.Count == 0)
-            {
-                try
-                {
-                    // TryGetFilesAsync 失败后的兜底：用新读取模型（无参 TryGetDataAsync +
-                    // IAsyncDataTransfer）再取一次 File 格式（多数平台不会走到）。
-                    var transfer = await clipboard.TryGetDataAsync();
-                    if (transfer is not null)
-                    {
-                        var storageItems = await transfer.TryGetValuesAsync(DataFormat.File);
-                        if (storageItems is { Length: > 0 })
-                        {
-                            foreach (var item in storageItems)
-                            {
-                                AddPath(item.Path.IsAbsoluteUri ? item.Path.LocalPath : item.Path.OriginalString);
-                            }
-                        }
-                    }
-                }
-                catch (Exception)
-                {
-                    // 忽略：剪贴板里可能只有文本 / 图片
-                }
-            }
-
-            return paths.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-        }
-
-        /// <summary>把剪贴板里的位图（截图）另存为临时 PNG；没有图片时返回 null。</summary>
-        private static async Task<string?> SaveClipboardImageAsync(IClipboard clipboard)
-        {
-            Bitmap? bitmap;
-            try
-            {
-                bitmap = await clipboard.TryGetBitmapAsync();
-            }
-            catch (Exception)
-            {
-                return null;
-            }
-
-            if (bitmap is null)
-            {
-                return null;
-            }
-
-            try
-            {
-                var directory = Path.Combine(Path.GetTempPath(), "FileShare.Clipboard");
-                Directory.CreateDirectory(directory);
-                var filePath = Path.Combine(directory,
-                    $"剪贴板_{DateTime.Now:yyyyMMdd_HHmmss}_{Guid.NewGuid():N[..6]}.png");
-                bitmap.Save(filePath);
-                return filePath;
-            }
-            catch (Exception)
-            {
-                return null;
-            }
-            finally
-            {
-                bitmap.Dispose();
             }
         }
 
@@ -1604,16 +1496,14 @@ namespace FileShare.Desktop.ViewModels
                 return;
             }
 
-            var clipboard = _appLifetime?.MainWindow?.Clipboard;
-            if (clipboard is null)
-            {
-                StatusMessage = Loc.Get("剪贴板不可用");
-                return;
-            }
-
             try
             {
-                await clipboard.SetTextAsync(item.MessageText);
+                if (!await _clipboardService.SetTextAsync(item.MessageText).ConfigureAwait(true))
+                {
+                    StatusMessage = Loc.Get("剪贴板不可用");
+                    return;
+                }
+
                 StatusMessage = Loc.Get("已复制文本消息");
             }
             catch (Exception ex)
@@ -1727,11 +1617,11 @@ namespace FileShare.Desktop.ViewModels
             _toastService?.Show(
                 Loc.Get("收到文本消息"),
                 message.Length > 60 ? message[..60] + "…" : message,
-                () => Dispatcher.UIThread.Post(() =>
+                () => _uiContext.Post(_ =>
                 {
                     ActivateMainWindow();
                     ShowMessageCard();
-                }),
+                }, null),
                 Loc.Get("点击查看（6 秒后自动关闭）"));
         }      
 

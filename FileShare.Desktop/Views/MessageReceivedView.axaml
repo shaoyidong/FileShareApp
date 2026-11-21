@@ -36,9 +36,9 @@
             </Border>
 
             <TextBlock
-                x:Name="HintText"
                 Classes="muted"
-                IsVisible="False" />
+                Text="{Binding CopyHintText}"
+                IsVisible="{Binding IsCopyHintVisible}" />
         </StackPanel>
 
         <Border
@@ -52,7 +52,7 @@
                 <Button
                     MinWidth="96"
                     Classes="accent"
-                    Click="OnCopyClick"
+                    Command="{Binding CopyCommand}"
                     Content="{loc:Tr '复制全文'}" />
                 <Button
                     MinWidth="84"

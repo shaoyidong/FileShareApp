@@ -1,7 +1,10 @@
+using Avalonia;
 using FileShare.Core.Models;
+using FileShare.Desktop.Services;
 using Shyd.Prism.Dialogs;
 using FileShare.Desktop.ViewModels;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using Xunit;
 
 namespace FileShare.Desktop.Tests.ViewModels;
@@ -11,6 +14,21 @@ namespace FileShare.Desktop.Tests.ViewModels;
 /// </summary>
 public class DialogViewModelTests
 {
+    /// <summary>记录 SetTextAsync 的假剪贴板。</summary>
+    private sealed class RecordingClipboardService : IClipboardService
+    {
+        public string? LastText { get; private set; }
+
+        public Task<bool> SetTextAsync(string text, Visual? visual = null)
+        {
+            LastText = text;
+            return Task.FromResult(true);
+        }
+
+        public Task<ClipboardContent?> ReadAsync(Visual? visual = null) =>
+            Task.FromResult<ClipboardContent?>(null);
+    }
+
     /// <summary>收集 RequestClose 触发过的结果。</summary>
     private static List<IDialogResult> Capture(IDialogAware viewModel)
     {
@@ -141,6 +159,24 @@ public class DialogViewModelTests
 
         Assert.Contains("手机", viewModel.SenderText);
         Assert.Equal("全文内容", viewModel.Message);
+    }
+
+    [Fact]
+    public async Task MessageReceivedViewModel_Copy_WritesMessageToClipboard()
+    {
+        var clipboard = new RecordingClipboardService();
+        var viewModel = new MessageReceivedViewModel(clipboard);
+
+        viewModel.OnDialogOpened(new DialogParameters
+        {
+            [MessageReceivedViewModel.DialogKeys.Message] = "全文内容"
+        });
+
+        await viewModel.CopyCommand.ExecuteAsync(null);
+
+        Assert.Equal("全文内容", clipboard.LastText);
+        Assert.True(viewModel.IsCopyHintVisible);
+        Assert.False(string.IsNullOrWhiteSpace(viewModel.CopyHintText));
     }
 
     [Fact]
