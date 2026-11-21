@@ -13,15 +13,15 @@ namespace FileShare.Desktop.Services;
 
 /// <inheritdoc cref="ITrayService"/>
 public sealed class TrayService : ITrayService
-{
-    private readonly IClassicDesktopStyleApplicationLifetime _lifetime;
+{ 
+    private readonly Application _application;
     private TrayIcon? _trayIcon;
     private TrayIcons? _trayIcons;
     private Window? _window;
 
-    public TrayService(IClassicDesktopStyleApplicationLifetime lifetime)
-    {
-        _lifetime = lifetime ?? throw new ArgumentNullException(nameof(lifetime));
+    public TrayService(Application application)
+    {        
+        _application = application ?? throw new ArgumentNullException(nameof(application));
     }
 
     /// <inheritdoc />
@@ -74,10 +74,7 @@ public sealed class TrayService : ITrayService
             _trayIcon.Clicked += (_, _) => ShowMainWindow();
 
             _trayIcons = new TrayIcons { _trayIcon };
-            if (Application.Current is { } application)
-            {
-                TrayIcon.SetIcons(application, _trayIcons);
-            }
+            TrayIcon.SetIcons(_application, _trayIcons);
         }
         catch (Exception)
         {
@@ -127,7 +124,10 @@ public sealed class TrayService : ITrayService
         // Hide 之后再 Shutdown，避免关闭确认逻辑把应用又藏起来
         _window?.Hide();
 
-        _lifetime.Shutdown();
+        if (_application.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktopLifetime
+            && desktopLifetime is not null)
+            desktopLifetime.Shutdown();
+
     }
 
     /// <inheritdoc />

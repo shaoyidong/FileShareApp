@@ -23,6 +23,7 @@ namespace FileShare.Desktop.Services;
 public sealed class ThemeService : IThemeService
 {
     private readonly IUiPreferencesService _uiPreferences;
+    private Application? _application;
     private bool _initialized;
 
     public ThemeService(IUiPreferencesService uiPreferences)
@@ -44,6 +45,7 @@ public sealed class ThemeService : IThemeService
             return;
         }
 
+        _application = application;
         RemoveAllSkins(application);
         _initialized = true;
     }
@@ -54,7 +56,7 @@ public sealed class ThemeService : IThemeService
         var id = ResolveId(themeId);
         var pack = ThemePackLoader.Find(id);
 
-        var application = Application.Current;
+        var application = _application;
         if (application is null || !_initialized)
         {
             // 设计器 / 单元测试环境：只记录状态，不做实际切换

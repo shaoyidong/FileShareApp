@@ -1,3 +1,9 @@
+using Avalonia.Media;
+using Avalonia.Media.Imaging;
+using Avalonia.Platform;
+using FileShare.Core.Services;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using System;
 using System.IO;
 using System.Net.Http;
@@ -6,11 +12,6 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using Avalonia.Media;
-using Avalonia.Media.Imaging;
-using Avalonia.Platform;
-using Avalonia.Threading;
-using FileShare.Core.Services;
 
 namespace FileShare.Desktop.Services;
 
@@ -59,7 +60,7 @@ public sealed class AboutContent
 /// </para>
 /// <para>AOT 安全：只用 <see cref="JsonDocument"/> + <see cref="Utf8JsonWriter"/> 手工解析，不用反射序列化。</para>
 /// </summary>
-public static class AboutContentService
+public sealed class AboutContentService : IAboutContentService
 {
     /// <summary>
     /// 发布前把这里填成一个你能随时修改的地址；留空则退化为「纯本地 about.json」模式
@@ -88,51 +89,62 @@ public static class AboutContentService
         CommentHandling = JsonCommentHandling.Skip
     };
 
-    private static readonly Lock Gate = new();
     private static readonly AboutContent EmptyContent = new();
-    // 注意：静态字段按声明顺序初始化，内置默认必须排在 _current 之前，否则 _current 会拿到 null
+    // 注意：静态字段按声明顺序初始化，内置默认必须在 EmptyContent 之后解析
     private static readonly AboutContent BuiltinDefaults = Parse(BuiltInJson);
     private static readonly Lazy<IImage?> BuiltinQr = new(LoadBuiltinQr);
-    private static int _refreshing;
-    private static DateTime _lastRefreshUtc = DateTime.MinValue;
 
-    private static string _dataDirectory = AppPaths.GetDataDirectory();
-    private static string _filePath = Path.Combine(_dataDirectory, FileName);
-    private static string _qrCachePath = Path.Combine(_dataDirectory, QrCacheFileName);
-    private static AboutContent _current = BuiltinDefaults;
-    private static IImage? _qrImage;
+    private readonly Lock _gate = new();
+    private readonly ILogger<AboutContentService> _logger;
+    private readonly SynchronizationContext? _uiContext;
+    private int _refreshing;
+    private DateTime _lastRefreshUtc = DateTime.MinValue;
+
+    private string _dataDirectory = AppPaths.GetDataDirectory();
+    private string _filePath;
+    private string _qrCachePath;
+    private AboutContent _current = BuiltinDefaults;
+    private IImage? _qrImage;    
+
+    public AboutContentService(SynchronizationContext uiContext,ILogger<AboutContentService>? logger = null)
+    {
+        _logger = logger ?? NullLogger<AboutContentService>.Instance;
+        _uiContext = uiContext ?? SynchronizationContext.Current;
+        _filePath = Path.Combine(_dataDirectory, FileName);
+        _qrCachePath = Path.Combine(_dataDirectory, QrCacheFileName);
+    }
 
     /// <summary>内容发生变化（远程刷新成功后）在 UI 线程触发，视图据此重新绑定。</summary>
-    public static event Action? ContentChanged;
+    public event Action? ContentChanged;
 
     /// <summary>内置默认配置（与首次生成的 about.json 一致）。</summary>
     public static AboutContent Defaults => BuiltinDefaults;
 
     /// <summary>当前生效的内容。</summary>
-    public static AboutContent Current
+    public AboutContent Current
     {
-        get { lock (Gate) { return _current; } }
+        get { lock (_gate) { return _current; } }
     }
 
     /// <summary>当前生效的二维码/图片；null 表示不显示。</summary>
-    public static IImage? QrImage
+    public IImage? QrImage
     {
-        get { lock (Gate) { return _qrImage; } }
+        get { lock (_gate) { return _qrImage; } }
     }
 
     /// <summary>本地配置文件路径（可告知用户直接编辑）。</summary>
-    public static string LocalFilePath
+    public string LocalFilePath
     {
-        get { lock (Gate) { return _filePath; } }
+        get { lock (_gate) { return _filePath; } }
     }
 
     /// <summary>
     /// 初始化：准备数据目录 → 首次生成 about.json → 立即应用本地内容。
     /// 应在任何窗口创建之前调用（见 App.axaml.cs）。
     /// </summary>
-    public static void Initialize(string? dataDirectory = null)
-    {
-        lock (Gate)
+    public void Initialize(string? dataDirectory = null)
+    {   
+        lock (_gate)
         {
             _dataDirectory = string.IsNullOrWhiteSpace(dataDirectory)
                 ? AppPaths.GetDataDirectory()
@@ -149,7 +161,7 @@ public static class AboutContentService
     /// 后台拉取远程配置。<paramref name="force"/> = true 时忽略刷新间隔（打开关于窗口时用）。
     /// 全程不抛异常：任何失败都保留原有内容。
     /// </summary>
-    public static async Task RefreshAsync(bool force = false)
+    public async Task RefreshAsync(bool force = false)
     {
         if (Interlocked.CompareExchange(ref _refreshing, 1, 0) != 0)
         {
@@ -167,7 +179,7 @@ public static class AboutContentService
 
             string localPath;
             string cachePath;
-            lock (Gate)
+            lock (_gate)
             {
                 localPath = _filePath;
                 cachePath = _qrCachePath;
@@ -292,10 +304,10 @@ public static class AboutContentService
 
     // ---------------------------------------------------------------- 本地文件
 
-    private static void EnsureLocalFile()
+    private void EnsureLocalFile()
     {
         string path;
-        lock (Gate)
+        lock (_gate)
         {
             path = _filePath;
         }
@@ -319,10 +331,10 @@ public static class AboutContentService
         }
     }
 
-    private static AboutContent ReadLocalContent()
+    private AboutContent ReadLocalContent()
     {
         string path;
-        lock (Gate)
+        lock (_gate)
         {
             path = _filePath;
         }
@@ -425,7 +437,7 @@ public static class AboutContentService
         }
     }
 
-    private static IImage? ResolveQr(string? spec)
+    private IImage? ResolveQr(string? spec)
     {
         if (string.Equals(spec, "none", StringComparison.OrdinalIgnoreCase))
         {
@@ -441,7 +453,7 @@ public static class AboutContentService
         if (IsHttpUrl(spec))
         {
             string cache;
-            lock (Gate)
+            lock (_gate)
             {
                 cache = _qrCachePath;
             }
@@ -450,7 +462,7 @@ public static class AboutContentService
         }
 
         string path;
-        lock (Gate)
+        lock (_gate)
         {
             path = Path.IsPathRooted(spec)
                 ? spec
@@ -526,9 +538,9 @@ public static class AboutContentService
 
     // ---------------------------------------------------------------- 工具
 
-    private static void Apply(AboutContent content)
+    private void Apply(AboutContent content)
     {
-        lock (Gate)
+        lock (_gate)
         {
             _current = content;
             _qrImage = ResolveQr(content.QrImage);
@@ -537,7 +549,7 @@ public static class AboutContentService
         NotifyChanged();
     }
 
-    private static void NotifyChanged()
+    private void NotifyChanged()
     {
         var handler = ContentChanged;
         if (handler is null)
@@ -545,20 +557,26 @@ public static class AboutContentService
             return;
         }
 
+        var context = _uiContext;
+        if (context is null || SynchronizationContext.Current == context)
+        {
+            InvokeSafely(handler);
+        }
+        else
+        {
+            context.Post(_ => InvokeSafely(handler), null);
+        }
+    }
+
+    private void InvokeSafely(Action handler)
+    {
         try
         {
-            if (Dispatcher.UIThread.CheckAccess())
-            {
-                handler();
-            }
-            else
-            {
-                Dispatcher.UIThread.Post(handler);
-            }
+            handler();
         }
-        catch
+        catch (Exception ex)
         {
-            // 设计器 / 无 UI 线程环境下忽略通知
+            _logger.LogWarning(ex, "关于窗口内容更新通知失败");
         }
     }
 

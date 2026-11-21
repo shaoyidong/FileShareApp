@@ -1,13 +1,13 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
-using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Threading;
 using FileShare.Desktop.ViewModels;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using System;
+using System.Threading;
 
 namespace FileShare.Desktop.Views;
 
@@ -34,6 +34,7 @@ public partial class AboutWindow : Window
     private static readonly TimeSpan TiltResetInterval = TimeSpan.FromMilliseconds(16);
 
     private readonly ILogger<AboutWindow> _logger;
+    private readonly SynchronizationContext _uiContext;
     private readonly Rotate3DTransform _tiltTransform = new(0, 0, 0, 0, 0, 0, 600);
     private readonly RotateTransform _logoRotation = new();
     private DispatcherTimer? _tiltResetTimer;
@@ -46,13 +47,16 @@ public partial class AboutWindow : Window
     private bool _closing;
     private LayeredWindowRenderer? _layeredRenderer;
 
-    public AboutWindow() : this(NullLogger<AboutWindow>.Instance)
+    public AboutWindow() : this(
+        NullLogger<AboutWindow>.Instance,
+        SynchronizationContext.Current ?? new SynchronizationContext())
     {
     }
 
-    public AboutWindow(ILogger<AboutWindow> logger)
+    public AboutWindow(ILogger<AboutWindow> logger, SynchronizationContext uiContext)
     {
         _logger = logger;
+        _uiContext = uiContext;
         InitializeComponent();
         if (Design.IsDesignMode)
         {
@@ -101,7 +105,7 @@ public partial class AboutWindow : Window
         {
             if (_activatedOnce)
             {
-                Dispatcher.UIThread.Post(CloseIfNotClosing);
+                _uiContext.Post(_ => CloseIfNotClosing(), null);
             }
         };
         PointerExited += (_, _) => StartTiltReset();

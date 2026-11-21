@@ -1,7 +1,8 @@
 using System;
-using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
+using System.Threading;
+using System.Threading.Tasks;
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -26,6 +27,8 @@ namespace FileShare.Desktop.ViewModels;
 /// </summary>
 public sealed partial class AboutViewModel : ViewModelBase, IDisposable, IDialogAware
 {
+    private readonly IAboutContentService _contentService;
+    private readonly IShellService _shellService;
     /// <inheritdoc />
     public string Title => Loc.Get("关于");
 
@@ -64,8 +67,16 @@ public sealed partial class AboutViewModel : ViewModelBase, IDisposable, IDialog
     /// <summary>构建日期：编译时由 csproj 以 AssemblyMetadata(BuildDate) 打进程序集。</summary>
     public string BuildDate { get; }
 
-    public AboutViewModel()
+    /// <summary>设计器 / 单元测试使用的回退：内置默认内容 + 空外壳实现。</summary>
+    public AboutViewModel() : this(DesignAboutContentService.Instance, NullShellService.Instance)
     {
+    }
+
+    public AboutViewModel(IAboutContentService contentService, IShellService shellService)
+    {
+        _contentService = contentService ?? throw new ArgumentNullException(nameof(contentService));
+        _shellService = shellService ?? throw new ArgumentNullException(nameof(shellService));
+
         Version = ReadVersion();
         BuildDate = ReadBuildDate();
 
@@ -76,15 +87,15 @@ public sealed partial class AboutViewModel : ViewModelBase, IDisposable, IDialog
         LinkText = string.Empty;
         LinkUrl = string.Empty;
 
-        Apply(AboutContentService.Current, AboutContentService.QrImage);
+        Apply(_contentService.Current, _contentService.QrImage);
 
         // 远程配置刷新成功后即时重绑；服务会在 UI 线程触发事件
-        AboutContentService.ContentChanged += OnContentChanged;
+        _contentService.ContentChanged += OnContentChanged;
 
         // 每次构造（即每次打开关于窗口）都尝试拉一次最新配置：
         // 改完远程 JSON 后，用户重新打开关于窗口即可看到新内容。
         // 断网 / 超时全部由服务内部静默处理，这里 fire-and-forget 即可。
-        _ = AboutContentService.RefreshAsync(force: true);
+        _ = _contentService.RefreshAsync(force: true);
     }
 
     /// <summary>用最新内容刷新全部可绑定属性；enabled=false 时整块动态信息隐藏。</summary>
@@ -105,10 +116,10 @@ public sealed partial class AboutViewModel : ViewModelBase, IDisposable, IDialog
     }
 
     private void OnContentChanged() =>
-        Apply(AboutContentService.Current, AboutContentService.QrImage);
+        Apply(_contentService.Current, _contentService.QrImage);
 
     public void Dispose() =>
-        AboutContentService.ContentChanged -= OnContentChanged;
+        _contentService.ContentChanged -= OnContentChanged;
 
     /// <summary>关闭弹窗（经 DialogService 回传结果并关闭窗口）。</summary>
     [RelayCommand]
@@ -125,7 +136,7 @@ public sealed partial class AboutViewModel : ViewModelBase, IDisposable, IDialog
 
         try
         {
-            Process.Start(new ProcessStartInfo(LinkUrl) { UseShellExecute = true });
+            _shellService.OpenUrl(LinkUrl);
         }
         catch (Exception)
         {
@@ -143,6 +154,28 @@ public sealed partial class AboutViewModel : ViewModelBase, IDisposable, IDialog
         }
 
         return value.Trim();
+    }
+
+    /// <summary>设计器 / 单元测试回退：内置默认内容，不读写文件、不发起网络请求。</summary>
+    private sealed class DesignAboutContentService : IAboutContentService
+    {
+        public static readonly DesignAboutContentService Instance = new();
+
+        public AboutContent Current => AboutContentService.Defaults;
+
+        public IImage? QrImage => null;
+
+        public event Action? ContentChanged
+        {
+            add { }
+            remove { }
+        }
+
+        public void Initialize(string? dataDirectory = null)
+        {
+        }
+
+        public Task RefreshAsync(bool force = false) => Task.CompletedTask;
     }
 
     private static string ReadVersion()

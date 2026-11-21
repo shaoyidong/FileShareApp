@@ -292,13 +292,16 @@ namespace FileShare.Desktop
                 AppPaths.GetDataDirectory(),
                 sp.GetRequiredService<ILoggerFactory>()));
             services.AddSingleton<IThemeService, ThemeService>();
+            services.AddSingleton<IAboutContentService, AboutContentService>();
 
             // LocalSend 适配层通过 UI 桥反向注入通知 / 文案，适配层本身不依赖 Avalonia
             services.AddSingleton<ILocalSendUiBridge>(sp => new LocalSendUiBridge(
                 sp.GetRequiredService<IToastService>(),
                 sp.GetRequiredService<IAppSettingsService>(),
                 sp.GetRequiredService<IDialogService>(),
-                sp.GetRequiredService<IMessenger>()));
+                sp.GetRequiredService<IMessenger>(),
+                sp.GetRequiredService<IClassicDesktopStyleApplicationLifetime>(),
+                sp.GetRequiredService<SynchronizationContext>()));
             services.AddSingleton<IAppUiBridge>(sp => sp.GetRequiredService<ILocalSendUiBridge>());
 
             // 通知卡片（懒解析 lifetime：解析发生在 App 初始化之后）
@@ -341,9 +344,17 @@ namespace FileShare.Desktop
             services.AddSingleton<IPlatformDialogService>(sp => new PlatformDialogService(
                 sp.GetRequiredService<IClassicDesktopStyleApplicationLifetime>()));
 
+            // Avalonia Application（需要 UI 宿主的服务懒解析；组合根之外不再用 Application.Current）
+            services.AddSingleton<Application>(_ =>
+                Application.Current ?? throw new InvalidOperationException("Application 未初始化"));
+
+            // 剪贴板 / 系统外壳（平台实现，ViewModel 只依赖接口）
+            services.AddSingleton<IClipboardService, DesktopClipboardService>();
+            services.AddSingleton<IShellService, DesktopShellService>();
+
             // 托盘（MainViewModel / MainWindow / SettingsViewModel 都注入使用）
-            services.AddSingleton<ITrayService>(sp => new TrayService(
-                sp.GetRequiredService<IClassicDesktopStyleApplicationLifetime>()));
+            services.AddSingleton<ITrayService>(sp => new TrayService(                
+                sp.GetRequiredService<Application>()));
 
             // 外部协议传输事件总线（解耦协议桥与主 ViewModel，避免循环依赖）
             // 用 CommunityToolkit 的 WeakReferenceMessenger：订阅者对消息总线是弱引用，

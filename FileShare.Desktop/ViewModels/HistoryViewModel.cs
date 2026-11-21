@@ -1,5 +1,3 @@
-using Avalonia;
-using Avalonia.Controls.ApplicationLifetimes;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using FileShare.Core.Models.Entities;
@@ -9,10 +7,7 @@ using Shyd.Prism.Regions;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Diagnostics;
-using System.IO;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows.Input;
 using Shyd.Prism.Localization;
@@ -30,6 +25,8 @@ namespace FileShare.Desktop.ViewModels
         private readonly IFileShareServiceManager _serviceManager;
         private readonly IPlatformDialogService _dialogService;
         private readonly IRegionManager _regionManager;
+        private readonly IClipboardService _clipboardService;
+        private readonly IShellService _shellService;
 
         /// <summary>当前筛选下已加载的记录（新的在前）。行的双列布局由 <see cref="RebuildRows"/> 拼装。</summary>
         private readonly List<HistoryItemViewModel> _loadedItems = new();
@@ -75,11 +72,18 @@ namespace FileShare.Desktop.ViewModels
             ? Loc.F("共 {0} 条（已加载 {1}）", _totalCount, _loadedItems.Count)
             : Loc.F("共 {0} 条", _loadedItems.Count);
 
-        public HistoryViewModel(IFileShareServiceManager serviceManager, IPlatformDialogService dialogService, IRegionManager regionManager)
+        public HistoryViewModel(
+            IFileShareServiceManager serviceManager,
+            IPlatformDialogService dialogService,
+            IRegionManager regionManager,
+            IClipboardService clipboardService,
+            IShellService shellService)
         {
             _serviceManager = serviceManager;
             _dialogService = dialogService;
             _regionManager = regionManager ?? throw new ArgumentNullException(nameof(regionManager));
+            _clipboardService = clipboardService ?? throw new ArgumentNullException(nameof(clipboardService));
+            _shellService = shellService ?? throw new ArgumentNullException(nameof(shellService));
             ReceiveHistoryRows = new ObservableCollection<HistoryRowViewModel>();
 
             BackCommand = new RelayCommand(Back);
@@ -217,16 +221,12 @@ namespace FileShare.Desktop.ViewModels
                 return;
             }
 
-            var clipboard = (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)
-                ?.MainWindow?.Clipboard;
-            if (clipboard is null)
-            {
-                return;
-            }
-
             try
             {
-                await clipboard.SetTextAsync(history.Message);
+                if (!await _clipboardService.SetTextAsync(history.Message))
+                {
+                    return;
+                }
             }
             catch (Exception ex)
             {
@@ -255,11 +255,7 @@ namespace FileShare.Desktop.ViewModels
 
             try
             {
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = fullname,
-                    UseShellExecute = true
-                });
+                _shellService.OpenFile(fullname);
             }
             catch (Exception ex)
             {
@@ -284,35 +280,7 @@ namespace FileShare.Desktop.ViewModels
 
             try
             {
-                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-                {
-                    Process.Start("explorer.exe", $"/select,\"{fullname}\"");
-                }
-                else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-                {
-                    Process.Start("open", $"-R \"{fullname}\"");
-                }
-                else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-                {
-                    // 尝试多种文件管理器（按需调整）
-                    string[] fileManagers = { "nautilus", "dolphin", "thunar", "pcmanfm" };
-                    bool launched = false;
-                    foreach (var fm in fileManagers)
-                    {
-                        try
-                        {
-                            Process.Start(fm, $"--select \"{fullname}\"");
-                            launched = true;
-                            break;
-                        }
-                        catch { /* 尝试下一个 */ }
-                    }
-                    if (!launched)
-                    {
-                        // 降级：只打开目录
-                        Process.Start("xdg-open", Path.GetDirectoryName(fullname)!);
-                    }
-                }
+                _shellService.RevealInFileManager(fullname);
             }
             catch (Exception ex)
             {
