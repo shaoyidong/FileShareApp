@@ -19,11 +19,14 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Serilog;
 using System;
+using System.Buffers;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Runtime.Loader;
 using System.Threading;
 
 namespace FileShare.Desktop
@@ -112,19 +115,21 @@ namespace FileShare.Desktop
 
             if (OperatingSystem.IsWindows())
             {
-                // 默认首选 WinUIComposition；它的 ICompositor5.RequestCommitAsync 在合成器
-                // 提交超时时会打一条 Error 并自行 force-trigger next tick（已自愈，不是应用异常）。
-                // 本项目未使用任何亚克力 / 模糊 / 透明特效，把 DirectComposition 提到首位
-                // 功能等价且更轻；后两项保留 Avalonia 原有的完整回退能力。
-                builder = builder.With(new Win32PlatformOptions
-                {
-                    CompositionMode = new[]
-                    {
-                        Win32CompositionMode.DirectComposition,
-                        Win32CompositionMode.WinUIComposition,
-                        Win32CompositionMode.RedirectionSurface
-                    }
-                });
+                // 合成模式不覆盖，沿用 Avalonia 的默认优先级：
+                //   WinUIComposition → DirectComposition → RedirectionSurface。
+                // 显式写数组的唯一作用是调整优先级；本项目没有必须把某个模式提前的理由，
+                // 交给运行时按系统能力自动挑更省心（也避免以后新增模式时漏配）。
+                //
+                // 各模式的能力边界（决定实际命中哪一个）：
+                //   WinUIComposition   Win10 1803+，唯一支持亚克力 / Mica 的模式；
+                //   DirectComposition  Win8+，纯 COM 调用，不依赖 WinRT；
+                //   RedirectionSurface 兜底（Win7、无 GPU、ANGLE 初始化失败后的软件渲染）。
+                //
+                // 已知噪音：WinUIComposition 的 ICompositor5.RequestCommitAsync 在合成器提交超时时
+                // 会打一条 Error，随后自行 force-trigger 下一个 tick —— 已自愈，不是应用异常。
+                // 之前把 DirectComposition 提到首位就是为了绕开它；改回默认顺序后 Win10 1803+
+                // 会走 WinUIComposition，这条日志可能在极端情况下重新出现（实测 5 次冷启动未复现）。
+                builder = builder.With(new Win32PlatformOptions());
             }
 
             return builder;
@@ -132,100 +137,323 @@ namespace FileShare.Desktop
 
         private static void ExtractAndLoadNativeLibs()
         {
+            var dataDirectory = AppPaths.GetDataDirectory();
+
+            // 原生库加载的日志统一记在这一个文件里（含异常），不再单独生成 NativeLibError.txt
+            var logPath = Path.Combine(dataDirectory, "load_log.txt");
+
             try
             {
-                string tempDir = string.Empty;
-                if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-                {
-                    tempDir = AppContext.BaseDirectory;
-                    // 确保系统SQLite软链接存在
-                    SqliteLibraryLinker.EnsureSystemSqliteLink();
-                }
-                else
-                {
-                    tempDir = Path.Combine(Path.GetTempPath(), "FileShare.Desktop_NativeLibs");
-                    Directory.CreateDirectory(tempDir);
-                }
-
-                // 记录日志以便调试
-                var logPath = Path.Combine(tempDir, "load_log.txt");               
-
-                File.WriteAllText(logPath, $"Starting extraction at {DateTime.Now}\n");                
+                // 原生库是应用每次启动都要用的运行时依赖，不是临时文件：
+                // 统一放在应用自己的数据目录下（Windows 为 %APPDATA%\<应用名>，
+                // Linux 为 ~/.config/<应用名>），既不会被系统清理临时目录时删掉，
+                // 也不会把一堆 .so 散落在程序安装目录里。
+                var nativeDir = Path.Combine(dataDirectory, "native");
+                Directory.CreateDirectory(nativeDir);
 
                 var assembly = Assembly.GetExecutingAssembly();
 
                 // 获取所有嵌入式资源
                 var allResourceNames = assembly.GetManifestResourceNames();
-                File.AppendAllText(logPath, $"Total embedded resources: {allResourceNames.Length}\n");
 
-                foreach (var name in allResourceNames)
-                {
-                    File.AppendAllText(logPath, $"Resource: {name}\n");
-                }
-
-                // 查找并加载当前平台的Native库
+                // 查找当前平台的Native库
                 var nativeResources = allResourceNames
                     .Where(name => name.EndsWith(".dll") || name.EndsWith(".so") || name.EndsWith(".dylib"))
                     .ToList();
 
-                File.AppendAllText(logPath, $"Found {nativeResources.Count} native resources\n");
-
                 // 定义在Linux上需要排除提取的库（使用纯文件名）
                 var excludedOnLinux = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
                 {
-                    "libe_sqlite3.so"   // 请根据实际资源名调整，如果资源名包含路径，这里只需文件名
+                    "libe_sqlite3.so"   // 走系统 libsqlite3，解压自带版本反而会和系统库冲突
                 };
 
-                foreach (var resourceName in nativeResources)
+                var allLoaded = TryExtractAndLoadInto(
+                    nativeDir, logPath, assembly, allResourceNames, nativeResources, excludedOnLinux);
+
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
                 {
-                    var fileName = resourceName;
-                    var targetPath = Path.Combine(tempDir, fileName);
+                    // native/ 不在 .NET 默认探测路径里，P/Invoke 按名找库会落空，
+                    // 挂一个兜底解析器把它们指过去。
+                    RegisterUnixNativeLibraryFallback(nativeDir);
+                }
 
-                    File.AppendAllText(logPath, $"Processing: {fileName}\n");
-
-                    bool shouldSkipExtract = false;
-                    if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux) && excludedOnLinux.Contains(fileName))
-                    {
-                        shouldSkipExtract = true;
-                        File.AppendAllText(logPath, $"Skipping extraction for {fileName} on Linux, expecting system-provided library.\n");
-                    }
-
-                    // 提取文件
-                    if (!shouldSkipExtract && !File.Exists(targetPath))
-                    {
-                        using var stream = assembly.GetManifestResourceStream(resourceName);
-                        if (stream == null)
-                        {
-                            File.AppendAllText(logPath, $"ERROR: Stream is null for {resourceName}\n");
-                            continue;
-                        }
-
-                        using var fileStream = File.Create(targetPath);
-                        stream.CopyTo(fileStream);
-                        File.AppendAllText(logPath, $"Extracted: {fileName} ({stream.Length} bytes)\n");
-                    }
-
-                    // 尝试加载DLL
-                    if (fileName.EndsWith(".dll") || fileName.EndsWith(".so") || fileName.EndsWith(".dylib"))
-                    {
-                        try
-                        {
-                            NativeLibrary.Load(targetPath);
-                            File.AppendAllText(logPath, $"Successfully loaded: {fileName}\n");
-                        }
-                        catch (Exception ex)
-                        {
-                            File.AppendAllText(logPath, $"ERROR loading {fileName}: {ex.Message}\n");
-                        }
-                    }
-                }              
+                if (!allLoaded)
+                {
+                    Console.Error.WriteLine($"[Native] 部分原生库加载失败，详见 {logPath}");
+                }
             }
             catch (Exception ex)
             {
-                var errorLog = Path.Combine(Path.GetTempPath(), "NativeLibError.txt");
-                File.WriteAllText(errorLog, $"ExtractAndLoadNativeLibs failed: {ex}\n{ex.StackTrace}");
+                AppendNativeErrorToLoadLog(logPath, ex);
                 throw;
             }
+        }
+
+        /// <summary>
+        /// 把原生库加载异常追加到 <c>load_log.txt</c> 末尾——不单独生成 NativeLibError.txt，
+        /// 排查时只需要看这一个文件。
+        /// </summary>
+        /// <remarks>
+        /// 这里发生在 Serilog 初始化之前，所以不能用应用日志；数据目录都写不了时退到 stderr，
+        /// 至少让控制台/终端能看到原因。
+        /// </remarks>
+        private static void AppendNativeErrorToLoadLog(string logPath, Exception ex)
+        {
+            var content = $"\n===== FAILED at {DateTime.Now:yyyy-MM-dd HH:mm:ss} =====\n" +
+                          $"{ex}\n{ex.StackTrace}\n";
+
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(logPath)!);
+                File.AppendAllText(logPath, content);
+            }
+            catch
+            {
+                try
+                {
+                    Console.Error.WriteLine(content);
+                }
+                catch
+                {
+                    // 连 stderr 都写不了就没别的办法了
+                }
+            }
+        }
+
+        /// <summary>
+        /// 把嵌入式原生库解压到 <paramref name="nativeDir"/> 并逐个按全路径加载，
+        /// 过程写进 <paramref name="logPath"/>。
+        /// </summary>
+        /// <returns>全部加载成功返回 true；有库加载失败返回 false（应用仍会继续启动，交由上层回退软件渲染）。</returns>
+        private static bool TryExtractAndLoadInto(
+            string nativeDir,
+            string logPath,
+            Assembly assembly,
+            string[] allResourceNames,
+            List<string> nativeResources,
+            HashSet<string> excludedOnLinux)
+        {
+            File.WriteAllText(logPath, $"Starting extraction at {DateTime.Now}\n");
+            File.AppendAllText(logPath, $"Native dir: {nativeDir}\n");
+            File.AppendAllText(logPath, $"Total embedded resources: {allResourceNames.Length}\n");
+
+            foreach (var name in allResourceNames)
+            {
+                File.AppendAllText(logPath, $"Resource: {name}\n");
+            }
+
+            File.AppendAllText(logPath, $"Found {nativeResources.Count} native resources\n");
+
+            // Linux 上 SQLite 用系统库：先建好软链，后面跳过解压时才有可加载的目标
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            {
+                SqliteLibraryLinker.EnsureSystemSqliteLink(nativeDir);
+            }
+
+            var extractionTimer = Stopwatch.StartNew();
+            int written = 0, skipped = 0;
+            var allLoaded = true;
+
+            foreach (var resourceName in nativeResources)
+            {
+                var fileName = resourceName;
+                var targetPath = Path.Combine(nativeDir, fileName);
+
+                File.AppendAllText(logPath, $"Processing: {fileName}\n");
+
+                bool shouldSkipExtract = false;
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux) && excludedOnLinux.Contains(fileName))
+                {
+                    shouldSkipExtract = true;
+                    File.AppendAllText(logPath, $"Skipping extraction for {fileName} on Linux, expecting system-provided library.\n");
+                }
+
+                // 提取文件：先比对，只有内容不一致才写。
+                // - 不能像早先那样「目标存在就跳过」：升级后目录里会留着旧版本，
+                //   明明换了原生库却仍按旧行为运行（曾因此把 ANGLE 的问题排查带偏）。
+                // - 也不必每次盲目覆盖：长度先比（O(1)），长度相同再按 64KB 分块比内容。
+                //   读比写便宜（写要建文件、落脏页、还可能被杀软扫一遍），内容一致时连一次写都不做。
+                if (!shouldSkipExtract)
+                {
+                    using var stream = assembly.GetManifestResourceStream(resourceName);
+                    if (stream == null)
+                    {
+                        File.AppendAllText(logPath, $"ERROR: Stream is null for {resourceName}\n");
+                        allLoaded = false;
+                        continue;
+                    }
+
+                    if (HasSameContent(stream, targetPath))
+                    {
+                        skipped++;
+                        File.AppendAllText(logPath, $"Up-to-date, skipped: {fileName}\n");
+                    }
+                    else
+                    {
+                        try
+                        {
+                            stream.Position = 0;
+                            using (var fileStream = File.Create(targetPath))
+                            {
+                                stream.CopyTo(fileStream);
+                            }
+
+                            written++;
+                            File.AppendAllText(logPath, $"Extracted: {fileName} ({stream.Length} bytes)\n");
+                        }
+                        catch (IOException ex)
+                        {
+                            // 常见原因：文件被另一个进程（或上一次没退干净的实例）占用。
+                            // 这时不展开终止启动，继续尝试用磁盘上已有的那份。
+                            File.AppendAllText(logPath, $"WARN cannot overwrite {fileName}: {ex.Message}\n");
+                        }
+                    }
+                }
+
+                // 尝试加载DLL
+                if (fileName.EndsWith(".dll") || fileName.EndsWith(".so") || fileName.EndsWith(".dylib"))
+                {
+                    try
+                    {
+                        NativeLibrary.Load(targetPath);
+                        File.AppendAllText(logPath, $"Successfully loaded: {fileName}\n");
+                    }
+                    catch (Exception ex)
+                    {
+                        allLoaded = false;
+                        File.AppendAllText(logPath, $"ERROR loading {fileName}: {ex.Message}\n");
+                    }
+                }
+            }
+
+            extractionTimer.Stop();
+            File.AppendAllText(logPath,
+                $"Extraction finished in {extractionTimer.ElapsedMilliseconds} ms " +
+                $"(written={written}, skipped={skipped})\n");
+            File.AppendAllText(logPath,
+                allLoaded ? "All native libraries loaded\n" : "Some native libraries FAILED to load\n");
+
+            return allLoaded;
+        }
+
+        /// <summary>
+        /// 判断磁盘上的文件与嵌入资源内容是否完全一致。
+        /// <para>先比长度（O(1)，最常见的「换了新版本」和「文件不完整」都会在这一步判定），
+        /// 长度相同才按 64KB 分块比内容，一旦发现差异立刻返回。</para>
+        /// <para>为什么不直接覆盖：读比写便宜得多，写要建文件、落脏页、还可能被杀软扫一遍；
+        /// 绝大多数启动场景内容都没变，省掉写入能少一次全量 I/O，也避免无谓地刷新文件时间戳。</para>
+        /// </summary>
+        private static bool HasSameContent(Stream source, string targetPath)
+        {
+            try
+            {
+                var info = new FileInfo(targetPath);
+                if (!info.Exists || info.Length != source.Length)
+                    return false;
+
+                // 长度已经对上，逐块比对。顺序读 + 64KB 缓冲，命中页缓存时开销很小。
+                const int BufferSize = 64 * 1024;
+                using var file = new FileStream(
+                    targetPath, FileMode.Open, FileAccess.Read, System.IO.FileShare.Read,
+                    BufferSize, FileOptions.SequentialScan);
+
+                var sourceBuffer = ArrayPool<byte>.Shared.Rent(BufferSize);
+                var fileBuffer = ArrayPool<byte>.Shared.Rent(BufferSize);
+                try
+                {
+                    while (true)
+                    {
+                        var read = source.Read(sourceBuffer, 0, BufferSize);
+                        if (read == 0)
+                            return true;   // 源读完了，长度又一致 → 内容一致
+
+                        var fileRead = 0;
+                        while (fileRead < read)
+                        {
+                            var n = file.Read(fileBuffer, fileRead, read - fileRead);
+                            if (n == 0)
+                                return false;
+
+                            fileRead += n;
+                        }
+
+                        if (!sourceBuffer.AsSpan(0, read).SequenceEqual(fileBuffer.AsSpan(0, read)))
+                            return false;
+                    }
+                }
+                finally
+                {
+                    ArrayPool<byte>.Shared.Return(sourceBuffer);
+                    ArrayPool<byte>.Shared.Return(fileBuffer);
+                }
+            }
+            catch (IOException)
+            {
+                // 读不了（被占用 / 权限）就当作不一致，交给后续写入逻辑处理并记录 WARN。
+                return false;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Linux 上给原生库解析兜底。
+        /// <para>库被放在 <c>&lt;应用目录&gt;/native</c> 而不是应用根目录，.NET 的默认探测路径
+        /// （应用目录 + deps.json 里登记的位置）不会包含它，托管代码里的
+        /// <c>[DllImport("libSkiaSharp")]</c> 这类按名加载会落空。这里挂
+        /// <see cref="AssemblyLoadContext.ResolvingUnmanagedDll"/>，在默认解析失败后按
+        /// 「原名 / 加 .so / 加 lib 前缀」三种形式到该目录里找，找到就按全路径加载。</para>
+        /// <para>只在 Linux 注册；Windows 上原生库仍然放在应用目录，走系统默认解析。</para>
+        /// </summary>
+        private static void RegisterUnixNativeLibraryFallback(string nativeDir)
+        {
+            // 同一个库名只会解析一次，把句柄缓存下来：
+            // 运行时对每个 P/Invoke 桩都会问一次，不缓存会重复做文件探测（SQLite 有上百个入口）。
+            var resolved = new Dictionary<string, IntPtr>(StringComparer.Ordinal);
+
+            AssemblyLoadContext.Default.ResolvingUnmanagedDll += (_, libraryName) =>
+            {
+                lock (resolved)
+                {
+                    if (resolved.TryGetValue(libraryName, out var cached))
+                        return cached;
+                }
+
+                foreach (var candidate in EnumerateNativeNameCandidates(libraryName))
+                {
+                    var path = Path.Combine(nativeDir, candidate);
+                    if (!File.Exists(path))
+                        continue;
+
+                    if (!NativeLibrary.TryLoad(path, out var handle))
+                        continue;
+
+                    lock (resolved)
+                    {
+                        resolved[libraryName] = handle;
+                    }
+
+                    Console.WriteLine($"[Native] {libraryName} -> {path}");
+                    return handle;
+                }
+
+                // 交给运行时按默认逻辑报错
+                return IntPtr.Zero;
+            };
+        }
+
+        /// <summary>按 P/Invoke 里写的名字推出可能的文件名（Unix 的 .so 命名习惯）。</summary>
+        private static IEnumerable<string> EnumerateNativeNameCandidates(string libraryName)
+        {
+            yield return libraryName;
+
+            if (libraryName.EndsWith(".so", StringComparison.Ordinal))
+                yield break;
+
+            yield return libraryName + ".so";
+            yield return "lib" + libraryName + ".so";
         }
 
         /// <summary>
@@ -353,8 +581,9 @@ namespace FileShare.Desktop
             services.AddSingleton<IShellService, DesktopShellService>();
 
             // 托盘（MainViewModel / MainWindow / SettingsViewModel 都注入使用）
-            services.AddSingleton<ITrayService>(sp => new TrayService(                
-                sp.GetRequiredService<Application>()));
+            services.AddSingleton<ITrayService>(sp => new TrayService(
+                sp.GetRequiredService<Application>(),
+                sp.GetRequiredService<ILogger<TrayService>>()));
 
             // 外部协议传输事件总线（解耦协议桥与主 ViewModel，避免循环依赖）
             // 用 CommunityToolkit 的 WeakReferenceMessenger：订阅者对消息总线是弱引用，

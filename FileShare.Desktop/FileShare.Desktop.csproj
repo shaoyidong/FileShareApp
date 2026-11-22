@@ -57,6 +57,28 @@
 		</EmbeddedResource>
 	</ItemGroup>
 
+	<!--
+		原生库漂移检查：应用的原生库以嵌入资源形式打进 exe（源头是 runtimes\<rid>\native\），
+		而 publish 还会把 NuGet 包里的同名原生库复制到发布目录，两者容易悄悄不一致
+		（曾出现发布产物 SQLite 3.53.4、native 目录仍是 3.50.4 的情况）。
+		发布结束后比对哈希：默认只提示，加 -p:SyncNativeLibs=true 时自动用发布产物覆盖 native 目录。
+		脚本仅依赖 PowerShell，非 Windows 宿主跳过（发布在哪种机器上做都可以，只是不检查）。
+	-->
+	<PropertyGroup>
+		<_SyncNativeLibArg Condition="'$(SyncNativeLibs)' == 'true'">-Sync</_SyncNativeLibArg>
+	</PropertyGroup>
+	<Target Name="CheckNativeLibDrift" AfterTargets="Publish"
+	        Condition="'$(RuntimeIdentifier)' != '' and '$(OS)' == 'Windows_NT' and '$(SkipNativeLibCheck)' != 'true'">
+		<!-- 去掉尾部分隔符：$(PublishDir) 以 "\" 结尾，直接塞进带引号的命令行会把结束引号吃掉。
+		     必须在 Target 内部求值 —— 静态 PropertyGroup 求值时 $(PublishDir) 还没定下来。 -->
+		<PropertyGroup>
+			<_PublishDirForCheck>$(PublishDir.TrimEnd('\'))</_PublishDirForCheck>
+		</PropertyGroup>
+		<Exec WorkingDirectory="$(MSBuildProjectDirectory)"
+		      ContinueOnError="WarnAndContinue"
+		      Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\tools\Sync-NativeLibs.ps1&quot; -Rid $(RuntimeIdentifier) -PublishDir &quot;$(_PublishDirForCheck)&quot; -NativeDir &quot;$(MSBuildProjectDirectory)\runtimes\$(RuntimeIdentifier)\native&quot; $(_SyncNativeLibArg)" />
+	</Target>	
+
 	<!-- 定义一个目标，在发布流程的核心步骤之前运行 -->
 	<!--<Target Name="EmbedNativeLibrariesForPublish"  BeforeTargets="IlcCompile">
 		<Message Text="=== 开始为发布嵌入本机库 ===" Importance="high" />

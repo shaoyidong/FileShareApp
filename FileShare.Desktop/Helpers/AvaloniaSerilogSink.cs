@@ -29,6 +29,15 @@ internal sealed class AvaloniaSerilogSink : ILogSink
     private const string NullPlatformImplInputMessage =
         "PlatformImpl is null, couldn't handle input.";
 
+    /// <summary>
+    /// Linux 上没有 StatusNotifierWatcher 时（WSL / 无桌面面板 / GNOME 未装 AppIndicator 扩展），
+    /// Avalonia 建托盘图标会抛 DBus 异常并打一条 Error + 完整堆栈；而托盘本来就用不了。
+    /// 应用侧已经做到「没有桌面宿主就不创建托盘图标」，但桌面标识存在、watcher 却缺席的环境
+    /// （例如设了 XDG_CURRENT_DESKTOP 的精简桌面）仍会走到这里，所以再精确过滤这一条。
+    /// 只匹配这一点，其他 D-Bus 错误照旧保留。
+    /// </summary>
+    private const string StatusNotifierUnavailableMessage = "org.kde.StatusNotifierWatcher";
+
     private readonly ILogger _logger;
 
     public AvaloniaSerilogSink(ILogger logger)
@@ -56,6 +65,13 @@ internal sealed class AvaloniaSerilogSink : ILogSink
         // 精确过滤：仅 Warning + 完全匹配这一条消息；Error / 其他 Warning 不受影响
         if (level == LogEventLevel.Warning &&
             string.Equals(messageTemplate, NullPlatformImplInputMessage, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        // 精确过滤：仅 Error + 消息里带了 StatusNotifierWatcher 名（托盘宿主不存在）
+        if (level == LogEventLevel.Error &&
+            messageTemplate.Contains(StatusNotifierUnavailableMessage, StringComparison.Ordinal))
         {
             return;
         }

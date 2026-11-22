@@ -13,6 +13,28 @@
             ],
             "group": "build",
             "problemMatcher": "$msCompile"
+		},
+		{
+			// 在 WSL(Ubuntu-18.04) 里跑 AOT 发布，等价于手动进 WSL 执行
+			// bash /mnt/d/StudyNode/localsend/tools/publish-linux-aot.sh
+			// 产物直接落在 FileShare.Desktop/bin/Release/net10.0/publish/linux-x64
+			// 与 Windows 的 publish/win-x64、win-x86 并列。
+			"label": "publish: linux-x64 AOT (WSL)",
+			"detail": "WSL AOT 编译 → bin/Release/net10.0/publish/linux-x64，再把 exe 拷到 ~/fileshare-test 并启动",
+			"type": "shell",
+			"command": "C:/Windows/System32/wsl.exe",
+			"args": [
+				"-d", "Ubuntu-18.04",
+				"--", "bash", "-lc",
+				"bash /mnt/d/StudyNode/localsend/tools/publish-linux-aot.sh"
+			],
+			"group": { "kind": "build", "isDefault": false },
+			"problemMatcher": [],
+			"presentation": {
+				"reveal": "always",
+				"panel": "dedicated",
+				"clear": true
+			}
 		}
 	]
 }

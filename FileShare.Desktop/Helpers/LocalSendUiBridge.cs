@@ -130,10 +130,13 @@ public sealed class LocalSendUiBridge : ILocalSendUiBridge
             Status = TransferStatus.Pending
         };
 
-        // 窗口活跃：直接弹确认窗，不再无条件 Show()+Activate() 抢焦点
-        var isActive = await InvokeOnUiAsync(() => owner.IsActive).ConfigureAwait(false);
-        if (isActive)
+        // 与文本消息弹窗同一套判定：IsActive 在主窗口只是被别的窗口遮挡时也是 false，
+        // 用它判断会漏弹确认窗（只发一条 toast）。只有不可见 / 最小化才算后台。
+        var isBackground = await InvokeOnUiAsync(
+            () => !owner.IsVisible || owner.WindowState == WindowState.Minimized).ConfigureAwait(false);
+        if (!isBackground)
         {
+            await InvokeOnUiAsync(() => { ActivateWindow(owner); return true; }).ConfigureAwait(false);
             return await ShowConfirmDialogAsync(owner, request, transfer).ConfigureAwait(false);
         }
 

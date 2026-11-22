@@ -36,10 +36,19 @@ namespace FileShare.Desktop.Helpers
         /// <summary>
         /// 在程序启动时调用，确保 libe_sqlite3.so 指向系统 SQLite 库
         /// </summary>
-        public static void EnsureSystemSqliteLink()
+        /// <param name="targetDirectory">
+        /// 软链接所在目录。Linux 上原生库统一放在应用目录的 native/ 子目录，由调用方传入；
+        /// 传 null 时退回应用根目录（历史行为）。
+        /// </param>
+        public static void EnsureSystemSqliteLink(string? targetDirectory = null)
         {
+            var linkDirectory = string.IsNullOrEmpty(targetDirectory)
+                ? AppContext.BaseDirectory
+                : targetDirectory;
+            Directory.CreateDirectory(linkDirectory);
+
             // 如果当前目录已经存在 libe_sqlite3.so，检查它是否是一个有效的符号链接
-            string linkPath = Path.Combine(AppContext.BaseDirectory, LINK_NAME);
+            string linkPath = Path.Combine(linkDirectory, LINK_NAME);
             if (File.Exists(linkPath))
             {
                 // 如果是符号链接，且指向的库文件存在，就无需处理
@@ -88,8 +97,8 @@ SQLite 运行时库是运行本程序所必需的，请使用系统包管理器�
        sudo pacman -S sqlite
 
 安装后请重新运行程序。如果问题仍然存在，可能是系统库路径特殊，请手动查找
-libsqlite3.so.0 文件，并在程序启动目录创建符号链接：
-   ln -s /找到的路径/libsqlite3.so.0 ./libe_sqlite3.so";
+libsqlite3.so.0 文件，并在程序目录的 native/ 子目录创建符号链接：
+   ln -s /找到的路径/libsqlite3.so.0 ./native/libe_sqlite3.so";
                 throw new InvalidOperationException(errorMsg);
             }
 

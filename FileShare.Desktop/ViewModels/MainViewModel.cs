@@ -1637,7 +1637,11 @@ namespace FileShare.Desktop.ViewModels
                 return Task.CompletedTask;
             }
 
-            if (!owner.IsActive)
+            // 和文本消息弹窗保持同一套判定：IsActive 在主窗口被别的窗口遮挡时也是 false，
+            // 用它判断会把「只是被遮住」误当成「已退到后台」，于是一个确认窗都不弹、只发 toast。
+            // 只有真正不可见（托盘隐藏）或最小化才算后台。
+            var isBackground = IsBackgroundWindow(owner.IsVisible, owner.WindowState);
+            if (isBackground)
             {
                 // 托盘 / 后台：只弹通知，不自动激活主窗口；点击通知才显示主窗口 + 弹确认窗
                 var name = Devices.FirstOrDefault(item => item.DeviceId == info.SenderId)?.DeviceName
@@ -1654,7 +1658,8 @@ namespace FileShare.Desktop.ViewModels
                 return Task.CompletedTask;
             }
 
-            // 窗口活跃：直接弹确认窗，不再无条件 Show()+Activate() 抢焦点
+            // 窗口可见（哪怕被其它程序遮挡）：激活主窗口后直接弹确认窗
+            ActivateMainWindow();
             return ShowReceiveRequestDialogCoreAsync(owner, info);
         }
 

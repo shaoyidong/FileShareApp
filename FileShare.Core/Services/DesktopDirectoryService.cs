@@ -58,22 +58,49 @@ namespace FileShare.Core.Services
 
         public string GetDocumentsDirectory()
         {
-            return Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-        }       
+            return GetSpecialFolder(Environment.SpecialFolder.MyDocuments, "Documents");
+        }
 
         public string GetMusicDirectory()
         {
-            return Environment.GetFolderPath(Environment.SpecialFolder.MyMusic);
+            return GetSpecialFolder(Environment.SpecialFolder.MyMusic, "Music");
         }
 
         public string GetPicturesDirectory()
         {
-            return Environment.GetFolderPath(Environment.SpecialFolder.MyPictures);
+            return GetSpecialFolder(Environment.SpecialFolder.MyPictures, "Pictures");
         }
 
         public string GetVideosDirectory()
         {
-            return Environment.GetFolderPath(Environment.SpecialFolder.MyVideos);
+            return GetSpecialFolder(Environment.SpecialFolder.MyVideos, "Videos");
+        }
+
+        /// <summary>
+        /// 读取「我的文档 / 图片 / 音乐 / 视频」这类已知目录，取不到时回退到 <c>~/&lt;名称&gt;</c>。
+        /// </summary>
+        /// <remarks>
+        /// Linux 上这些目录来自 XDG（~/.config/user-dirs.dirs），**没配置过或目录不存在时
+        /// GetFolderPath 直接返回空字符串**。空字符串拼出来的保存路径是相对路径，
+        /// Directory.CreateDirectory("") 会抛异常，表现为「点接收就失败」——
+        /// 手工指定一个存在的目录又能正常接收，现象很迷惑。这里统一兜底成绝对于路径。
+        /// </remarks>
+        private static string GetSpecialFolder(Environment.SpecialFolder folder, string fallbackName)
+        {
+            var path = Environment.GetFolderPath(folder);
+            if (!string.IsNullOrWhiteSpace(path))
+            {
+                return path;
+            }
+
+            var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            if (string.IsNullOrWhiteSpace(home))
+            {
+                // 极端情况（连主目录都读不到）：退到临时目录，至少保证是可写绝对路径
+                home = Path.GetTempPath();
+            }
+
+            return Path.Combine(home, fallbackName);
         }
     }
 }

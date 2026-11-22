@@ -34,7 +34,6 @@ public partial class AboutWindow : Window
     private static readonly TimeSpan TiltResetInterval = TimeSpan.FromMilliseconds(16);
 
     private readonly ILogger<AboutWindow> _logger;
-    private readonly SynchronizationContext _uiContext;
     private readonly Rotate3DTransform _tiltTransform = new(0, 0, 0, 0, 0, 0, 600);
     private readonly RotateTransform _logoRotation = new();
     private DispatcherTimer? _tiltResetTimer;
@@ -43,20 +42,16 @@ public partial class AboutWindow : Window
     private double _logoRotationSpeed = 1;
     private double _logoRotationAngle;
     private bool _logoHovered;
-    private bool _activatedOnce;
-    private bool _closing;
     private LayeredWindowRenderer? _layeredRenderer;
 
     public AboutWindow() : this(
-        NullLogger<AboutWindow>.Instance,
-        SynchronizationContext.Current ?? new SynchronizationContext())
+        NullLogger<AboutWindow>.Instance)
     {
     }
 
-    public AboutWindow(ILogger<AboutWindow> logger, SynchronizationContext uiContext)
+    public AboutWindow(ILogger<AboutWindow> logger)
     {
         _logger = logger;
-        _uiContext = uiContext;
         InitializeComponent();
         if (Design.IsDesignMode)
         {
@@ -77,10 +72,9 @@ public partial class AboutWindow : Window
         _logoRotationTimer.Tick += OnLogoTick;
         _logoRotationTimer.Start();
 
-        Activated += (_, _) => _activatedOnce = true;
         Opened += (_, _) =>
         {
-            // Win7 拿不到 Avalonia 透明窗口，改用分层窗口自行合成；其余平台继续走原生透明
+            // Win7 拿不到 Avalonia 透明窗口，改用分层窗口自行合成；其余平台继续走原生透明。
             if (!TryEnableLayeredMode())
             {
                 ApplyOpaqueCardFallbackIfNeeded();
@@ -98,16 +92,10 @@ public partial class AboutWindow : Window
             (DataContext as IDisposable)?.Dispose();
         };
 
-        // 浮动卡片语义：主窗口抢回焦点即收起。
-        // 必须用 Post 延迟关闭：在 WM_ACTIVATE(WA_INACTIVE) 处理栈内同步 Close() owned 窗口
-        // 会触发 Avalonia Win32 的激活修复失败（Avalonia#4868），把 owner 主窗口错误最小化。
-        Deactivated += (_, _) =>
-        {
-            if (_activatedOnce)
-            {
-                _uiContext.Post(_ => CloseIfNotClosing(), null);
-            }
-        };
+        // 关闭方式只保留标题栏右上角的关闭按钮（VM 的 CloseCommand）。
+        // 早先还挂在 Deactivated 上「主窗口抢回焦点即收起」，但窗口被其他程序遮挡、
+        // 或在 Linux 上焦点行为不一致时，会出现「点外面关掉、鼠标移过去又冒出来」的抖动，
+        // 用户也反馈不希望误触关闭，因此全平台统一去掉这个隐式关闭。
         PointerExited += (_, _) => StartTiltReset();
     }
 
@@ -180,17 +168,6 @@ public partial class AboutWindow : Window
         TiltRoot.CornerRadius = new CornerRadius(0);
         // 阴影在非透明窗口上会被裁掉，留着只会在卡片边缘留下脏边
         TiltRoot.ClearValue(Border.BoxShadowProperty);
-    }
-
-    private void CloseIfNotClosing()
-    {
-        if (_closing)
-        {
-            return;
-        }
-
-        _closing = true;
-        Close();
     }
 
     /// <summary>
